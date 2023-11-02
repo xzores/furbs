@@ -1,0 +1,19 @@
+{
+	"bg_color": [
+		1.00000000,
+		1.00000000,
+		1.00000000,
+		1.00000000
+	],
+	"texture": "res/GUI/button_active.png",
+	"line_width": 0.01000000,
+	"line_margin": 0.01000000,
+	"line_texture": "res/GUI/line.png",
+	"front_color": [
+		1.00000000,
+		1.00000000,
+		1.00000000,
+		1.00000000
+	],
+	"front_margin": 0.03000000
+}

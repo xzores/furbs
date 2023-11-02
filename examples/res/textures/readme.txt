@@ -1,0 +1,1 @@
+These textures are made by me, they are in public domain. Use as you se fit.

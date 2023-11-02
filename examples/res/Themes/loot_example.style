@@ -1,0 +1,19 @@
+{
+	"bg_color": [
+		1.00000000,
+		1.00000000,
+		1.00000000,
+		1.00000000
+	],
+	"texture": "res/GUI/loot_example.png",
+	"line_width": 0.00000000,
+	"line_margin": 0.00000000,
+	"line_texture": "",
+	"front_color": [
+		1.00000000,
+		1.00000000,
+		1.00000000,
+		1.00000000
+	],
+	"front_margin": 0.00000000
+}
