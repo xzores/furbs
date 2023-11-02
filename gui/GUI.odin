@@ -168,7 +168,7 @@ Slider :: struct {
 Slide_input :: struct {
     //Static, set by user.
 	value : ^f32,
-	upper_bound, lower_bound : f32,
+	lower_bound, upper_bound : f32,
 
 	//Dynamic, user should not touch.
 	was_dragged : bool,
@@ -352,6 +352,7 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 						ctx : Maybe(Gui_context) = current_context, loc := #caller_location) -> (hovering : bool, active : bool, triggered : bool) {
 
 	assert(container.element != nil, "Element is nil", loc);
+	assert(current_context != nil, "current_context is nil", loc);
 	
 	stl : Style = current_theme.default_style;
 
@@ -483,7 +484,7 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 						render.draw_shape(line, color = stl.front_color, texture = line_texture);							
 					}
 				}
-
+				
 			case Slide_input:
 				using element;
 
@@ -558,7 +559,7 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 											{elem_rect.x + (elem_rect.z - 2*fm_unit) * value^ + fm_unit, elem_rect.y + elem_rect.w - stl.line_margin/2 * unit_size}}
 
 				render.draw_shape(elem_rect, color = stl.bg_color, texture = texture);
-				render.draw_shape(render.Line{slider_line[0], slider_line[1], stl.line_width * unit_size}, color = stl.bg_color, texture = line_texture);
+				render.draw_shape(render.Line{slider_line[0], slider_line[1], stl.line_width * unit_size}, color = stl.front_color, texture = line_texture);
 				
 			case Input_field:
 				using element;

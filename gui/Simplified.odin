@@ -1,5 +1,7 @@
 package gui;
 
+import "core:fmt"
+import "core:strings"
 import "core:encoding/json"
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -68,15 +70,31 @@ draw_checkbox :: proc (checked : bool, dest : Destination) -> bool {
 	return checked;
 }
 
-draw_slide_input :: proc (v : f32, upper_bound, lower_bound : f32, dest : Destination) -> f32 {
-
+//TODO this might not be possaible with a slider_input...
+draw_slide_input :: proc (v : f32, selected: bool, lower_bound, upper_bound : f32, dest : Destination) -> (f32, bool) {
 	v := v;
+	
+	element := init_slide_input(&v, lower_bound, upper_bound);
+	strings.write_string(&element.current_text, fmt.tprintf("%.4f",v)); //TODO make style select precision, also selection does not work
+
+	ele := Element_container{element = element, dest = dest, is_selected = selected};
+	defer destroy_element(&ele);
+	
+	h, a, t := draw_element(&ele);
+
+	return v, ele.is_selected;
+}
+
+draw_slider :: proc (value : f32, dest : Destination) -> f32 {
+
+	value := value;
 	ele : Element_container = {
-		element = init_slide_input(&v, upper_bound, lower_bound),
+		element = init_slider(&value),
 		dest = dest,
 	}
 	defer destroy_element(&ele);
+	
 	h, a, t := draw_element(&ele);
 
-	return v;
+	return value;
 }
