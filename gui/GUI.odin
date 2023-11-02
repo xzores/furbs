@@ -340,8 +340,9 @@ pop_panel :: proc (panel : ^Panel, loc := #caller_location) {
 			render.begin_texture_mode(current_panel.render_texture);
 		}
 	}
-
-	render.draw_shape([4]f32{100, 100, 400, 400}, color = {1,1,1,1}, texture = panel.render_texture.texture);
+	
+	//TODO what about scrollable?
+	//render.draw_shape([4]f32{100, 100, 400, 400}, color = {1,1,1,1}, texture = panel.render_texture.texture);
 }
 
 /////////////////////////////////////////////////////////////////
