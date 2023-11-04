@@ -59,3 +59,5 @@ main :: proc {
 ```
 
 Tutorials, documentation and more exampels are on the way.
+
+Codeveloped by albe194e
