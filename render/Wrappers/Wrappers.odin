@@ -11,17 +11,10 @@ import gl "vendor:OpenGL"
 
 import "../utils"
 
-check_context :: proc(loc : runtime.Source_Code_Location) {
-	assert(bound_window != nil, "There is no bound context, use bind_window before calling this function", loc);
-	//TODO assert render state (Overall renderer) is bound.
-}
-
-/////////////////////
-
-load_vertex_buffer :: proc(data : rawptr, size : int, dyn : bool) -> Vbo_ID {
+load_vertex_buffer :: proc(data : rawptr, #any_int size : int, dyn : bool) -> Vbo_id {
 	using gl;
 
- 	id : Vbo_ID = 0;
+ 	id : Vbo_id = 0;
 
 	GenBuffers(1, auto_cast &id);
 	vertex_buffers_alive[id] = true;
@@ -40,20 +33,20 @@ load_vertex_buffer :: proc(data : rawptr, size : int, dyn : bool) -> Vbo_ID {
     return id;
 }
 
-upload_vertex_sub_buffer_data :: proc(vbo : Vbo_ID, offset : int, size : int, data : rawptr) {
+upload_vertex_sub_buffer_data :: proc(vbo : Vbo_id, offset : int, size : int, data : rawptr) {
 	enable_vertex_buffer(vbo);
 	gl.BufferSubData(gl.ARRAY_BUFFER, offset, size, data);
 	disable_vertex_buffer(vbo);
 }
 
-unload_vertex_buffer :: proc (vbo_id : Vbo_ID, loc := #caller_location) { 	
+unload_vertex_buffer :: proc (vbo_id : Vbo_id, loc := #caller_location) { 	
 	vbo_id := vbo_id;
 	assert(vbo_id in vertex_buffers_alive, "Vbo is not created", loc = loc);
 	vertex_buffers_alive[vbo_id] = false;
 	gl.DeleteBuffers(1, auto_cast &vbo_id);
 }
 
-enable_vertex_buffer :: proc(id : Vbo_ID, loc := #caller_location) {
+enable_vertex_buffer :: proc(id : Vbo_id, loc := #caller_location) {
 	assert(id in vertex_buffers_alive, "Vbo is not created", loc = loc)
 	assert(vertex_buffers_alive[id] == true, "Vbo is deleted", loc = loc)
 	assert(vertex_buffer_targets[.array_buffer] == 0, "Another vbo is already bound", loc = loc);
@@ -62,7 +55,7 @@ enable_vertex_buffer :: proc(id : Vbo_ID, loc := #caller_location) {
 	gl.BindBuffer(gl.ARRAY_BUFFER, auto_cast id);
 }
 
-disable_vertex_buffer :: proc(id : Vbo_ID, loc := #caller_location) {
+disable_vertex_buffer :: proc(id : Vbo_id, loc := #caller_location) {
 	assert(id in vertex_buffers_alive, "Vbo is not created")
 	assert(vertex_buffers_alive[id] == true, "Vbo is deleted")
 	assert(vertex_buffer_targets[.array_buffer] == id, "The vbo that is trying to be disabled is not enabled", loc = loc);
@@ -73,17 +66,17 @@ disable_vertex_buffer :: proc(id : Vbo_ID, loc := #caller_location) {
 /////////////////////
 
 //VBO element
-load_vertex_array :: proc(loc := #caller_location) -> Vao_ID {
+load_vertex_array :: proc(loc := #caller_location) -> Vao_id {
 	using gl;
 
-    vao_id : Vao_ID = 0;
+    vao_id : Vao_id = 0;
     gl.GenVertexArrays(1, auto_cast &vao_id);
 
 	array_buffers_alive[vao_id] = {is_alive = true};
     return vao_id;
 }
 
-unload_vertex_array :: proc(vao_id : Vao_ID, loc := #caller_location) {
+unload_vertex_array :: proc(vao_id : Vao_id, loc := #caller_location) {
 
 	vao_id := vao_id;
 
@@ -91,7 +84,7 @@ unload_vertex_array :: proc(vao_id : Vao_ID, loc := #caller_location) {
     gl.DeleteVertexArrays(1, auto_cast &vao_id);
 }
 
-enable_vertex_array :: proc(id : Vao_ID, loc := #caller_location) {
+enable_vertex_array :: proc(id : Vao_id, loc := #caller_location) {
 	when ODIN_DEBUG {
 		assert(id in array_buffers_alive, "Vao is not created", loc = loc);
 		assert(array_buffers_alive[id].is_alive == true, "Vao is deleted", loc = loc);
@@ -106,7 +99,7 @@ enable_vertex_array :: proc(id : Vao_ID, loc := #caller_location) {
     gl.BindVertexArray(auto_cast id);
 }
 
-disable_vertex_array :: proc(id : Vao_ID, loc := #caller_location) {
+disable_vertex_array :: proc(id : Vao_id, loc := #caller_location) {
 	when ODIN_DEBUG {
 		assert(id in array_buffers_alive, "Vao is not created", loc = loc);
 		assert(array_buffers_alive[id].is_alive == true, "Vao is deleted", loc = loc);
@@ -118,10 +111,10 @@ disable_vertex_array :: proc(id : Vao_ID, loc := #caller_location) {
 }
 
 // Enable vertex attribute index
-setup_vertex_attribute :: proc(vao : Vao_ID, vbo : Vbo_ID, components : i32, type : Attribute_data_type, index : Attribute_location, loc := #caller_location) {
+setup_vertex_attribute :: proc(vao : Vao_id, vbo : Vbo_id, components : i32, type : Attribute_data_type, index : Attribute_client_index, loc := #caller_location) {
 	//TODO this should take all the information and do in one swop,
 	//use vertex_buffers_alive 
-	//enable_vertex_attribute :: proc(vao : Vao_ID, vbo : Vbo_ID, index : u32)
+	//enable_vertex_attribute :: proc(vao : Vao_id, vbo : Vbo_id, index : u32)
 	//array_buffers_alive.vertex_attrib_enabled[id] = true;
 
 	assert(vbo in vertex_buffers_alive, "Vbo is not created")
@@ -150,7 +143,7 @@ setup_vertex_attribute :: proc(vao : Vao_ID, vbo : Vbo_ID, components : i32, typ
 /*
 // Enable vertex attribute index
 disable_vertex_attribute :: proc(index : u32) {
-	//TODO disable_vertex_attribute :: proc(vao : Vao_ID, vbo : Vbo_ID, index : u32)
+	//TODO disable_vertex_attribute :: proc(vao : Vao_id, vbo : Vbo_id, index : u32)
 	//gl.DisableVertexAttribArray(index);
 	gl.DisableVertexAttribArray(auto_cast index);
 }
@@ -399,13 +392,13 @@ reload_texture_data :: proc(data : []u8, width : i32, height : i32, format : Pix
 /////////////////////
 
 // Enable vertex buffer element (VBO element)
-enable_vertex_buffer_element :: proc(id : Vbo_ID, loc := #caller_location) {
+enable_vertex_buffer_element :: proc(id : Vbo_id, loc := #caller_location) {
 	assert(bound_element_buffer == 0, "There is already a bound element buffer", loc = loc);
 	bound_element_buffer = id;
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, auto_cast id);
 }
 // Disable vertex buffer element (VBO element)
-disable_vertex_buffer_element :: proc(id : Vbo_ID, loc := #caller_location) {
+disable_vertex_buffer_element :: proc(id : Vbo_id, loc := #caller_location) {
 	assert(bound_element_buffer == id, "The element buffer your are trying to unbind is not bound", loc = loc);
 	bound_element_buffer = 0;
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0);

@@ -8,78 +8,6 @@ import linalg "core:math/linalg"
 
 import c "core:c/libc"
 
-////////////////////////////////////////////////////////////////////
-
-		// THESE DEFINES WHAT CANE BE IN A SHADER // 
-
-//locations may overlap as long as there is only of the overlapping in use at a time.
-Attribute_location :: enum {
-	//Default, used by the library, don't remove or rename.
-	position, // Shader location: vertex attribute: position
-    texcoord, // Shader location: vertex attribute: texcoord01
-    normal, // Shader location: vertex attribute: normal
-    tangent, // Shader location: vertex attribute: tangent
-}
-
-//TODO Use this to determine what happens
-//The instance data has the location 0 and is interleaved so it only takes up a single attribute slot.
-Attribute_location_instanced :: enum {
-	position_offset,
-	texture_offset,
-}
-
-Uniform_location :: enum {
-
-	//Per Frame
-	bg_color,
-	game_time,
-	real_time,
-
-	//Per prost processing
-	post_depth_buffer,
-	post_color_texture,
-	post_normal_texture,
-	
-	//For fog post processing
-	distance_fog_color,
-	fog_density,
-	start_far_fog,
-	end_far_fog,
-
-	//
-
-	//Per camera
-	prj_mat,
-	inv_prj_mat,
-	
-	view_mat,
-	inv_view_mat,
-		
-	/////////// Anything above binds at bind_shader or before, anything below is a draw call implementation thing ///////////
-
-	//Per model
-	mvp,
-	inv_mvp,		//will it ever be used?
-
-	model_mat,
-	inv_model_mat,	//will it ever be used?
-	
-	col_diffuse,
-	
-	//Textures
-	texture_diffuse,
-	emission_tex,
-
-	//For text
-	texcoords,
-}
-
-//If a Uniform_location is in this map, it is assumed (required?) to be a texture.
-texture_locations : map[Uniform_location]Texture_slot = {
-	.texture_diffuse = 0, ///= gl.TEXTURE0
-	.emission_tex = 1,
-}
-
 //////////////////////////////////////////////////////////
 
 Shader_program_id :: distinct u32;
@@ -93,8 +21,8 @@ Frame_buffer_id :: distinct u32;
 Attribute_id :: distinct i32;
 Uniform_id :: distinct i32;
 
-Vao_ID :: distinct i32; //TODO small ID
-Vbo_ID :: distinct i32; //TODO
+Vao_id :: distinct i32; //TODO small ID
+Vbo_id :: distinct i32; //TODO
 
 //Not an opengl thing
 Texture_slot :: distinct i32;
@@ -148,34 +76,11 @@ Attribute_type :: enum u32 {
 	uvec2 			= gl.UNSIGNED_INT_VEC2,
 	uvec3 			= gl.UNSIGNED_INT_VEC3,
 	uvec4 			= gl.UNSIGNED_INT_VEC4,
-	mat2 			= gl.FLOAT_MAT2,
-	mat3 			= gl.FLOAT_MAT3,
-	mat4 			= gl.FLOAT_MAT4,
-}
 
-Attribute_data_type :: enum u32 {
-	float 			= gl.FLOAT,
-	//TODO int 			= gl.INT,
-	//TODOuint 			= gl.UNSIGNED_INT,
-}
-
-Uniform_info :: struct {
-	location : Uniform_id,
-	uniform_type : Uniform_type,
-	array_size : i32,
-}
-
-Attribute_info :: struct {
-	location : Attribute_id,
-	attrib_type : Attribute_type,
-}
-
-// Shader attribute data types
-Shader_attribute_data_type :: enum c.int {
-	float = 0,         // Shader attribute type: float
-	vector2,              // Shader attribute type: vec2 (2 float)
-	vector3,              // Shader attribute type: vec3 (3 float)
-	vector4,              // Shader attribute type: vec4 (4 float)
+	//TODO these are not valid? right?
+	//mat2 			= gl.FLOAT_MAT2,
+	//mat3 			= gl.FLOAT_MAT3,
+	//mat4 			= gl.FLOAT_MAT4,
 }
 
 Depth_format :: enum {
@@ -183,6 +88,16 @@ Depth_format :: enum {
 	bits_16 = gl.DEPTH_COMPONENT16,
 	bits_24 = gl.DEPTH_COMPONENT24,
 	bits_32 = gl.DEPTH_COMPONENT32,
+}
+
+// Pixel formats
+// NOTE: Support depends on OpenGL version and platform
+Pixel_format :: enum c.int {
+	invalid = 0,
+	uncompressed_R8 = gl.R8,
+	uncompressed_RG8 = gl.RG8,
+	uncompressed_RGB8 = gl.RGB8,
+	uncompressed_RGBA8 = gl.RGBA8,
 }
 
 format_info :: proc(format : Pixel_format) -> (gl_name : c.uint, channels : c.int) {
@@ -202,16 +117,6 @@ format_info :: proc(format : Pixel_format) -> (gl_name : c.uint, channels : c.in
 	else {
 		panic("Unsupported pixel format");
 	}
-}
-
-// Pixel formats
-// NOTE: Support depends on OpenGL version and platform
-Pixel_format :: enum c.int {
-	invalid = 0,
-	uncompressed_R8 = gl.R8,
-	uncompressed_RG8 = gl.RG8,
-	uncompressed_RGB8 = gl.RGB8,
-	uncompressed_RGBA8 = gl.RGBA8,
 }
 
 GL_version :: enum {
@@ -266,17 +171,4 @@ get_gl_minor :: proc(version : GL_version) -> int {
 	}
 
 	return 0;
-}
-
-//////////////////
-Anchor_point :: enum {
-    top_left,
-    top_center,
-    top_right,
-    center_left,
-    center_center,
-    center_right,
-    bottom_left,
-    bottom_center,
-    bottom_right,
 }

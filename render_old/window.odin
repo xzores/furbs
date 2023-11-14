@@ -7,6 +7,7 @@ import "core:container/queue"
 import "core:sync"
 import "core:mem"
 import "core:time"
+import "core:intrinsics"
 
 import "vendor:glfw"
 import gl "vendor:OpenGL"
@@ -22,7 +23,7 @@ Mouse_mode :: enum {
 window_context : runtime.Context;
 frame_timer : time.Stopwatch;
 frame_counter : f32;
-ms_counter : f32;
+ms_counter : f32;	
 
 key_callback : glfw.KeyProc : proc "c" (window : glfw.WindowHandle, key : i32, scancode : i32, action : i32, mods : i32) {
 	sync.lock(&input_events_mutex);
@@ -86,35 +87,18 @@ input_callback : glfw.CharModsProc : proc "c" (window : glfw.WindowHandle, codep
 	queue.append(&char_input_buffer, codepoint);
 }
 
-error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstring) {
-	
-	context = window_context;
-
-	fmt.panicf("Recvied GLFW error : %v, text : %s", error, description);
-}
-
 Window :: struct {
 	glfw_window : glfw.WindowHandle, //dont touch
 	title : string, //dont change yourself, use set_title
 	startup_timer : time.Stopwatch,
 }
 
-init_window :: proc(width, height : i32, title : string, shader_folder : string, required_gl_verion : Maybe(GL_version) = nil, culling : bool = true, loc := #caller_location) -> (window : Window) {
+init_window :: proc(width, height : i32, title : string, culling : bool = true, required_gl_verion : Maybe(GL_version) = nil, loc := #caller_location) -> (window : Window) {
 	
 	window_context = context;
 
 	assert(render_has_been_init == false, "init_render has already been called!", loc = loc);
 	render_has_been_init = true;
-
-	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
-
-	if(!cast(bool)glfw.Init()){
-		panic("Failed to init glfw");
-	}
-	
-	shader_folder_location = strings.clone(shader_folder);
-	
-	glfw.SetErrorCallback(error_callback);
 
 	assert(render_has_been_init == true, "You must call init_render", loc = loc)
 	window.title = fmt.aprintf("%s",title);
@@ -127,14 +111,14 @@ init_window :: proc(width, height : i32, title : string, shader_folder : string,
 	glfw.MakeContextCurrent(window.glfw_window);
 	glfw.SetInputMode(window.glfw_window, glfw.STICKY_KEYS, 1);
 
-	gl.load_up_to(3, 0, glfw.gl_set_proc_address);
-	version := get_gl_version();
-	//TODO, enum cannot be below 3.3 //assert(version >= .opengl_3_3, "This library only supports OpenGL 3.0 or higher")
 	glfw.SetKeyCallback(window.glfw_window, key_callback);
 	glfw.SetMouseButtonCallback(window.glfw_window, button_callback);
 	glfw.SetScrollCallback(window.glfw_window, scroll_callback);
 	glfw.SetCharModsCallback(window.glfw_window, input_callback);
 	
+	gl.load_up_to(3, 0, glfw.gl_set_proc_address);
+	version := get_gl_version();
+	//TODO, enum cannot be below 3.3 //assert(version >= .opengl_3_3, "This library only supports OpenGL 3.0 or higher")
 	if required_verion, ok := required_gl_verion.?; ok {
 		//load the specified
 		assert(version >= required_verion, "OpenGL version is not new enough for the requied version");

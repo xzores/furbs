@@ -11,6 +11,7 @@ Pair :: struct(A : typeid, B : typeid) {
 	b : B,
 }
 
+@(require_results)
 is_number :: proc (codepoint : rune) -> bool {
 
 	switch codepoint {

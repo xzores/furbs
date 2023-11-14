@@ -4,6 +4,8 @@ import "core:fmt"
 import "core:mem"
 import "core:math"
 
+import glfw "vendor:glfw"
+
 import glsl "core:math/linalg/glsl"
 import linalg "core:math/linalg"
 
@@ -161,7 +163,20 @@ camera_rotate :: proc(cam : ^Camera3D, angles_degress : [3]f32) {
 
 camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {
 	using linalg;
-	
+
+	//forward := camera_forward(cam^);
+	//quaternion_from_forward_and_up_f32()
+	//m := linalg.matrix3_rotate_f32(math.to_radians(angle_degress), auto_cast around);
+	//matrix4_from_quaternion
+	/* 
+	qx := quaternion_angle_axis_f32(math.to_radians(angles_degress.x), {1,0,0});
+	qy := quaternion_angle_axis_f32(math.to_radians(angles_degress.y), {0,1,0});
+	qz := quaternion_angle_axis_f32(math.to_radians(angles_degress.z), {0,0,1});
+
+	//m := linalg.matrix3_from_euler_angles(math.to_radians(angles_degress.x), math.to_radians(angles_degress.y), math.to_radians(angles_degress.z), .XYZ);
+	m := matrix4_from_quaternion(mul(qx, qy));	
+	*/
+
 	yaw := math.to_radians(yaw);
 	pitch := math.to_radians(pitch);
 

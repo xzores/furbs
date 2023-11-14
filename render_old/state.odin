@@ -10,6 +10,14 @@ Vertex_buffer_targets :: enum {
 
 ///////////// STATE ////////////
 
+allowed_uniforms : [dynamic]Uniform_info;
+allowed_attributes : [dynamic]Attribute_info;
+
+uniform_enum_type : typeid = nil;
+attribute_enum_type : typeid = nil;
+
+texture_locations : map[Uniform_client_index]struct{};
+
 font_texture : Texture2D;
 font_context : fs.FontContext;
 text_shader : Shader;
@@ -58,8 +66,8 @@ textures_alive : map[Texture_id]bool; //All array_buffers alive
 render_buffer_alive : map[Render_buffer_id]bool; //All array_buffers alive
 frame_buffer_alive : map[Frame_buffer_id]bool; //All array_buffers alive
 
-vertex_buffers_alive : map[Vbo_ID]bool; //All array_buffers alive
-array_buffers_alive : map[Vao_ID]struct{
+vertex_buffers_alive : map[Vbo_id]bool; //All array_buffers alive
+array_buffers_alive : map[Vao_id]struct{
 	is_alive : bool,
 	vertex_attrib_enabled : [8]bool,
 }; //All array_buffers alive
@@ -69,10 +77,10 @@ texture_slots_binds : map[Texture_slot]Texture_id;
 //What is bound
 
 bound_shader_program : Shader_program_id;
-bound_array_buffer : Vao_ID;
-bound_element_buffer : Vbo_ID;
+bound_array_buffer : Vao_id;
+bound_element_buffer : Vbo_id;
 //TODO check bound_texture2D 	: Texture_id;
-vertex_buffer_targets : [Vertex_buffer_targets]Vbo_ID;
+vertex_buffer_targets : [Vertex_buffer_targets]Vbo_id;
 
 bound_frame_buffer_id : Frame_buffer_id;
 bound_read_frame_buffer_id : Frame_buffer_id;

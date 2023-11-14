@@ -4,6 +4,7 @@ import "core:runtime"
 import "core:reflect"
 import "core:intrinsics"
 
+@(require_results)
 is_enum_valid :: proc(a : any, loc := #caller_location) -> bool {
 
 	if a == nil { return false; }
@@ -26,10 +27,12 @@ is_enum_valid :: proc(a : any, loc := #caller_location) -> bool {
 	return false;
 }
 
-is_type_name_in_union :: proc ($u : typeid, type_name : string) -> bool where intrinsics.type_is_union(u) {
+@(require_results)
+is_type_name_in_union :: proc ($u : typeid, type_name : string) -> (bool) where intrinsics.type_is_union(u) {
 	return type_name_in_union_to_typeid(u, type_name) != nil;
 }
 
+@(require_results)
 type_name_in_union_to_typeid :: proc ($u : typeid, type_name : string) -> typeid where intrinsics.type_is_union(u) {
 	using runtime;
 

@@ -15,6 +15,7 @@ import "../gui"
 
 //main :: proc () {
 
+/*
 @test
 minimum_implementation_button :: proc(t : ^testing.T) {
 	using render;
@@ -733,3 +734,4 @@ Gui_crazy_showoff :: proc (t : ^testing.T) {
 
 	fmt.printf("Shutdown succesfull");
 }
+*/

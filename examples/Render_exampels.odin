@@ -13,8 +13,210 @@ import "vendor:glfw"
 
 import "../render"
 
+Uniform_location :: enum {
+
+	//Per Frame
+	/*bg_color,
+	game_time,
+	real_time,
+
+	//Per prost processing
+	post_depth_buffer,
+	post_color_texture,
+	post_normal_texture,
+	
+	//For fog post processing
+	distance_fog_color,
+	fog_density,
+	start_far_fog,
+	end_far_fog,*/
+
+	//Per camera
+	prj_mat,
+	inv_prj_mat,
+	
+	view_mat,
+	inv_view_mat,
+		
+	/////////// Anything above binds at bind_shader or before, anything below is a draw call implementation thing ///////////
+
+	//Per model
+	mvp,
+	inv_mvp,		//will it ever be used?
+
+	model_mat,
+	inv_model_mat,	//will it ever be used?
+	
+	col_diffuse,
+	
+	//Textures
+	texture_diffuse,
+	emission_tex,
+
+	//For text
+	texcoords,
+}
+
+uniforms_types : [Uniform_location]render.Uniform_info = {
+
+	.prj_mat 			= {	location = -1, 			//-1 means don't care
+							uniform_type = .mat4,	//This must be defined
+							array_size = -1},		//-1 means don't care
+
+	.inv_prj_mat 		= {	location = -1, 			//-1 means don't care
+							uniform_type = .mat4,	//This must be defined
+							array_size = -1},		//-1 means don't care
+
+	.view_mat 			= {	location = -1, 			//-1 means don't care
+							uniform_type = .mat4,	//This must be defined
+							array_size = -1},		//-1 means don't care
+
+	.inv_view_mat 		= {location = -1, 			//-1 means don't care
+							uniform_type = .mat4,	//This must be defined
+							array_size = -1},		//-1 means don't care
+
+	.mvp 				= {location = -1, 			//-1 means don't care
+							uniform_type = .mat4,	//This must be defined
+							array_size = -1},		//-1 means don't care
+	
+	.inv_mvp 			= {location = -1, 			//-1 means don't care
+							uniform_type = .mat4,	//This must be defined
+							array_size = -1},		//-1 means don't care
+
+	.model_mat 			= {location = -1, 			//-1 means don't care
+							uniform_type = .mat4,	//This must be defined
+							array_size = -1},		//-1 means don't care	
+	
+	.inv_model_mat 		= {location = -1, 			//-1 means don't care
+							uniform_type = .mat4,	//This must be defined
+							array_size = -1},		//-1 means don't care
+
+	.col_diffuse 		= {location = -1, 			//-1 means don't care
+							uniform_type = .vec4,	//This must be defined
+							array_size = -1},		//-1 means don't care	
+
+	.texture_diffuse 	= {location = -1, 			//-1 means don't care
+							uniform_type = .sampler_2d,	//This must be defined
+							array_size = -1},		//-1 means don't care	
+
+	.emission_tex 		= {location = -1, 			//-1 means don't care
+							uniform_type = .sampler_2d,	//This must be defined
+							array_size = -1},		//-1 means don't care	
+
+	.texcoords 			= {location = -1, 			//-1 means don't care
+							uniform_type = .vec4,	//This must be defined
+							array_size = -1},		//-1 means don't care	
+}
+
+Attribute_location :: enum {
+	position, 		// Shader location: vertex attribute: position
+    texcoord, 		// Shader location: vertex attribute: texcoord01
+    normal, 		// Shader location: vertex attribute: normal
+    tangent, 		// Shader location: vertex attribute: tangent
+}
+
+attribute_types : [Attribute_location]render.Attribute_info = {
+
+	.position 		= {	location = -1,			//-1 means don't care	
+						attribute_type = .vec3},
+
+	.texcoord 		= {	location = -1,			//-1 means don't care
+						attribute_type = .vec2},
+
+	.normal 		= {	location = -1,			//-1 means don't care	
+						attribute_type = .vec3},
+
+	.tangent 		= {	location = -1,			//-1 means don't care	
+						attribute_type = .vec3},
+}
+
+main :: proc() {
+	using render;
+
+	uniform_spec : render.Uniform_specification(Uniform_location) = {uniforms_types};
+	attrib_spec : render.Attribute_specification(Attribute_location) = {attribute_types};
+	
+	begin_render(uniform_spec, attrib_spec, nil, "res/shaders");
+
+	window := init_window(600, 400, "Hello world");
+	
+	my_quad := generate_quad();
+	
+	my_shader : Shader;
+	load_shader(&my_shader, "gui", "gui");
+
+	my_camera : Camera2D = {
+		position 			= {0,0},
+		target_relative 	= {0,0},
+		rotation 			= 0,
+		zoom	   			= 1,
+
+		far 				= 1,
+		near 				= -1,
+	};
+
+	//Optional: load a cursor
+	{
+		using png;
+
+		data, ok := os.read_entire_file_from_filename("res/cursor/my_cursor.png");
+		defer delete(data);
+
+		options := Options{
+			.alpha_add_if_missing,
+		};
+
+		img, err := png.load_from_bytes(data, options);
+		if err != nil {
+			panic("Failed to load cursor");
+		}
+		defer destroy(img)
+
+		assert(img.width == img.height, "Icon must be square")
+		set_cursor(bytes.buffer_to_bytes(&img.pixels), auto_cast img.width);
+	}
+	
+	for !should_close(window) {
+		begin_frame(window, {1,0,1,1});
+		
+		//////// LOGIC ////////
+
+		if is_key_down(Key_code.a) {
+			my_camera.position -= {1,0} * delta_time();
+		}
+		if is_key_down(Key_code.a) {
+			my_camera.position += {1,0} * delta_time();
+		}
+		if is_key_down(Key_code.a) {
+			my_camera.position += {0,1} * delta_time();
+		}
+		if is_key_down(Key_code.a) {
+			my_camera.position -= {0,1} * delta_time();
+		}
+		
+		//////// Draw 2D ////////
+		//2D
+		begin_mode_2D(my_camera); //Camera is optional
+		bind_shader(my_shader);
+
+		//keep running
+		draw_mesh_single(my_shader, my_quad);
+		
+		unbind_shader(my_shader);
+		end_mode_2D(my_camera);
+		//////////////////////////
+
+		end_frame(window);
+	}
+
+	destroy_window(&window);
+	end_render();
+	fmt.printf("Shutdown succesfull");
+}
+
+
+
 /*
-*/
 @test
 Draw_quad_2D :: proc(t : ^testing.T) {
 	using render;
@@ -604,3 +806,4 @@ Instanced_drawing :: proc (t : ^testing.T) {
 
 	fmt.printf("Shutdown succesfull");
 }
+*/

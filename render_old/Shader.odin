@@ -6,6 +6,8 @@ import "core:strings"
 import "core:intrinsics"
 import "core:reflect"
 
+import glfw "vendor:glfw"
+
 import glsl "core:math/linalg/glsl"
 import linalg "core:math/linalg"
 
