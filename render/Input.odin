@@ -8,8 +8,6 @@ import "vendor:glfw"
 
 ////////// Common //////////
 
-input_events_mutex : sync.Mutex;
-
 Input_modifier_enum :: enum i32 {
 	none = 0,
 	
@@ -30,12 +28,6 @@ Input_state :: enum {
 Input_modifier :: bit_set[Input_modifier_enum; i32];
 
 ////////// Keys //////////
-
-key_input_events : queue.Queue(Key_input_event);
-key_release_input_events : queue.Queue(Key_input_event);
-
-char_input_buffer : queue.Queue(rune);
-char_input : queue.Queue(rune);
 
 Key_code :: enum i32 {
 
@@ -183,7 +175,6 @@ Key_code :: enum i32 {
 }
 
 Key_input_event :: struct {
-
 	glfw_handle : glfw.WindowHandle,
 	key : Key_code,
 	scancode : i32,
@@ -191,40 +182,8 @@ Key_input_event :: struct {
 	mods : Input_modifier,
 }
 
-//Current key state
-@(private="file")
-keys_down 		: #sparse [Key_code]bool;
-@(private="file")
-keys_released 	: #sparse [Key_code]bool;
-@(private="file")
-keys_pressed 	: #sparse [Key_code]bool;
-@(private="file")
-keys_triggered 	: #sparse [Key_code]bool;
-
-@(private="file")
-pasted : bool;
-
-//constantly down
-is_key_down :: proc(key : Key_code) -> bool {
-	return keys_down[key];
-}
-
-//trigger on pressed key
-is_key_pressed :: proc(key : Key_code) -> bool {
-	return keys_released[key] ;
-}
-
-//trigger on release key
-is_key_released :: proc(key : Key_code) -> bool {
-	return keys_pressed[key];
-}
-
-//triggers when press and repeat signals
-is_key_triggered :: proc(key : Key_code) -> bool {
-	return keys_triggered[key];
-}
-
-recive_next_input :: proc () -> (char : rune, done : bool) {
+@(require_results)
+recive_next_input :: proc(using s : Render_state($U,$A)) -> (char : rune, done : bool) {
 
 	done = queue.len(char_input) != 0;
 	
@@ -235,22 +194,36 @@ recive_next_input :: proc () -> (char : rune, done : bool) {
 	return;
 }
 
-get_clipboard_string :: proc (loc := #caller_location) -> string {
+get_clipboard_string :: proc(using s : Render_state($U,$A), loc := #caller_location) -> string {
 
 	if window, ok := bound_window.?; ok {
 		return glfw.GetClipboardString(window.glfw_window);
 	}
-
+	
 	panic("A window must be bound to recive clipboard string", loc = loc);
 }
 
+//constantly down
+is_key_down :: proc(using s : Render_state($U,$A), key : Key_code) -> bool {
+	return keys_down[key];
+}
+
+//trigger on pressed key
+is_key_pressed :: proc(using s : Render_state($U,$A), key : Key_code) -> bool {
+	return keys_released[key] ;
+}
+
+//trigger on release key
+is_key_released :: proc(using s : Render_state($U,$A), key : Key_code) -> bool {
+	return keys_pressed[key];
+}
+
+//triggers when press and repeat signals
+is_key_triggered :: proc(using s : Render_state($U,$A), key : Key_code) -> bool {
+	return keys_triggered[key];
+}
+
 ////////// Mouse //////////
-
-//TODO, these you the window's allocator. Is this always true???
-button_input_events : queue.Queue(Mouse_input_event);
-button_release_input_events : queue.Queue(Mouse_input_event);
-
-scroll_input_event : queue.Queue([2]f32);
 
 Mouse_code :: enum i32 {
 	
@@ -277,31 +250,18 @@ Mouse_input_event :: struct {
 	mods : Input_modifier,
 }
 
-//Current key state
-@(private="file")
-button_down 	: [Mouse_code]bool;
-@(private="file")
-button_released : [Mouse_code]bool;
-@(private="file")
-button_pressed 	: [Mouse_code]bool;
-
-//public
-mouse_pos : [2]f32;
-mouse_delta : [2]f32;
-scroll_delta : [2]f32;
-
 //constantly down, button means mouse
-is_button_down :: proc(button : Mouse_code) -> bool {
+is_button_down :: proc(using s : Render_state($U,$A), button : Mouse_code) -> bool {
 	return button_down[button];
 }
 
 //trigger on pressed key
-is_button_pressed :: proc(button : Mouse_code) -> bool {
+is_button_pressed :: proc(using s : Render_state($U,$A), button : Mouse_code) -> bool {
 	return button_pressed[button];
 }
 
 //trigger on release key
-is_button_released :: proc(button : Mouse_code) -> bool {
+is_button_released :: proc(using s : Render_state($U,$A), button : Mouse_code) -> bool {
 	return button_released[button];
 }
 
@@ -309,7 +269,7 @@ is_button_released :: proc(button : Mouse_code) -> bool {
 
 //Called by begin_frame
 @(private)
-begin_inputs :: proc(loc := #caller_location) {
+begin_inputs :: proc(using s : Render_state($U,$A), loc := #caller_location) {
 
 	assert(bound_window != nil, "A window must be bound", loc = loc);
 	assert(queue.len(key_release_input_events) == 0, "key_release_input_events is not zero, did  you forget to call end_inputs?", loc = loc);
@@ -369,7 +329,7 @@ begin_inputs :: proc(loc := #caller_location) {
 }
 
 @(private)
-end_inputs :: proc(loc := #caller_location) {
+end_inputs :: proc(using s : Render_state($U,$A), loc := #caller_location) {
 
 	assert(bound_window != nil, "A window must be bound", loc = loc);
 
@@ -423,8 +383,5 @@ end_inputs :: proc(loc := #caller_location) {
 	queue.clear(&char_input);
 
 }
-
-
-
 
 //TODO is_cursor_on_screen

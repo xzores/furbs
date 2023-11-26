@@ -86,13 +86,6 @@ input_callback : glfw.CharModsProc : proc "c" (window : glfw.WindowHandle, codep
 	queue.append(&char_input_buffer, codepoint);
 }
 
-error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstring) {
-	
-	context = window_context;
-
-	fmt.panicf("Recvied GLFW error : %v, text : %s", error, description);
-}
-
 Window :: struct {
 	glfw_window : glfw.WindowHandle, //dont touch
 	title : string, //dont change yourself, use set_title

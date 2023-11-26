@@ -7,18 +7,24 @@ import "core:math"
 import glsl "core:math/linalg/glsl"
 import linalg "core:math/linalg"
 
-Mesh_data :: struct {
+Mesh_attribute :: struct {
+	
+}
+
+Mesh_data :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	
 	vertex_count : i32, 					//The amount of verticies
 	
 	//User vertex data here
 
 	// Default vertex data
-	vertices		: [][3]f32,           	// Mandatory, vertex positions (shader-location = 0)
-	texcoords		: [][2]f32,           	// optional (shader-location = 1)
-	normals			: [][3]f32,           	// optional (shader-location = 2)
+	//vertices		: [A][3]f32,           	// Mandatory, vertex positions (shader-location = 0)
+	//texcoords		: [][2]f32,           	// optional (shader-location = 1)
+	//normals			: [][3]f32,           	// optional (shader-location = 2)
 	//texcoords2		: [][2]f32,         // optional (shader-location = 5)
-	tangents		: [][3]f32,         	// optional (shader-location = 4)
+	//tangents		: [][3]f32,         	// optional (shader-location = 4)
+
+	attributes : [A]Mesh_attribute,
 
 	indices			: union {
 		[]u16,
@@ -54,7 +60,7 @@ Reserve_behavior :: enum {
 }
 
 //Don't touch use setup_mesh_buffer
-Mesh_buffer :: struct {
+Mesh_buffer :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	free_space : [dynamic][2]int,
 	total_mem : int,
 	padding : int, // if the meshs can resize slightly.
@@ -62,12 +68,12 @@ Mesh_buffer :: struct {
 	use_indicies : bool,
 	active_locations : bit_set[Attribute_location],
 	
-	using data : Mesh_data,
+	using data : Mesh_data(A),
 	using identifiers : Mesh_identifiers, //THe GPU buffers
 }
 
-Mesh :: struct {
-	using _ : Mesh_data,
+Mesh :: struct(A : typeid) where intrinsics.type_is_enum(A) {
+	using _ : Mesh_data(A),
 
 	implementation : union {
 		Mesh_identifiers,	//It is a standalone mesh, drawing happens with draw_mesh_single.
@@ -96,7 +102,7 @@ Mesh :: struct {
 */
 
 //"initial_mem" and "padding" is in verticies.
-init_mesh_buffer :: proc(mesh_buffer : ^Mesh_buffer, initial_mem : u64, padding : u64, active_locations : bit_set[Attribute_location], use_indicies : bool, reserve_behavior : Reserve_behavior = .moderate, loc := #caller_location) {
+init_mesh_buffer :: proc(using s : Render_state($U,$A), mesh_buffer : ^Mesh_buffer, initial_mem : u64, padding : u64, active_locations : bit_set[Attribute_location], use_indicies : bool, reserve_behavior : Reserve_behavior, loc := #caller_location) {
 	
 	assert(mesh_buffer.free_space == nil, "This is already setup", loc = loc);
 	assert(initial_mem != 0, "initial_mem must not be 0", loc = loc);
@@ -169,7 +175,7 @@ init_mesh_buffer :: proc(mesh_buffer : ^Mesh_buffer, initial_mem : u64, padding 
 }
 
 // Creates pointers to begin async upload  
-upload_mesh_single :: proc (mesh : ^Mesh, dyn : bool = false, loc := #caller_location) {
+upload_mesh_single :: proc (using s : Render_state($U,$A), mesh : ^Mesh, dyn : bool = false, loc := #caller_location) {
 	
 	upload_mesh_data :: proc(mesh : ^Mesh_data, dyn : bool, loc := #caller_location) -> (identifiers : Mesh_identifiers) {
 		
@@ -239,10 +245,10 @@ upload_mesh_single :: proc (mesh : ^Mesh, dyn : bool = false, loc := #caller_loc
 	}
 }
 
-upload_mesh_shared :: proc (mesh : ^Mesh, mesh_buffer : ^Mesh_buffer, ignore_discrepancies : bool = false, loc := #caller_location) {
+upload_mesh_shared :: proc (using s : Render_state($U,$A), mesh : ^Mesh, mesh_buffer : ^Mesh_buffer, loc := #caller_location) {
 	
 	//assert(mesh_buffer^ == Mesh_buffer{}, "mesh_buffer is not setup", loc = loc);
-	
+	/*
 	if !ignore_discrepancies {
 		if .position in mesh_buffer.active_locations {
 			assert(mesh.vertices != nil, "The mesh_buffer has .position as an active attribute but the mesh does not.", loc = loc);
@@ -270,6 +276,7 @@ upload_mesh_shared :: proc (mesh : ^Mesh, mesh_buffer : ^Mesh_buffer, ignore_dis
 			assert(!(.tangent in mesh_buffer.active_locations), "The mesh has vertices active but the mesh_buffer does not.", loc = loc);
 		}
 	}
+	*/
 
 	if mesh.implementation == nil {
 		
@@ -312,7 +319,7 @@ upload_mesh_shared :: proc (mesh : ^Mesh, mesh_buffer : ^Mesh_buffer, ignore_dis
 }
 
 // Unload mesh from memory (RAM and VRAM)
-unload_mesh_single :: proc(mesh : ^Mesh, loc := #caller_location) {
+unload_mesh_single :: proc(using s : Render_state($U,$A), mesh : ^Mesh, loc := #caller_location) {
 
 	assert(mesh.implementation != nil, "The mesh is not uploaded", loc = loc);
 
@@ -412,7 +419,7 @@ unload_mesh_shared :: proc(mesh : ^Mesh, mesh_buffer : ^Mesh_buffer, loc := #cal
 }
 */
 
-draw_mesh_single :: proc (shader : Shader, mesh : Mesh, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, loc := #caller_location) {
+draw_mesh_single :: proc (using s : Render_state($U,$A), shader : Shader, mesh : Mesh, transform : matrix[4, 4]f32, loc := #caller_location) {
 	
 	assert(shader.id == bound_shader_program, "The shader must be bound before drawing with it", loc = loc);
 	assert(bound_camera != nil, "A camera must be bound before a mesh can be drawn", loc = loc);
@@ -462,7 +469,7 @@ draw_mesh_single :: proc (shader : Shader, mesh : Mesh, transform : matrix[4, 4]
 
 //This allows you to draw a single mesh even if it part of a mesh_buffer.
 //If you need to swap textures or similar, you can use this instead of draw_mesh_shared. This is worse in preformance, so you should try and use texture arrays if possiable.
-draw_mesh_single_shared :: proc(shader : Shader, mesh : Mesh, mesh_buffer : Mesh_buffer, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, loc := #caller_location) {
+draw_mesh_single_shared :: proc(using s : Render_state($U,$A), shader : Shader, mesh : Mesh, mesh_buffer : Mesh_buffer, transform : matrix[4, 4]f32, loc := #caller_location) {
 	
 	assert(shader.id == bound_shader_program, "The shader must be bound before drawing with it", loc = loc);
 	assert(mesh.vertex_count == auto_cast len(mesh.vertices) || mesh.vertices == nil, "The vertices and vertex_count does not have the same size", loc = loc);
@@ -504,30 +511,30 @@ draw_mesh_single_instanced :: proc(shader : Shader, mesh : Mesh, ) {
 	//then make some better implementation that allows for better preformance. 
 	//Or even better make a call that return a pointer to the data we need and make draw_mesh_single_instanced take in that instance,
 	//this could be presistantly mapped (Opengl 4.4) and have the reason fallback to async upload with fallback to upload every frame. Like init_mesh_instance_draw_buffer -> [dynamic]u8 (or maybe template to fit data_type(s)).
-	
 }
 */
 
-calculate_tangents :: proc (mesh : ^Mesh) {
+calculate_tangents :: proc (using s : Render_state($U,$A), mesh : ^Mesh) {
 	//TODO
+	panic("TODO");
 }
 
-cond_free :: proc(to_free : rawptr, loc := #caller_location) {
+@(private)
+cond_free :: proc(using s : Render_state($U,$A), to_free : rawptr, loc := #caller_location) {
 	if to_free != nil {
 		free(to_free, loc = loc);
 	}
 }	
 
-cond_delete :: proc(to_delete : $T, loc := #caller_location) {
+@(private)
+cond_delete :: proc(using s : Render_state($U,$A), to_delete : $T, loc := #caller_location) {
 	if to_delete != nil {
 		delete(to_delete, loc = loc);
 	}
 }	
 
 //This will not upload it
-generate_quad :: proc(size : [3]f32 = {1,1,1}, position : [3]f32 = {0,0,0}, use_index_buffer := true, loc := #caller_location) -> Mesh {
-
-	assert(bound_array_buffer == 0, "Cannot generate quad while a array buffer is bound", loc = loc);
+generate_quad :: proc(using s : Render_state($U,$A), size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> Mesh {
 
 	quad : Mesh 
 	
@@ -590,10 +597,8 @@ generate_quad :: proc(size : [3]f32 = {1,1,1}, position : [3]f32 = {0,0,0}, use_
 	return quad;
 }
 
-generate_circle :: proc(diameter : f32 = 1, positon : [2]f32 = {0,0}, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (circle : Mesh) {
-	
-	assert(bound_array_buffer == 0, "Cannot generate circle while a array buffer is bound", loc = loc);
-	
+generate_circle :: proc(using s : Render_state($U,$A), diameter : f32, positon : [2]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (circle : Mesh) {
+
 	vertices := make([dynamic][2]f32, 0, 3 * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 3 * (sectors+1), context.temp_allocator);
 	normals := make([dynamic][3]f32, 0, 3 * (sectors+1), context.temp_allocator);
@@ -667,7 +672,7 @@ generate_circle :: proc(diameter : f32 = 1, positon : [2]f32 = {0,0}, sectors : 
 }
 
 //This will not upload it
-generate_cube :: proc(size : [3]f32 = {1,1,1}, position : [3]f32 = {0,0,0}, use_index_buffer := true, loc := #caller_location) -> (cube : Mesh) {
+generate_cube :: proc(using s : Render_state($U,$A), size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (cube : Mesh) {
 
 	Cube_verts := [][3]f32{
 		
@@ -759,8 +764,6 @@ generate_cube :: proc(size : [3]f32 = {1,1,1}, position : [3]f32 = {0,0,0}, use_
 		{1, 0}, // triangle 2 : end
 	}
 
-	assert(bound_array_buffer == 0, "Cannot generate quad while a array buffer is bound", loc = loc);
-
 	if use_index_buffer {
 		panic("Unimplemented");
 	}
@@ -780,10 +783,8 @@ generate_cube :: proc(size : [3]f32 = {1,1,1}, position : [3]f32 = {0,0,0}, use_
 }
 
 //This will not upload it
-generate_cylinder :: proc(offset : [3]f32 = {0,0,0}, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, stacks : int = 1, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (cylinder : Mesh) {
+generate_cylinder :: proc(using s : Render_state($U,$A), offset : [3]f32, transform : matrix[4, 4]f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (cylinder : Mesh) {
 
-	assert(bound_array_buffer == 0, "Cannot generate cylinder while a array buffer is bound", loc = loc);
-	
 	vertices := make([dynamic][3]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
 	normals := make([dynamic][3]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
@@ -854,10 +855,8 @@ generate_cylinder :: proc(offset : [3]f32 = {0,0,0}, transform : matrix[4, 4]f32
 }
 
 //This will not upload it
-generate_sphere :: proc(offset : [3]f32 = {0,0,0}, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (sphere : Mesh) {
+generate_sphere :: proc(using s : Render_state($U,$A), offset : [3]f32 = {0,0,0}, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (sphere : Mesh) {
 
-	assert(bound_array_buffer == 0, "Cannot generate sphere while a array buffer is bound", loc = loc);
-	
 	vertices := make([dynamic][3]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
 	normals := make([dynamic][3]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);

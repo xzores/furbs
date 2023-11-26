@@ -13,11 +13,11 @@ Circle :: struct {
 	diameter : f32,
 	position : [2]f32,
 }
+
 Line :: struct {
 	p1, p2 : [2]f32,
 	thickness : f32,
 }
-
 
 Rounded_rectangle :: struct {
 	rect : [4]f32,
@@ -54,7 +54,7 @@ _ensure_shapes_loaded :: proc() {
 }
 
 //This is ok fast if you dont specifify roundness, segments or thickness in Rounded_rectangle. And/Or if you dont 
-draw_shape :: proc(shape : Shape, rot : f32 = 0, texture : Maybe(Texture2D) = nil, shader := gui_shader, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+draw_shape :: proc(using s : Render_state($U,$A), shape : Shape, rot : f32 = 0, texture : Maybe(Texture2D), shader : Shader, color : [4]f32, loc := #caller_location) {
 	
 	assert(bound_camera != nil, "A camera must be bound before a mesh can be drawn", loc = loc);
 	shader := shader;

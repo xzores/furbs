@@ -9,7 +9,6 @@ import glfw "vendor:glfw"
 import glsl "core:math/linalg/glsl"
 import linalg "core:math/linalg"
 
-
 // Camera projection
 CameraProjection :: enum {
 	perspective = 0,                  // Perspective projection
@@ -36,12 +35,7 @@ Camera2D :: struct {
 	far, near : 	f32,
 }
 
-Camera_pixel :: struct {
-	position : [2]f32,
-	Anchor_point : [2]f32,
-}
-
-begin_mode_3D :: proc(using camera : Camera3D, use_transparency := true, loc := #caller_location) {
+begin_mode_3D :: proc(using s : Render_state($U,$A), using camera : Camera3D, use_transparency : bool, loc := #caller_location) {
 
 	assert(bound_camera == nil, "A camera is already bound, unbind it first", loc = loc);
 	bound_camera = camera;
@@ -74,7 +68,7 @@ begin_mode_3D :: proc(using camera : Camera3D, use_transparency := true, loc := 
 }
 
 // Ends 3D mode and returns to default 2D orthographic mode
-end_mode_3D :: proc(camera : Camera3D, loc := #caller_location) {
+end_mode_3D :: proc(using s : Render_state($U,$A), camera : Camera3D, loc := #caller_location) {
 	
 	assert(camera == bound_camera, "The camera you are trying to unbind is not the currently bound camera", loc = loc);
 	bound_camera = nil;
@@ -84,7 +78,7 @@ end_mode_3D :: proc(camera : Camera3D, loc := #caller_location) {
 	enable_transparency(false);
 }
 
-begin_mode_2D :: proc(using camera : Camera2D = {{0,0}, {0,0}, 0, 1, 1, -1}, use_transparency := true, loc := #caller_location) {
+begin_mode_2D :: proc(using s : Render_state($U,$A), using camera : Camera2D, use_transparency : bool, loc := #caller_location) {
 
 	assert(bound_camera == nil, "A camera is already bound, unbind it first", loc = loc);
 	bound_camera = camera;
@@ -105,14 +99,14 @@ begin_mode_2D :: proc(using camera : Camera2D = {{0,0}, {0,0}, 0, 1, 1, -1}, use
 }
 
 // Ends 3D mode and returns to default 2D orthographic mode
-end_mode_2D :: proc(camera : Camera2D = {{0,0}, {0,0}, 0, 1, 1, -1}, loc := #caller_location) {
+end_mode_2D :: proc(using s : Render_state($U,$A), camera : Camera2D = {{0,0}, {0,0}, 0, 1, 1, -1}, loc := #caller_location) {
 	assert(bound_camera == bound_camera, "A camera is already bound, unbind it first", loc = loc);
 	bound_camera = nil;
 
 	enable_transparency(false);
 }
 
-get_pixel_space_camera :: proc() -> (cam : Camera2D) {
+get_pixel_space_camera :: proc(using s : Render_state($U,$A), loc := #caller_location) -> (cam : Camera2D) {
 
 	aspect : f32 = current_render_target_width / current_render_target_height;
 
@@ -151,14 +145,6 @@ camera_right :: proc(cam : Camera3D) -> [3]f32 {
 camera_move :: proc(cam : ^Camera3D, movement : [3]f32) {
 	cam.position += movement;
 	cam.target += movement;
-}
-
-camera_rotate :: proc(cam : ^Camera3D, angles_degress : [3]f32) {
-
-	forward := camera_forward(cam^);
-	m := linalg.matrix3_from_euler_angles(math.to_radians(angles_degress.x), math.to_radians(angles_degress.y), math.to_radians(angles_degress.z), .XYZ);
-	//m := linalg.matrix3_rotate_f32(math.to_radians(angle_degress), auto_cast around);
-	cam.target = linalg.matrix_mul_vector(m, forward)  + cam.position;
 }
 
 camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {

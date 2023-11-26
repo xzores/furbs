@@ -12,9 +12,6 @@ import linalg "core:math/linalg"
 
 import "../utils"
 
-loaded_vertex_shaders : map[string]Shader_vertex_id;
-loaded_fragment_shaders : map[string]Shader_fragment_id;
-
 Shader :: struct {
 	id : Shader_program_id,                 					// Shader program id
 	name : string,				
@@ -23,7 +20,7 @@ Shader :: struct {
 }
 
 //Will load all shaders into memory.
-init_shaders :: proc(loc := #caller_location) {
+init_shaders :: proc(using s : Render_state($U,$A), loc := #caller_location) {
 	
 	assert(len(loaded_vertex_shaders) == 0, "Shaders has already been loaded", loc = loc);
 	assert(len(loaded_fragment_shaders) == 0, "Shaders has already been loaded", loc = loc);
@@ -58,7 +55,7 @@ init_shaders :: proc(loc := #caller_location) {
 
 }
 
-destroy_shaders :: proc() {
+destroy_shaders :: proc(using s : Render_state($U,$A)) {
 
 	for name, vs in loaded_vertex_shaders {	
 		unload_vertex_shader(vs);
@@ -74,7 +71,7 @@ destroy_shaders :: proc() {
 
 /////////////////
 
-load_shader :: proc(using shader : ^Shader, vs_name : string, fs_name : string, loc := #caller_location) {
+load_shader :: proc(using s : Render_state($U,$A), using shader : ^Shader, vs_name : string, fs_name : string, loc := #caller_location) {
 
 	//TODO cache the result, requires opengl 4.1 so we will only do it if the extension is supported.
 	//use glGetString(GL_VERSION);
@@ -164,14 +161,14 @@ load_shader :: proc(using shader : ^Shader, vs_name : string, fs_name : string, 
 	//fmt.printf("%s.vs / %s.fs : shader.attribute_locations : %#v\n shader.uniform_locations : %#v\n", vs_name, fs_name, shader.attribute_locations, shader.uniform_locations);
 }
 
-unload_shader :: proc(shader : ^Shader) {
+unload_shader :: proc(using s : Render_state($U,$A), shader : ^Shader) {
 	//TODO
 	panic("TODO");
 }
 
 //////////////////
 
-get_default_gui_shader :: proc() -> (shader : Shader) {
+get_default_gui_shader :: proc(using s : Render_state($U,$A)) -> (shader : Shader) {
 	
 	vertex_source_gui_shader := `
 	#version 330 core
@@ -214,7 +211,7 @@ get_default_gui_shader :: proc() -> (shader : Shader) {
 	return;
 }
 
-get_default_text_shader :: proc() -> (shader : Shader) {
+get_default_text_shader :: proc(using s : Render_state($U,$A)) -> (shader : Shader) {
 	
 	vertex_source_gui_shader := `
 	#version 330 core
@@ -260,7 +257,7 @@ get_default_text_shader :: proc() -> (shader : Shader) {
 //////////////////
 
 //Shader must be bound before this is called.
-place_uniform :: proc(shader : Shader, uniform_loc : Uniform_location, value : $T, loc := #caller_location) {
+place_uniform :: proc(using s : Render_state($U,$A), shader : Shader, uniform_loc : Uniform_location, value : $T, loc := #caller_location) {
 	
 	//TODO check that shader is the currently bound shader.
 	//TODO this should be bound to uniform block and there should be at least 12 uniforms blocks advaliable, so we can assert by using "GL_MAX_VERTEX_UNIFORM_BLOCKS"
@@ -284,7 +281,7 @@ place_uniform :: proc(shader : Shader, uniform_loc : Uniform_location, value : $
 	}
 }
 
-bind_shader :: proc(shader : Shader, loc := #caller_location) {
+bind_shader :: proc(using s : Render_state($U,$A), shader : Shader, loc := #caller_location) {
 	
 	assert(bound_camera != {}, "A camera must be bound when binding a shader", loc = loc);
 	assert(shader.id != 0, "Shader is not initizalized", loc = loc);
@@ -299,7 +296,7 @@ bind_shader :: proc(shader : Shader, loc := #caller_location) {
 	
 }
 
-unbind_shader :: proc(shader : Shader, loc := #caller_location){
+unbind_shader :: proc(using s : Render_state($U,$A), shader : Shader, loc := #caller_location){
 	assert(bound_camera != {}, "A camera must first be unbound after the shader is unbound", loc = loc);
 	disable_shader(shader.id);
 }

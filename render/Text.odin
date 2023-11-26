@@ -105,16 +105,17 @@ getTextBounds :: proc(text : string, position : [2]f32, font : Font, size : f32,
 	return;
 }
 
-draw_text :: proc (text : string, position : [2]f32, font : Font, size : f32, spacing : f32 = 0, color : [4]f32 = {1,1,1,1}, shader := text_shader, loc := #caller_location) {
+draw_text :: proc (text : string, position : [2]f32, font : Font, size : f32, spacing : f32, color : [4]f32, shader : Shader, loc := #caller_location) {
 	
 	shader := shader;
 
+	assert(false, "TODO");
 	if shader.id == 0 {
 		fmt.printf("loading default text shader\n");
 		text_shader = get_default_text_shader();
 		shader = text_shader;
 	}
-
+	
 	fs.SetFont(&font_context, auto_cast font);
 	fs.SetSize(&font_context, size);
 	fs.SetSpacing(&font_context, spacing);

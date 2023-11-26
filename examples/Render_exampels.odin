@@ -11,8 +11,6 @@ import "core:math/rand"
 
 import "vendor:glfw"
 
-import "../render"
-
 /*
 */
 @test
