@@ -1,3 +1,5 @@
+
+/*
 package examples;
 
 import "core:fmt"
@@ -10,6 +12,8 @@ import "core:bytes"
 import "core:math/rand"
 
 import "vendor:glfw"
+
+import render "../interface";
 
 /*
 */
@@ -602,3 +606,4 @@ Instanced_drawing :: proc (t : ^testing.T) {
 
 	fmt.printf("Shutdown succesfull");
 }
+*/

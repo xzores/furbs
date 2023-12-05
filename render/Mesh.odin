@@ -4,16 +4,22 @@ import "core:slice"
 import "core:fmt"
 import "core:mem"
 import "core:math"
+import "core:intrinsics"
 import glsl "core:math/linalg/glsl"
 import linalg "core:math/linalg"
 
 Mesh_attribute :: struct {
-	
+	active : bool,
+	data_type : Attribute_type,
+	data : []u8,
+
+	vbo : Vbo_ID,
 }
+
 
 Mesh_data :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	
-	vertex_count : i32, 					//The amount of verticies
+	vertex_count : int, 					//The amount of verticies
 	
 	//User vertex data here
 
@@ -23,9 +29,9 @@ Mesh_data :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	//normals			: [][3]f32,           	// optional (shader-location = 2)
 	//texcoords2		: [][2]f32,         // optional (shader-location = 5)
 	//tangents		: [][3]f32,         	// optional (shader-location = 4)
-
+	
 	attributes : [A]Mesh_attribute,
-
+	
 	indices			: union {
 		[]u16,
 		[]u32,
@@ -40,10 +46,10 @@ Mesh_data :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	*/
 }
 
-Mesh_identifiers :: struct {
+Mesh_identifiers :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	// OpenGL identifiers
 	vao_id		: Vao_ID,                // OpenGL Vertex Array Object id
-	vbo_id		: [Attribute_location]Vbo_ID,              // OpenGL Vertex Buffer Objects id (default vertex data)
+	vbo_id		: [A]Vbo_ID,              // OpenGL Vertex Buffer Objects id (default vertex data)
 	vbo_indices : Vbo_ID,				//special for indicies 
 }
 
@@ -66,17 +72,17 @@ Mesh_buffer :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	padding : int, // if the meshs can resize slightly.
 	reserve_behavior : Reserve_behavior,
 	use_indicies : bool,
-	active_locations : bit_set[Attribute_location],
+	active_locations : bit_set[A],
 	
 	using data : Mesh_data(A),
-	using identifiers : Mesh_identifiers, //THe GPU buffers
+	using identifiers : Mesh_identifiers(A), //THe GPU buffers
 }
 
 Mesh :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	using _ : Mesh_data(A),
 
 	implementation : union {
-		Mesh_identifiers,	//It is a standalone mesh, drawing happens with draw_mesh_single.
+		Mesh_identifiers(A),	//It is a standalone mesh, drawing happens with draw_mesh_single.
 		Mesh_buffer_index,	//It is a mesh sharing a buffers with similar meshes, draw with draw_mesh.
 	},
 
@@ -102,7 +108,7 @@ Mesh :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 */
 
 //"initial_mem" and "padding" is in verticies.
-init_mesh_buffer :: proc(using s : Render_state($U,$A), mesh_buffer : ^Mesh_buffer, initial_mem : u64, padding : u64, active_locations : bit_set[Attribute_location], use_indicies : bool, reserve_behavior : Reserve_behavior, loc := #caller_location) {
+init_mesh_buffer :: proc(using s : ^Render_state($U,$A), mesh_buffer : ^Mesh_buffer(A), initial_mem : u64, padding : u64, active_locations : bit_set[A], use_indicies : bool, reserve_behavior : Reserve_behavior, loc := #caller_location) {
 	
 	assert(mesh_buffer.free_space == nil, "This is already setup", loc = loc);
 	assert(initial_mem != 0, "initial_mem must not be 0", loc = loc);
@@ -134,7 +140,7 @@ init_mesh_buffer :: proc(using s : Render_state($U,$A), mesh_buffer : ^Mesh_buff
 
 	mesh_buffer.total_mem = auto_cast initial_mem * mul;
 
-	{	
+	{
 		using mesh_buffer;
 
 		identifiers.vao_id = 0;        // Vertex Array Object
@@ -143,27 +149,15 @@ init_mesh_buffer :: proc(using s : Render_state($U,$A), mesh_buffer : ^Mesh_buff
 			vbo = 0;     // Vertex buffer set to 0
 		}
 		
-		identifiers.vao_id = load_vertex_array(); //glGenVertexArrays(1, &vao_id);
+		identifiers.vao_id = load_vertex_array(s); //glGenVertexArrays(1, &vao_id);
 		
-		//TODO walk though this instead with interspection.
-		if .position in active_locations {
-			identifiers.vbo_id[.position] = load_vertex_buffer(nil, total_mem * 3 * size_of(f32), dyn);
-			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[.position], 3, .float, .position, loc = loc);
-		}
-
-		if .texcoord in active_locations {
-			identifiers.vbo_id[.texcoord] = load_vertex_buffer(nil, total_mem * 2 * size_of(f32), dyn);
-			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[.texcoord], 2, .float, .texcoord, loc = loc);
-		}
-
-		if .normal in active_locations {
-			identifiers.vbo_id[.normal] = load_vertex_buffer(nil, total_mem * 3 * size_of(f32), dyn);
-			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[.normal], 3, .float, .normal, loc = loc);
-		}
-		
-		if .tangent in active_locations {
-			identifiers.vbo_id[.tangent] = load_vertex_buffer(nil, total_mem * 4 * size_of(f32), dyn);
-			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[.tangent], 4, .float, .tangent, loc = loc);
+		for a in active_locations {
+			dims := get_attribute_type_dimensions(attrib.data_type);
+			prim_type := get_attribute_primary_type(attrib.data_type);
+			size_of_prim_type := get_attribute_primary_byte_len(prim_type);
+			
+			identifiers.vbo_id[a] = load_vertex_buffer(nil, mesh.vertex_count * dims * size_of_prim_type, dyn); //TODO upload data here instead of below. nil = attrib.data?
+			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[a], dims, prim_type, a, loc = loc);
 		}
 
 		if use_indicies {
@@ -175,9 +169,9 @@ init_mesh_buffer :: proc(using s : Render_state($U,$A), mesh_buffer : ^Mesh_buff
 }
 
 // Creates pointers to begin async upload  
-upload_mesh_single :: proc (using s : Render_state($U,$A), mesh : ^Mesh, dyn : bool = false, loc := #caller_location) {
+upload_mesh_single :: proc (using s : ^Render_state($U,$A), mesh : ^Mesh(A), dyn : bool = false, loc := #caller_location) {
 	
-	upload_mesh_data :: proc(mesh : ^Mesh_data, dyn : bool, loc := #caller_location) -> (identifiers : Mesh_identifiers) {
+	upload_mesh_data :: proc(using s : ^Render_state($U,$A), mesh : ^Mesh_data(A), dyn : bool, loc := #caller_location) -> (identifiers : Mesh_identifiers(A)) {
 		
 		identifiers.vao_id = 0;        // Vertex Array Object
 
@@ -185,41 +179,28 @@ upload_mesh_single :: proc (using s : Render_state($U,$A), mesh : ^Mesh, dyn : b
 			vbo = 0;     // Vertex buffer set to 0
 		}
 		
-		identifiers.vao_id = load_vertex_array(); //glGenVertexArrays(1, &vao_id);
+		identifiers.vao_id = load_vertex_array(s); //glGenVertexArrays(1, &vao_id);
 		//enable_vertex_array(identifiers.vao_id);
 		
-		assert(len(mesh.vertices) == len(mesh.texcoords) || mesh.texcoords == nil, "vertices and texcoords lengths does not match", loc = loc);
-		assert(len(mesh.vertices) == len(mesh.normals) || mesh.normals == nil, "vertices and normals lengths does not match", loc = loc);
-		assert(len(mesh.vertices) == len(mesh.tangents) || mesh.tangents == nil, "vertices and tangents lengths does not match", loc = loc);
+		when ODIN_DEBUG {
+			for a in mesh.attributes {
+				//TODO
+				//assert(mesh.attributes[A.position].vertex_cnt == mesh.attributes[a].vertex_cnt || mesh.texcoords == nil, "vertices and texcoords lengths does not match", loc = loc);
+			}
+		}
 		
-		// Enable vertex attributes: position (shader-location = 0)
-		//TODO vertices : rawptr = mesh.animVertices != nil ? mesh.animVertices : mesh.vertices;
-		
-		if (mesh.vertices != nil) {
-			identifiers.vbo_id[.position] = load_vertex_buffer(nil, int(int(mesh.vertex_count)) * 3 * size_of(f32), dyn);
-			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[.position], 3, .float, .position, loc = loc);
-			upload_vertex_sub_buffer_data(identifiers.vbo_id[.position], 0, int(int(mesh.vertex_count)) * 3 * size_of(f32), raw_data(mesh.vertices));
+		for attrib, a in mesh.attributes {
+			if attrib.active {
+				dims := get_attribute_type_dimensions(attrib.data_type);
+				prim_type := get_attribute_primary_type(attrib.data_type);
+				size_of_prim_type := get_attribute_primary_byte_len(prim_type);
+				
+				identifiers.vbo_id[a] = load_vertex_buffer(nil, mesh.vertex_count * dims * size_of_prim_type, dyn); //TODO upload data here instead of below. nil = attrib.data?
+				setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[a], dims, prim_type, a, loc = loc);
+				upload_vertex_sub_buffer_data(identifiers.vbo_id[a], 0, mesh.vertex_count * dims * size_of_prim_type, attrib.data);
+			}
 		}
 
-		if (mesh.texcoords != nil) {
-			// Enable vertex attributes: texcoords (shader-location = 1)
-			identifiers.vbo_id[.texcoord] = load_vertex_buffer(raw_data(mesh.texcoords), int(mesh.vertex_count) * 2 * size_of(f32), dyn);
-			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[.texcoord], 2, .float, .texcoord, loc = loc);
-		}
-
-		if (mesh.normals != nil) {
-			// Enable vertex attributes: normals (shader-location = 2)
-			//TODO normals : [][3]f32 = mesh.animNormals != nil ? mesh.animNormals : mesh.normals;
-			identifiers.vbo_id[.normal] = load_vertex_buffer(raw_data(mesh.normals), int(mesh.vertex_count) * 3 * size_of(f32), dyn);
-			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[.normal], 3, .float, .normal, loc = loc);
-		}
-		
-		if (mesh.tangents != nil) {
-			// Enable vertex attribute: tangent (shader-location = 4)
-			identifiers.vbo_id[.tangent] = load_vertex_buffer(raw_data(mesh.tangents), int(mesh.vertex_count) * 4 * size_of(f32), dyn);
-			setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[.tangent], 4, .float, .tangent, loc = loc);
-		}
-		
 		if (mesh.indices != nil) {
 			if indices, ok := mesh.indices.([]u16); ok {
 				identifiers.vbo_indices = load_vertex_buffer(raw_data(indices), len(indices) * size_of(u16), dyn);
@@ -238,43 +219,19 @@ upload_mesh_single :: proc (using s : Render_state($U,$A), mesh : ^Mesh, dyn : b
 	}
 
 	if mesh.implementation == nil {
-		mesh.implementation = upload_mesh_data(mesh, dyn, loc);
+		mesh.implementation = upload_mesh_data(s, mesh, dyn, loc);
 	}
 	else {
 		panic("You have already uploaded this mesh", loc = loc);
 	}
 }
 
-upload_mesh_shared :: proc (using s : Render_state($U,$A), mesh : ^Mesh, mesh_buffer : ^Mesh_buffer, loc := #caller_location) {
+upload_mesh_shared :: proc (using s : ^Render_state($U,$A), mesh : ^Mesh(A), mesh_buffer : ^Mesh_buffer(A), loc := #caller_location) {
 	
 	//assert(mesh_buffer^ == Mesh_buffer{}, "mesh_buffer is not setup", loc = loc);
 	/*
 	if !ignore_discrepancies {
-		if .position in mesh_buffer.active_locations {
-			assert(mesh.vertices != nil, "The mesh_buffer has .position as an active attribute but the mesh does not.", loc = loc);
-		}
-		if .texcoord in mesh_buffer.active_locations {
-			assert(mesh.texcoords != nil, "The mesh_buffer has texcoords as an active attribute but the mesh does not.", loc = loc);
-		}
-		if .normal in mesh_buffer.active_locations {
-			assert(mesh.normals != nil, "The mesh_buffer has normals as an active attribute but the mesh does not.", loc = loc);
-		}
-		if .tangent in mesh_buffer.active_locations {
-			assert(mesh.tangents != nil, "The mesh_buffer has tangents as an active attribute but the mesh does not.", loc = loc);
-		}
-
-		if mesh.vertices == nil {
-			assert(!(.position in mesh_buffer.active_locations), "The mesh has vertices active but the mesh_buffer does not.", loc = loc);
-		}
-		if mesh.texcoords == nil {
-			assert(!(.texcoord in mesh_buffer.active_locations), "The mesh has vertices active but the mesh_buffer does not.", loc = loc);
-		}
-		if mesh.normals == nil {
-			assert(!(.normal in mesh_buffer.active_locations), "The mesh has vertices active but the mesh_buffer does not.", loc = loc);
-		}
-		if mesh.tangents == nil {
-			assert(!(.tangent in mesh_buffer.active_locations), "The mesh has vertices active but the mesh_buffer does not.", loc = loc);
-		}
+		....
 	}
 	*/
 
@@ -295,17 +252,29 @@ upload_mesh_shared :: proc (using s : Render_state($U,$A), mesh : ^Mesh, mesh_bu
 		assert(buffer_index.length != 0, "Length is 0", loc = loc);
 		assert(buffer_index.used != 0, "Length is 0", loc = loc);
 		
+		for attrib, a in mesh.attributes {
+			if attrib.active {
+				dims := get_attribute_type_dimensions(attrib.data_type);
+				prim_type := get_attribute_primary_type(attrib.data_type);
+				size_of_prim_type := get_attribute_primary_byte_len(prim_type);
+				
+				identifiers.vbo_id[a] = load_vertex_buffer(nil, mesh.vertex_count * dims * size_of_prim_type, dyn); //TODO upload data here instead of below. nil = attrib.data?
+				setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[a], dims, prim_type, a, loc = loc);
+				upload_vertex_sub_buffer_data(identifiers.vbo_id[a], 0, mesh.vertex_count * dims * size_of_prim_type, attrib.data);
+			}
+		}
+
 		//TODO walk though this instead with interspection.
-		if .position in mesh_buffer.active_locations {
+		if A.position in mesh_buffer.active_locations {
 			upload_vertex_sub_buffer_data(mesh_buffer.vbo_id[.position], 	buffer_index.start * 3 * size_of(f32), buffer_index.length * 3 * size_of(f32), raw_data(mesh.vertices));
 		}
-		if .texcoord in mesh_buffer.active_locations {
+		if A.texcoord in mesh_buffer.active_locations {
 			upload_vertex_sub_buffer_data(mesh_buffer.vbo_id[.texcoord],  	buffer_index.start * 2 * size_of(f32), buffer_index.length * 2 * size_of(f32), raw_data(mesh.texcoords));
 		}
-		if .normal in mesh_buffer.active_locations {
+		if A.normal in mesh_buffer.active_locations {
 			upload_vertex_sub_buffer_data(mesh_buffer.vbo_id[.normal],  	buffer_index.start * 3 * size_of(f32), buffer_index.length * 3 * size_of(f32), raw_data(mesh.normals));
 		}
-		if .tangent in mesh_buffer.active_locations {
+		if A.tangent in mesh_buffer.active_locations {
 			upload_vertex_sub_buffer_data(mesh_buffer.vbo_id[.tangent],		buffer_index.start * 4 * size_of(f32), buffer_index.length * 4 * size_of(f32), raw_data(mesh.tangents));
 		}
 
@@ -319,27 +288,29 @@ upload_mesh_shared :: proc (using s : Render_state($U,$A), mesh : ^Mesh, mesh_bu
 }
 
 // Unload mesh from memory (RAM and VRAM)
-unload_mesh_single :: proc(using s : Render_state($U,$A), mesh : ^Mesh, loc := #caller_location) {
+unload_mesh_single :: proc(using s : ^Render_state($U,$A), mesh : ^Mesh(A), loc := #caller_location) {
 
 	assert(mesh.implementation != nil, "The mesh is not uploaded", loc = loc);
 
-	if identifiers, ok := &mesh.implementation.(Mesh_identifiers); ok {
+	if identifiers, ok := &mesh.implementation.(Mesh_identifiers(A)); ok {
 		
-		unload_vertex_array(identifiers.vao_id);
+		unload_vertex_array(s, identifiers.vao_id);
 		identifiers.vao_id = 0;
 
-		for i in Attribute_location {
+		for i in A {
 			if identifiers.vbo_id[i] != 0 {
-				unload_vertex_buffer(identifiers.vbo_id[i], loc = loc);
+				unload_vertex_buffer(s, identifiers.vbo_id[i], loc = loc);
 				identifiers.vbo_id[i] = -1;
 			}
 		}
 		
-		cond_delete(mesh.vertices, loc);
-		cond_delete(mesh.texcoords, loc);
-		cond_delete(mesh.normals, loc);
-		cond_delete(mesh.tangents, loc);
-		
+		for &attrib in mesh.attributes {
+			if attrib.active {
+				delete(attrib.data);
+				attrib = {};
+			}
+		}
+
 		if (mesh.indices != nil)
 		{
 			if indices, ok := mesh.indices.([]u16); ok {
@@ -353,23 +324,6 @@ unload_mesh_single :: proc(using s : Render_state($U,$A), mesh : ^Mesh, loc := #
 			}
 		}
 
-		mesh.vertices = nil;
-		mesh.texcoords = nil;
-		mesh.normals = nil;
-		mesh.tangents = nil;
-		mesh.indices = nil;
-
-		/*
-		cond_free(mesh.animVertices, loc);
-		cond_free(mesh.animNormals, loc);
-		cond_free(mesh.boneWeights, loc);
-		cond_free(mesh.boneIds, loc);
-		mesh.animVertices = nil;
-		mesh.animNormals = nil;
-		mesh.boneWeights = nil;
-		mesh.boneIds = nil;
-		*/
-		
 		mesh.vertex_count = 0;
 	}
 	else {
@@ -419,19 +373,24 @@ unload_mesh_shared :: proc(mesh : ^Mesh, mesh_buffer : ^Mesh_buffer, loc := #cal
 }
 */
 
-draw_mesh_single :: proc (using s : Render_state($U,$A), shader : Shader, mesh : Mesh, transform : matrix[4, 4]f32, loc := #caller_location) {
+set_attribute_single :: proc(using s : ^Render_state($U,$A), mesh : ^Mesh(A), attribute : A, data : []$T, loc := #caller_location) {
+	panic("TODO");
+}
+
+draw_mesh_single :: proc (using s : ^Render_state($U,$A), shader : Shader(U, A), mesh : Mesh(A), transform : matrix[4, 4]f32, loc := #caller_location) {
 	
-	assert(shader.id == bound_shader_program, "The shader must be bound before drawing with it", loc = loc);
-	assert(bound_camera != nil, "A camera must be bound before a mesh can be drawn", loc = loc);
-	assert(mesh.vertex_count == auto_cast len(mesh.vertices) || mesh.vertices == nil, "The vertices and vertex_count does not have the same size", loc = loc);
-	assert(mesh.implementation != nil, "The mesh is not uploaded", loc = loc);
-	
+	when ODIN_DEBUG {
+		assert(shader.id == s.bound_shader_program, "The shader must be bound before drawing with it", loc = loc);
+		assert(bound_camera != nil, "A camera must be bound before a mesh can be drawn", loc = loc);
+		assert(mesh.implementation != nil, "The mesh is not uploaded", loc = loc);
+	}
+
 	mvp : matrix[4,4]f32 = prj_mat * view_mat * transform;
 	
-	place_uniform(shader, .model_mat, transform);
-	place_uniform(shader, .mvp, mvp);
+	place_uniform(s, shader, U.model_mat, transform);
+	place_uniform(s, shader, U.mvp, mvp);
 	
-	if identifiers, ok := mesh.implementation.(Mesh_identifiers); ok {
+	if identifiers, ok := mesh.implementation.(Mesh_identifiers(A)); ok {
 		enable_vertex_array(identifiers.vao_id);
 		
 		// Draw mesh
@@ -469,17 +428,18 @@ draw_mesh_single :: proc (using s : Render_state($U,$A), shader : Shader, mesh :
 
 //This allows you to draw a single mesh even if it part of a mesh_buffer.
 //If you need to swap textures or similar, you can use this instead of draw_mesh_shared. This is worse in preformance, so you should try and use texture arrays if possiable.
-draw_mesh_single_shared :: proc(using s : Render_state($U,$A), shader : Shader, mesh : Mesh, mesh_buffer : Mesh_buffer, transform : matrix[4, 4]f32, loc := #caller_location) {
+draw_mesh_single_shared :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), mesh : Mesh(A), mesh_buffer : Mesh_buffer(A), transform : matrix[4, 4]f32, loc := #caller_location) {
 	
-	assert(shader.id == bound_shader_program, "The shader must be bound before drawing with it", loc = loc);
-	assert(mesh.vertex_count == auto_cast len(mesh.vertices) || mesh.vertices == nil, "The vertices and vertex_count does not have the same size", loc = loc);
-	assert(bound_camera != nil, "A camera must be bound before a mesh can be drawn", loc = loc);
-	assert(mesh.implementation != nil, "The mesh is not uploaded", loc = loc);
+	when ODIN_DEBUG {
+		assert(shader.id == s.bound_shader_program, "The shader must be bound before drawing with it", loc = loc);
+		assert(bound_camera != nil, "A camera must be bound before a mesh can be drawn", loc = loc);
+		assert(mesh.implementation != nil, "The mesh is not uploaded", loc = loc);
+	}
 
 	mvp : matrix[4,4]f32 = prj_mat * view_mat * transform;
 
-	place_uniform(shader, .model_mat, transform);
-	place_uniform(shader, .mvp, mvp);
+	place_uniform(s, shader, U.model_mat, transform);
+	place_uniform(s, shader, U.mvp, mvp);
 	
 	if buffer_index, ok := mesh.implementation.(Mesh_buffer_index); ok {
 		
@@ -503,7 +463,7 @@ draw_mesh_single_shared :: proc(using s : Render_state($U,$A), shader : Shader, 
 }
 
 /* 
-draw_mesh_single_instanced :: proc(shader : Shader, mesh : Mesh, ) {
+draw_mesh_single_instanced :: proc(shader : Shader(U, A), mesh : Mesh, ) {
 	
 	//We want to use a VAO, not uniforms.
 	//Uniforms can be kinda ok if SSBO is advaliable as far as I understand, but these are only advaliable since opengl 4.3, so it would exclude a lot of hardware.
@@ -514,29 +474,29 @@ draw_mesh_single_instanced :: proc(shader : Shader, mesh : Mesh, ) {
 }
 */
 
-calculate_tangents :: proc (using s : Render_state($U,$A), mesh : ^Mesh) {
+calculate_tangents :: proc (using s : ^Render_state($U,$A), mesh : ^Mesh(A)) {
 	//TODO
 	panic("TODO");
 }
 
 @(private)
-cond_free :: proc(using s : Render_state($U,$A), to_free : rawptr, loc := #caller_location) {
+cond_free :: proc(using s : ^Render_state($U,$A), to_free : rawptr, loc := #caller_location) {
 	if to_free != nil {
 		free(to_free, loc = loc);
 	}
 }	
 
 @(private)
-cond_delete :: proc(using s : Render_state($U,$A), to_delete : $T, loc := #caller_location) {
+cond_delete :: proc(using s : ^Render_state($U,$A), to_delete : $T, loc := #caller_location) {
 	if to_delete != nil {
 		delete(to_delete, loc = loc);
 	}
 }	
 
 //This will not upload it
-generate_quad :: proc(using s : Render_state($U,$A), size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> Mesh {
+generate_quad :: proc(using s : ^Render_state($U,$A), size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> Mesh(A) {
 
-	quad : Mesh 
+	quad : Mesh(A);
 	
 	if use_index_buffer {
 		quad.vertex_count = 4;
@@ -597,7 +557,7 @@ generate_quad :: proc(using s : Render_state($U,$A), size : [3]f32, position : [
 	return quad;
 }
 
-generate_circle :: proc(using s : Render_state($U,$A), diameter : f32, positon : [2]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (circle : Mesh) {
+generate_circle :: proc(using s : ^Render_state($U,$A), diameter : f32, positon : [2]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (circle : Mesh(A)) {
 
 	vertices := make([dynamic][2]f32, 0, 3 * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 3 * (sectors+1), context.temp_allocator);
@@ -672,7 +632,7 @@ generate_circle :: proc(using s : Render_state($U,$A), diameter : f32, positon :
 }
 
 //This will not upload it
-generate_cube :: proc(using s : Render_state($U,$A), size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (cube : Mesh) {
+generate_cube :: proc(using s : ^Render_state($U,$A), size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (cube : Mesh(A)) {
 
 	Cube_verts := [][3]f32{
 		
@@ -783,7 +743,7 @@ generate_cube :: proc(using s : Render_state($U,$A), size : [3]f32, position : [
 }
 
 //This will not upload it
-generate_cylinder :: proc(using s : Render_state($U,$A), offset : [3]f32, transform : matrix[4, 4]f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (cylinder : Mesh) {
+generate_cylinder :: proc(using s : ^Render_state($U,$A), offset : [3]f32, transform : matrix[4, 4]f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (cylinder : Mesh(A)) {
 
 	vertices := make([dynamic][3]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
@@ -855,7 +815,7 @@ generate_cylinder :: proc(using s : Render_state($U,$A), offset : [3]f32, transf
 }
 
 //This will not upload it
-generate_sphere :: proc(using s : Render_state($U,$A), offset : [3]f32 = {0,0,0}, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (sphere : Mesh) {
+generate_sphere :: proc(using s : ^Render_state($U,$A), offset : [3]f32 = {0,0,0}, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (sphere : Mesh(A)) {
 
 	vertices := make([dynamic][3]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);

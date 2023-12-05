@@ -31,11 +31,11 @@ Camera2D :: struct {
 	target_relative:[2]f32,				// 
 	rotation: 		f32,				// in degrees
 	zoom:   		f32,            	//
-
+	
 	far, near : 	f32,
 }
 
-begin_mode_3D :: proc(using s : Render_state($U,$A), using camera : Camera3D, use_transparency : bool, loc := #caller_location) {
+begin_mode_3D :: proc(using s : ^Render_state($U,$A), using camera : Camera3D, use_transparency : bool, loc := #caller_location) {
 
 	assert(bound_camera == nil, "A camera is already bound, unbind it first", loc = loc);
 	bound_camera = camera;
@@ -62,23 +62,23 @@ begin_mode_3D :: proc(using s : Render_state($U,$A), using camera : Camera3D, us
 	
 	inv_prj_mat = linalg.matrix4_inverse(prj_mat);
 	
-	enable_depth_test();
+	enable_depth_test(s);
 
-	enable_transparency(use_transparency);
+	enable_transparency(s, use_transparency);
 }
 
 // Ends 3D mode and returns to default 2D orthographic mode
-end_mode_3D :: proc(using s : Render_state($U,$A), camera : Camera3D, loc := #caller_location) {
+end_mode_3D :: proc(using s : ^Render_state($U,$A), camera : Camera3D, loc := #caller_location) {
 	
 	assert(camera == bound_camera, "The camera you are trying to unbind is not the currently bound camera", loc = loc);
 	bound_camera = nil;
 
-	disable_depth_test();
+	disable_depth_test(s);
 
-	enable_transparency(false);
+	enable_transparency(s, false);
 }
 
-begin_mode_2D :: proc(using s : Render_state($U,$A), using camera : Camera2D, use_transparency : bool, loc := #caller_location) {
+begin_mode_2D :: proc(using s : ^Render_state($U,$A), using camera : Camera2D, use_transparency : bool, loc := #caller_location) {
 
 	assert(bound_camera == nil, "A camera is already bound, unbind it first", loc = loc);
 	bound_camera = camera;
@@ -95,18 +95,18 @@ begin_mode_2D :: proc(using s : Render_state($U,$A), using camera : Camera2D, us
 	prj_mat = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
 	inv_prj_mat = linalg.matrix4_inverse(prj_mat);
 
-	enable_transparency(use_transparency);
+	enable_transparency(s, use_transparency);
 }
 
 // Ends 3D mode and returns to default 2D orthographic mode
-end_mode_2D :: proc(using s : Render_state($U,$A), camera : Camera2D = {{0,0}, {0,0}, 0, 1, 1, -1}, loc := #caller_location) {
+end_mode_2D :: proc(using s : ^Render_state($U,$A), camera : Camera2D = {{0,0}, {0,0}, 0, 1, 1, -1}, loc := #caller_location) {
 	assert(bound_camera == bound_camera, "A camera is already bound, unbind it first", loc = loc);
 	bound_camera = nil;
 
-	enable_transparency(false);
+	enable_transparency(s, false);
 }
 
-get_pixel_space_camera :: proc(using s : Render_state($U,$A), loc := #caller_location) -> (cam : Camera2D) {
+get_pixel_space_camera :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> (cam : Camera2D) {
 
 	aspect : f32 = current_render_target_width / current_render_target_height;
 

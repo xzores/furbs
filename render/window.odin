@@ -19,51 +19,52 @@ Mouse_mode :: enum {
 	normal = glfw.CURSOR_NORMAL,
 }
 
-window_context : runtime.Context;
-frame_timer : time.Stopwatch;
-frame_counter : f32;
-ms_counter : f32;
+key_callback : glfw.KeyProc : proc "c" (glfw_window : glfw.WindowHandle, key : i32, scancode : i32, action : i32, mods : i32) {	
+	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
 
-key_callback : glfw.KeyProc : proc "c" (window : glfw.WindowHandle, key : i32, scancode : i32, action : i32, mods : i32) {
-	sync.lock(&input_events_mutex);
-	defer sync.unlock(&input_events_mutex);
+	sync.lock(&window.input_events_mutex);
+	defer sync.unlock(&window.input_events_mutex);
 
-	context = window_context;
+	context = window.context;
 
 	event : Key_input_event = {
-		glfw_handle = window,
+		glfw_handle = glfw_window,
 		key = auto_cast key,
 		scancode = auto_cast scancode,
 		action = auto_cast action,
 		mods = transmute(Input_modifier) mods,
 	}
 	
-	queue.append(&key_input_events, event);
+	queue.append(&window.key_input_events, event);
 }
 
-button_callback : glfw.MouseButtonProc : proc "c" (window : glfw.WindowHandle, button, action, mods : i32) {
-	sync.lock(&input_events_mutex);
-	defer sync.unlock(&input_events_mutex);
-
-	context = window_context;
+button_callback : glfw.MouseButtonProc : proc "c" (glfw_window : glfw.WindowHandle, button, action, mods : i32) {
+	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
+	
+	sync.lock(&window.input_events_mutex);
+	defer sync.unlock(&window.input_events_mutex);
+	
+	context = window.context;
 
 	event : Mouse_input_event = {
-		glfw_handle = window,
+		glfw_handle = glfw_handle,
 		button = auto_cast button,
 		action = auto_cast action,
 		mods = transmute(Input_modifier) mods,
 	}
 	
-	queue.append(&button_input_events, event);
+	queue.append(&window.button_input_events, event);
 }
 
-scroll_callback : glfw.ScrollProc : proc "c" (window : glfw.WindowHandle, xoffset, yoffset: f64) {
-	sync.lock(&input_events_mutex);
-	defer sync.unlock(&input_events_mutex);
+scroll_callback : glfw.ScrollProc : proc "c" (glfw_window : glfw.WindowHandle, xoffset, yoffset: f64) {
+	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
+	
+	context = window.context;
 
-	context = window_context;
+	sync.lock(&window.input_events_mutex);
+	defer sync.unlock(&window.input_events_mutex);
 
-	queue.append(&scroll_input_event, [2]f32{auto_cast xoffset, auto_cast yoffset});
+	queue.append(&window.scroll_input_event, [2]f32{auto_cast xoffset, auto_cast yoffset});
 }
 
 /*
@@ -77,25 +78,60 @@ input_callback : glfw.CharProc : proc "c" (window : glfw.WindowHandle, codepoint
 }
 */
 
-input_callback : glfw.CharModsProc : proc "c" (window : glfw.WindowHandle, codepoint: rune, mods : i32) {
-	sync.lock(&input_events_mutex);
-	defer sync.unlock(&input_events_mutex);
+input_callback : glfw.CharModsProc : proc "c" (glfw_window : glfw.WindowHandle, codepoint: rune, mods : i32) {
+	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
+
+	sync.lock(&window.input_events_mutex);
+	defer sync.unlock(&window.input_events_mutex);
 
 	context = window_context;
 	
-	queue.append(&char_input_buffer, codepoint);
+	queue.append(&window.char_input_buffer, codepoint);
 }
 
 Window :: struct {
+	
 	glfw_window : glfw.WindowHandle, //dont touch
 	title : string, //dont change yourself, use set_title
 	startup_timer : time.Stopwatch,
+	frame_timer : time.Stopwatch,
+
+	context : Context;
+
+	//Current key state
+	keys_down 		: #sparse [Key_code]bool,
+	keys_released 	: #sparse [Key_code]bool,
+	keys_pressed 	: #sparse [Key_code]bool,
+	keys_triggered 	: #sparse [Key_code]bool,
+
+	button_input_events : queue.Queue(Mouse_input_event),
+	button_release_input_events : queue.Queue(Mouse_input_event),
+
+	scroll_input_event : queue.Queue([2]f32),
+	
+	//Current key state
+	button_down 	: [Mouse_code]bool,
+	button_released : [Mouse_code]bool,
+	button_pressed 	: [Mouse_code]bool,
+
+	mouse_pos : [2]f32,
+	mouse_delta : [2]f32,
+	scroll_delta : [2]f32,
+
+	//Locks
+	input_events_mutex : sync.Mutex,
+	key_input_events : queue.Queue(Key_input_event),
+	key_release_input_events : queue.Queue(Key_input_event),
+	char_input_buffer : queue.Queue(rune),
+	char_input : queue.Queue(rune),
 }
 
-init_window :: proc(width, height : i32, title : string, shader_folder : string, required_gl_verion : Maybe(GL_version) = nil, culling : bool = true, loc := #caller_location) -> (window : Window) {
+//TODO move culling to a render pass
+//TODO this now return a pointer.
+init_window :: proc(using s : ^Render_state($U,$A), width, height : i32, title : string, required_gl_verion : Maybe(GL_version) = nil, culling : bool = true, loc := #caller_location) -> (window : ^Window) {
 	
-	window_context = context;
-
+	using window;
+	
 	assert(render_has_been_init == false, "init_render has already been called!", loc = loc);
 	render_has_been_init = true;
 
@@ -156,11 +192,13 @@ init_window :: proc(width, height : i32, title : string, shader_folder : string,
 	
 	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
 	fs.Init(&font_context, 1, 1, .BOTTOMLEFT); //TODO try TOPLEFT and BOTTOMLEFT
-		
+
+	glfw.SetWindowUserPointer :: proc(window.glfw_window, window) //TODO this window and then pointer
+
 	return;
 }
 
-destroy_window :: proc(window : ^Window, loc :=  #caller_location) {
+destroy_window :: proc(using s : ^Render_state($U,$A), window : ^Window, loc :=  #caller_location) {
 	
 	unbind_window(window^);
 
@@ -172,12 +210,12 @@ destroy_window :: proc(window : ^Window, loc :=  #caller_location) {
 
 	glfw.DestroyWindow(window.glfw_window);
 	window.glfw_window = nil;
-	window_context = {};
+	//TODO //window_context = {};
 	delete(window.title);
 	glfw.Terminate();
 }
 
-bind_window :: proc(window : Window, loc := #caller_location) {
+bind_window :: proc(using s : ^Render_state($U,$A), window : Window, loc := #caller_location) {
 
 	if bound_window != nil {
 		panic("Another window is already bound", loc = loc);
@@ -192,7 +230,7 @@ bind_window :: proc(window : Window, loc := #caller_location) {
 	set_view();
 }
 
-unbind_window :: proc(window : Window, loc := #caller_location) {
+unbind_window :: proc(using s : ^Render_state($U,$A), window : Window, loc := #caller_location) {
 	
 	if v, ok := bound_window.?; ok {
 		assert(v == window, "You are not unbinding the currently bound window", loc = loc);
@@ -205,7 +243,7 @@ unbind_window :: proc(window : Window, loc := #caller_location) {
 	bound_window = nil;
 }
 
-begin_frame :: proc(window : Window, clear_color : [4]f32 = {0,0,0,1}) {
+begin_frame :: proc(using s : ^Render_state($U,$A), window : Window, clear_color : [4]f32 = {0,0,0,1}, loc := #caller_location) {
 
 	time.stopwatch_start(&frame_timer);
 
@@ -221,7 +259,7 @@ begin_frame :: proc(window : Window, clear_color : [4]f32 = {0,0,0,1}) {
 	begin_inputs();
 } 
 
-end_frame :: proc(window : Window, loc := #caller_location) {
+end_frame :: proc(using s : ^Render_state($U,$A), window : Window, loc := #caller_location) {
 	
 	end_inputs();
 	
@@ -240,19 +278,19 @@ end_frame :: proc(window : Window, loc := #caller_location) {
 	time.stopwatch_reset(&frame_timer);
 }
 
-set_view :: proc() {
+set_view :: proc(using s : ^Render_state($U,$A)) {
 	set_viewport(0, 0, auto_cast current_render_target_width, auto_cast current_render_target_height);
 }
 
-should_close :: proc(window : Window) -> bool {
+should_close :: proc(using s : ^Render_state($U,$A), window : Window) -> bool {
 	return auto_cast glfw.WindowShouldClose(window.glfw_window);
 }
 
-enable_vsync :: proc(enable : bool) {
+enable_vsync :: proc(using s : ^Render_state($U,$A), enable : bool) {
 	glfw.SwapInterval(auto_cast enable);
 }
 
-get_screen_width :: proc(loc := #caller_location) -> i32{
+get_screen_width :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> i32{
 	
 	if window, ok := bound_window.?; ok {
 		w, h := glfw.GetFramebufferSize(window.glfw_window);
@@ -263,7 +301,7 @@ get_screen_width :: proc(loc := #caller_location) -> i32{
 	}
 }
 
-get_screen_height :: proc(loc := #caller_location) -> i32 {
+get_screen_height :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> i32 {
 	if window, ok := bound_window.?; ok {
 		w, h := glfw.GetFramebufferSize(window.glfw_window);
 		return h;
@@ -273,7 +311,7 @@ get_screen_height :: proc(loc := #caller_location) -> i32 {
 	}
 }
 
-mouse_mode :: proc(mouse_mode : Mouse_mode, loc := #caller_location) {
+mouse_mode :: proc(using s : ^Render_state($U,$A), mouse_mode : Mouse_mode, loc := #caller_location) {
 	
 	if v, ok := bound_window.?; ok {
 		glfw.SetInputMode(v.glfw_window, glfw.CURSOR, auto_cast mouse_mode);
@@ -284,7 +322,7 @@ mouse_mode :: proc(mouse_mode : Mouse_mode, loc := #caller_location) {
 }
 
 //The image data is 32-bit, little-endian, non-premultiplied RGBA, i.e. eight bits per channel. The pixels are arranged canonically as sequential rows, starting from the top-left corner.
-set_cursor :: proc(cursor : []u8, size : i32, loc := #caller_location) {
+set_cursor :: proc(using s : ^Render_state($U,$A), cursor : []u8, size : i32, loc := #caller_location) {
 	
 	fmt.assertf(len(cursor) == auto_cast(size * size * 4), "Size does not match array data. Data length : %v, expected : %v\n", len(cursor), size * size * 4, loc = loc)
 
@@ -301,11 +339,11 @@ set_cursor :: proc(cursor : []u8, size : i32, loc := #caller_location) {
 	}
 }
 
-delta_time :: proc() -> f32 {
+delta_time :: proc(using s : ^Render_state($U,$A)) -> f32 {
 	return 1.0/120;
 }
 
-time_since_window_creation :: proc() -> f64 {
+time_since_window_creation :: proc(using s : ^Render_state($U,$A)) -> f64 {
 	
 	if v, ok := bound_window.?; ok {
 		return time.duration_seconds(time.stopwatch_duration(v.startup_timer));

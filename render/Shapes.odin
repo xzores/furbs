@@ -41,7 +41,7 @@ Shape :: union {
 	Rounded_rectangle,
 }
 
-_ensure_shapes_loaded :: proc() {
+_ensure_shapes_loaded :: proc(using s : ^Render_state($U,$A)) {
 
 	if shape_quad.vertex_count == 0 {
 		shape_quad = generate_quad({1, 1, 1}, {-0.5,-0.5,0});
@@ -54,14 +54,14 @@ _ensure_shapes_loaded :: proc() {
 }
 
 //This is ok fast if you dont specifify roundness, segments or thickness in Rounded_rectangle. And/Or if you dont 
-draw_shape :: proc(using s : Render_state($U,$A), shape : Shape, rot : f32 = 0, texture : Maybe(Texture2D), shader : Shader, color : [4]f32, loc := #caller_location) {
+draw_shape :: proc(using s : ^Render_state($U,$A), shape : Shape, rot : f32 = 0, texture : Maybe(Texture2D), shader : Shader(U, A), color : [4]f32, loc := #caller_location) {
 	
 	assert(bound_camera != nil, "A camera must be bound before a mesh can be drawn", loc = loc);
 	shader := shader;
 	
 	if shader.id == 0 {
 		fmt.printf("loading default gui shader\n");
-		gui_shader = get_default_gui_shader();
+		gui_shader = get_default_shader();
 		shader = gui_shader;
 	}
 	

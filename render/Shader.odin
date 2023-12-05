@@ -12,22 +12,22 @@ import linalg "core:math/linalg"
 
 import "../utils"
 
-Shader :: struct {
+Shader :: struct (U, A : typeid) {
 	id : Shader_program_id,                 					// Shader program id
 	name : string,				
-	attribute_locations : [Attribute_location]Attribute_info, 	// Shader locations array (MAX_SHADER_LOCATIONS)
-	uniform_locations : [Uniform_location]Uniform_info,
+	attribute_locations : [A]Attribute_info, 	// Shader locations array (MAX_SHADER_LOCATIONS)
+	uniform_locations : [U]Uniform_info,
 }
 
 //Will load all shaders into memory.
-init_shaders :: proc(using s : Render_state($U,$A), loc := #caller_location) {
+init_shaders :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
 	
 	assert(len(loaded_vertex_shaders) == 0, "Shaders has already been loaded", loc = loc);
 	assert(len(loaded_fragment_shaders) == 0, "Shaders has already been loaded", loc = loc);
 
 	fmt.printf("Loading all shaders from source : %s\n", shader_folder_location);
 
-	if get_max_supported_attributes() <= len(Attribute_location) {
+	if get_max_supported_attributes(s) <= len(A) {
 		fmt.panicf("Not enough supported attribute locations for shader\n PLEASE contact developers!", loc = loc);
 	}
 	
@@ -38,7 +38,7 @@ init_shaders :: proc(using s : Render_state($U,$A), loc := #caller_location) {
 		assert(name != "_internal_opague", "_internal_opague is reserved for internal use", loc = loc)
 		assert(name != "_internal_transparent", "_internal_transparent is reserved for internal use", loc = loc)
 
-		compile_shader(&loaded_vertex_shaders, name, source, .vertex_shader);
+		compile_shader(s, &loaded_vertex_shaders, name, source, .vertex_shader);
 	}
 
 	fragment_shaders_code 	:= utils.load_all_as_txt(shader_folder_location, "fs", alloc = context.temp_allocator);
@@ -55,14 +55,14 @@ init_shaders :: proc(using s : Render_state($U,$A), loc := #caller_location) {
 
 }
 
-destroy_shaders :: proc(using s : Render_state($U,$A)) {
+destroy_shaders :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
 
 	for name, vs in loaded_vertex_shaders {	
-		unload_vertex_shader(vs);
+		unload_vertex_shader(s, vs);
 	}
 
 	for name, fs in loaded_fragment_shaders {	
-		unload_fragment_shader(fs);
+		unload_fragment_shader(s, fs);
 	}
 
 	delete(loaded_vertex_shaders);
@@ -71,12 +71,12 @@ destroy_shaders :: proc(using s : Render_state($U,$A)) {
 
 /////////////////
 
-load_shader :: proc(using s : Render_state($U,$A), using shader : ^Shader, vs_name : string, fs_name : string, loc := #caller_location) {
+load_shader :: proc(using s : ^Render_state($U,$A), using shader : ^Shader(U, A), vs_name : string, fs_name : string, loc := #caller_location) {
 
 	//TODO cache the result, requires opengl 4.1 so we will only do it if the extension is supported.
 	//use glGetString(GL_VERSION);
 	
-	shader.id = load_program();
+	shader.id = load_program(s);
 
 	vertex_shader : Shader_vertex_id;
 	fragment_shader : Shader_fragment_id;
@@ -105,10 +105,10 @@ load_shader :: proc(using s : Render_state($U,$A), using shader : ^Shader, vs_na
 		e.location = -1;
 	}
 
-	attrib_names := make(map[string]Attribute_location);
+	attrib_names := make(map[string]A);
 	defer delete(attrib_names);
 
-	uniform_names := make(map[string]Uniform_location);
+	uniform_names := make(map[string]U);
 	defer delete(uniform_names);
 
 	attrib_enums := reflect.enum_fields_zipped(Attribute_location);
@@ -119,10 +119,10 @@ load_shader :: proc(using s : Render_state($U,$A), using shader : ^Shader, vs_na
 	}
 
 	//Load uniforms into uniform_names
-	uniform_enums := reflect.enum_fields_zipped(Uniform_location);
+	uniform_enums := reflect.enum_fields_zipped(U);
 	for enum_field, i in uniform_enums {
 		name := enum_field.name;
-		value : Uniform_location = auto_cast enum_field.value;
+		value : U = auto_cast enum_field.value;
 		uniform_names[name] = value;
 	}
 
@@ -161,14 +161,14 @@ load_shader :: proc(using s : Render_state($U,$A), using shader : ^Shader, vs_na
 	//fmt.printf("%s.vs / %s.fs : shader.attribute_locations : %#v\n shader.uniform_locations : %#v\n", vs_name, fs_name, shader.attribute_locations, shader.uniform_locations);
 }
 
-unload_shader :: proc(using s : Render_state($U,$A), shader : ^Shader) {
+unload_shader :: proc(using s : ^Render_state($U,$A), shader : ^Shader(U, A)) {
 	//TODO
 	panic("TODO");
 }
 
 //////////////////
 
-get_default_gui_shader :: proc(using s : Render_state($U,$A)) -> (shader : Shader) {
+get_default_shader :: proc(using s : ^Render_state($U,$A)) -> (shader : Shader(U, A)) {
 	
 	vertex_source_gui_shader := `
 	#version 330 core
@@ -203,61 +203,19 @@ get_default_gui_shader :: proc(using s : Render_state($U,$A)) -> (shader : Shade
 	}
 	`;
 
-	compile_shader(&loaded_vertex_shaders, 		"_internal_gui", vertex_source_gui_shader, 		.vertex_shader);
-	compile_shader(&loaded_fragment_shaders, 	"_internal_gui", fragment_source_gui_shader, 	.fragment_shader);
+	//TODO what if callled multiable times.
+	compile_shader(s, &loaded_vertex_shaders, 		"_internal_gui", vertex_source_gui_shader, 		.vertex_shader);
+	compile_shader(s, &loaded_fragment_shaders, 	"_internal_gui", fragment_source_gui_shader, 	.fragment_shader);
 
-	load_shader(&shader, "_internal_gui", "_internal_gui");
-
-	return;
-}
-
-get_default_text_shader :: proc(using s : Render_state($U,$A)) -> (shader : Shader) {
-	
-	vertex_source_gui_shader := `
-	#version 330 core
-
-	layout (location = 0) in vec3 position;
-
-	out vec2 frag_texcoord; 
-
-	uniform vec2 texcoords[4];
-	uniform mat4 mvp;
-
-	void main()
-	{
-		frag_texcoord = texcoords[gl_VertexID];
-		gl_Position = mvp * vec4(position, 1.0);
-	};
-	`;
-
-	fragment_source_gui_shader := `
-	#version 330 core
-
-	in vec2 frag_texcoord;
-
-	out vec4 final_color;
-
-	uniform sampler2D texture_diffuse;
-	uniform vec4 col_diffuse = vec4(1,1,1,1);
-
-	void main()
-	{
-		vec4 texelColor = vec4(1, 1, 1, texture(texture_diffuse, frag_texcoord).r); 
-		final_color = col_diffuse * texelColor; //
-	}
-	`;
-
-	compile_shader(&loaded_vertex_shaders, 		"_internal_text", vertex_source_gui_shader, 		.vertex_shader);
-	compile_shader(&loaded_fragment_shaders, 	"_internal_text", fragment_source_gui_shader, 		.fragment_shader);
-	
-	load_shader(&shader, "_internal_text", "_internal_text");
+	load_shader(s, &shader, "_internal_gui", "_internal_gui");
 
 	return;
 }
+
 //////////////////
 
 //Shader must be bound before this is called.
-place_uniform :: proc(using s : Render_state($U,$A), shader : Shader, uniform_loc : Uniform_location, value : $T, loc := #caller_location) {
+place_uniform :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), uniform_loc : U, value : $T, loc := #caller_location) {
 	
 	//TODO check that shader is the currently bound shader.
 	//TODO this should be bound to uniform block and there should be at least 12 uniforms blocks advaliable, so we can assert by using "GL_MAX_VERTEX_UNIFORM_BLOCKS"
@@ -273,30 +231,32 @@ place_uniform :: proc(using s : Render_state($U,$A), shader : Shader, uniform_lo
 
 	if uniform_loc in texture_locations {
 		//it is a texture
-		set_uniform_sampler(uniform_info, texture_locations[uniform_loc], value, loc = loc);
+		set_uniform_sampler(s, uniform_info, texture_locations[uniform_loc], value, loc = loc);
 	} else if uniform_info.array_size != 1 {
-		set_uniform_array(uniform_info, value, loc = loc);
+		set_uniform_array(s, uniform_info, value, loc = loc);
 	} else {
-		set_uniform_single(uniform_info, value, loc = loc);
+		set_uniform_single(s, uniform_info, value, loc = loc);
 	}
 }
 
-bind_shader :: proc(using s : Render_state($U,$A), shader : Shader, loc := #caller_location) {
+bind_shader :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), loc := #caller_location) {
 	
-	assert(bound_camera != {}, "A camera must be bound when binding a shader", loc = loc);
-	assert(shader.id != 0, "Shader is not initizalized", loc = loc);
+	when ODIN_DEBUG {
+		assert(bound_camera != {}, "A camera must be bound when binding a shader", loc = loc);
+		assert(shader.id != 0, "Shader is not initizalized", loc = loc);
+	}
 
-	enable_shader(shader.id, loc = loc);
+	enable_shader(s, shader.id, loc = loc);
 
-	place_uniform(shader, .prj_mat, prj_mat);
-	place_uniform(shader, .inv_prj_mat, inv_prj_mat);
+	place_uniform(s, shader, .prj_mat, prj_mat);
+	place_uniform(s, shader, .inv_prj_mat, inv_prj_mat);
 
-	place_uniform(shader, .view_mat, view_mat);
-	place_uniform(shader, .inv_view_mat, inv_view_mat);
+	place_uniform(s, shader, .view_mat, view_mat);
+	place_uniform(s, shader, .inv_view_mat, inv_view_mat);
 	
 }
 
-unbind_shader :: proc(using s : Render_state($U,$A), shader : Shader, loc := #caller_location){
+unbind_shader :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), loc := #caller_location){
 	assert(bound_camera != {}, "A camera must first be unbound after the shader is unbound", loc = loc);
-	disable_shader(shader.id);
+	disable_shader(s, shader.id);
 }

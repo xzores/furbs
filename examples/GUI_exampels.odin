@@ -1,3 +1,4 @@
+/*
 package examples;
 
 import "core:fmt"
@@ -9,6 +10,8 @@ import "core:math/rand"
 
 import "vendor:glfw"
 import ma "vendor:miniaudio"
+
+import render "../interface";
 
 //main :: proc () {
 
@@ -725,11 +728,12 @@ Gui_crazy_showoff :: proc (t : ^testing.T) {
 		
 		end_frame(window);
 	}
-
+	
 	gui.pop_theme(my_theme);
 
 	destroy_window(&window);
 
 	fmt.printf("Shutdown succesfull");
 }
+*/
 */

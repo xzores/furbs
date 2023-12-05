@@ -14,12 +14,6 @@ import c "core:c/libc"
 
 //locations may overlap as long as there is only of the overlapping in use at a time.
 
-//If a Uniform_location is in this map, it is assumed (required?) to be a texture.
-texture_locations : map[Uniform_location]Texture_slot = {
-	.texture_diffuse = 0, ///= gl.TEXTURE0
-	.emission_tex = 1,
-}
-
 //////////////////////////////////////////////////////////
 
 Shader_program_id :: distinct u32;
@@ -88,15 +82,58 @@ Attribute_type :: enum u32 {
 	uvec2 			= gl.UNSIGNED_INT_VEC2,
 	uvec3 			= gl.UNSIGNED_INT_VEC3,
 	uvec4 			= gl.UNSIGNED_INT_VEC4,
-	mat2 			= gl.FLOAT_MAT2,
-	mat3 			= gl.FLOAT_MAT3,
-	mat4 			= gl.FLOAT_MAT4,
+	//mat2 			= gl.FLOAT_MAT2,
+	//mat3 			= gl.FLOAT_MAT3,
+	//mat4 			= gl.FLOAT_MAT4,
 }
 
-Attribute_data_type :: enum u32 {
+//return the "entries" or number of dimensions. numbers are between 0 and 4.
+get_attribute_type_dimensions :: proc (at : Attribute_type) -> int {
+	switch at {
+		case .invalid:
+			return 0;
+		case .float, .int, .uint:
+			return 1;
+		case .vec2, .ivec2, .uvec2:
+			return 2; 
+		case .vec3, .ivec3, .uvec3:
+			return 3;
+		case .vec4, .ivec4, .uvec4:
+			return 4;
+	}
+}
+
+get_attribute_primary_type :: proc (at : Attribute_type) -> Attribute_primary_type {
+	switch at {
+		case .invalid:
+			return .invalid;
+		case .float, .vec2, .vec3, .vec4: 
+			return .float;
+		case .int, .ivec2, .ivec3, .ivec4:
+			return .int; 
+		case .uint, .uvec2, .uvec3, .uvec4:
+			return .uint; 
+	}
+}
+
+Attribute_primary_type :: enum u32 {
+	invalid 		= 0,
 	float 			= gl.FLOAT,
-	//TODO int 			= gl.INT,
-	//TODOuint 			= gl.UNSIGNED_INT,
+	int 			= gl.INT,
+	uint 			= gl.UNSIGNED_INT,
+}
+
+get_attribute_primary_byte_len :: proc (at : Attribute_primary_type) -> int {
+	switch at {
+		case .invalid:
+			return 0;
+		case .float: 
+			return size_of(f32);
+		case .int:
+			return size_of(i32); 
+		case .uint:
+			return size_of(u32); 
+	}
 }
 
 Uniform_info :: struct {
@@ -107,7 +144,7 @@ Uniform_info :: struct {
 
 Attribute_info :: struct {
 	location : Attribute_id,
-	attrib_type : Attribute_type,
+	attribute_type : Attribute_type,
 }
 
 // Shader attribute data types

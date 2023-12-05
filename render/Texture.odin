@@ -34,7 +34,7 @@ Render_texture :: struct {
 	depth			:   Depth_texture2D, // Depth buffer attachment texture/renderbuffer
 }
 
-load_texture_from_file :: proc(using s : Render_state($U,$A), filename : string, loc := #caller_location) -> Texture2D {
+load_texture_from_file :: proc(using s : ^Render_state($U,$A), filename : string, loc := #caller_location) -> Texture2D {
 	
 	data, ok := os.read_entire_file_from_filename(filename);
 	defer delete(data);
@@ -44,7 +44,7 @@ load_texture_from_file :: proc(using s : Render_state($U,$A), filename : string,
     return load_texture_from_png_bytes(data, filename, loc = loc);
 }
 
-flip_texture :: proc(using s : Render_state($U,$A), data : []byte, width, height, channels : int) {
+flip_texture :: proc(using s : ^Render_state($U,$A), data : []byte, width, height, channels : int) {
 	
 	line_size := width * channels;
 	line_mem, err := mem.alloc_bytes(line_size, allocator = context.temp_allocator);
@@ -61,7 +61,7 @@ flip_texture :: proc(using s : Render_state($U,$A), data : []byte, width, height
 }
 
 //Data is compressed bytes (ex png format)
-load_texture_from_png_bytes :: proc(using s : Render_state($U,$A), data : []byte, texture_path := "", flipped := true, loc := #caller_location) -> Texture2D {
+load_texture_from_png_bytes :: proc(using s : ^Render_state($U,$A), data : []byte, texture_path := "", flipped := true, loc := #caller_location) -> Texture2D {
 	using image;
 
 	options := Options{
@@ -100,7 +100,7 @@ load_texture_from_png_bytes :: proc(using s : Render_state($U,$A), data : []byte
     return load_texture_from_raw_bytes(raw_data, auto_cast img.width, auto_cast img.height, .uncompressed_RGBA8, loc = loc);
 }
 
-load_texture_from_raw_bytes :: proc(using s : Render_state($U,$A), data : []byte, width, height : i32, format : Pixel_format, loc := #caller_location) -> Texture2D {
+load_texture_from_raw_bytes :: proc(using s : ^Render_state($U,$A), data : []byte, width, height : i32, format : Pixel_format, loc := #caller_location) -> Texture2D {
 
     texture : Texture2D = {
 		id			= load_texture_id(data, width, height, format, loc = loc),              // OpenGL texture id
@@ -115,7 +115,7 @@ load_texture_from_raw_bytes :: proc(using s : Render_state($U,$A), data : []byte
 
 // Load texture for rendering (framebuffer)
 // NOTE: Render texture is loaded by default with RGBA color attachment and depth RenderBuffer
-load_render_texture :: proc(using s : Render_state($U,$A), width : i32, height : i32, number_of_color_attachments : int = 1, depth_as_render_buffer : bool = false,
+load_render_texture :: proc(using s : ^Render_state($U,$A), width : i32, height : i32, number_of_color_attachments : int = 1, depth_as_render_buffer : bool = false,
 							 depth_buffer_bits : Depth_format = .bits_24, color_format : Pixel_format = .uncompressed_RGBA8, loc := #caller_location) -> Render_texture {
 	
 	//TODO number_of_color_attachments							
@@ -165,14 +165,14 @@ load_render_texture :: proc(using s : Render_state($U,$A), width : i32, height :
     return target;
 }
 
-resize_render_texture :: proc(using s : Render_state($U,$A), render_texture : ^Render_texture, width : i32, height : i32) {
+resize_render_texture :: proc(using s : ^Render_state($U,$A), render_texture : ^Render_texture, width : i32, height : i32) {
 	
 	unload_render_texture(render_texture);
 	render_texture^ = load_render_texture(width, height);
 	generate_mip_maps(render_texture.texture);
 }
 
-unload_render_texture :: proc(using s : Render_state($U,$A), rt : ^Render_texture) {
+unload_render_texture :: proc(using s : ^Render_state($U,$A), rt : ^Render_texture) {
 	//TODO
 	
 	//depth_type, depth_id := get_frame_buffer_depth_info(rt.id);
@@ -187,12 +187,12 @@ unload_render_texture :: proc(using s : Render_state($U,$A), rt : ^Render_textur
 	rt.id = 0;
 }
 
-unload_texture :: proc(using s : Render_state($U,$A), tex : ^Texture2D) {
+unload_texture :: proc(using s : ^Render_state($U,$A), tex : ^Texture2D) {
 	unload_texture_id(tex.id);
 	tex^ = {};
 }
 
-unload_depth_texture :: proc(using s : Render_state($U,$A), tex : ^Depth_texture2D) {
+unload_depth_texture :: proc(using s : ^Render_state($U,$A), tex : ^Depth_texture2D) {
 	
 	if v, ok := tex.id.(Render_buffer_id); ok {
 		unload_render_buffer_id(v);
@@ -208,7 +208,7 @@ unload_depth_texture :: proc(using s : Render_state($U,$A), tex : ^Depth_texture
 }
 
 // Check if a texture is ready
-is_texture_ready :: proc(using s : Render_state($U,$A), texture : Texture2D, loc := #caller_location) -> bool {
+is_texture_ready :: proc(using s : ^Render_state($U,$A), texture : Texture2D, loc := #caller_location) -> bool {
     
 	fmt.assertf(get_max_supported_texture_resolution_2D() >= texture.width, "Texture too large, max res is : %i and texture is %v", get_max_supported_texture_resolution_2D(), texture.width, loc);
 	fmt.assertf(get_max_supported_texture_resolution_2D() >= texture.height, "Texture too large, max res is : %i and texture is %v", get_max_supported_texture_resolution_2D(), texture.height, loc);
@@ -221,7 +221,7 @@ is_texture_ready :: proc(using s : Render_state($U,$A), texture : Texture2D, loc
 }
 
 // Check if a texture is ready
-is_depth_texture_ready :: proc(using s : Render_state($U,$A), depth : Depth_texture2D, loc := #caller_location) -> bool {
+is_depth_texture_ready :: proc(using s : ^Render_state($U,$A), depth : Depth_texture2D, loc := #caller_location) -> bool {
     
 	if id, ok := depth.id.(Render_buffer_id); ok {
 
@@ -248,12 +248,12 @@ is_depth_texture_ready :: proc(using s : Render_state($U,$A), depth : Depth_text
 }
 
 // Check if a render texture is ready
-is_render_texture_ready :: proc(using s : Render_state($U,$A), render_texture : Render_texture, loc := #caller_location) -> bool {
+is_render_texture_ready :: proc(using s : ^Render_state($U,$A), render_texture : Render_texture, loc := #caller_location) -> bool {
 
     return is_texture_ready(render_texture.texture) && is_depth_texture_ready(render_texture.depth) && verify_render_texture(render_texture);     		// TODO Validate texture mipmaps (at least 1 for basic mipmap level)
 }
 
-blit_render_texture_to_screen :: proc(using s : Render_state($U,$A), render_texture : Render_texture, loc := #caller_location) { //TODO choose attachment
+blit_render_texture_to_screen :: proc(using s : ^Render_state($U,$A), render_texture : Render_texture, loc := #caller_location) { //TODO choose attachment
 		
 	assert(render_texture.texture.width == auto_cast current_render_target_width, "render_texture and screen must have same dimensions", loc = loc);
 	assert(render_texture.texture.height == auto_cast current_render_target_height, "render_texture and screen must have same dimensions", loc = loc);
@@ -270,13 +270,13 @@ blit_render_texture_to_screen :: proc(using s : Render_state($U,$A), render_text
 	disable_frame_buffer_read(render_texture.id);
 }
 
-begin_texture_mode :: proc(using s : Render_state($U,$A), target : Render_texture, loc := #caller_location){
+begin_texture_mode :: proc(using s : ^Render_state($U,$A), target : Render_texture, loc := #caller_location){
 	
 	fmt.assertf(bound_frame_buffer_id == 0, "Another frame buffer (render texture) is already bound, its id is : %v", bound_frame_buffer_id, loc = loc);
 
 	current_render_target_width = cast(f32)target.texture.width;
 	current_render_target_height = cast(f32)target.texture.height;
-	
+		
 	assert(current_render_target_width != 0);
 	assert(current_render_target_height != 0);
 
@@ -284,7 +284,7 @@ begin_texture_mode :: proc(using s : Render_state($U,$A), target : Render_textur
 	set_view();
 }
 
-end_texture_mode :: proc(using s : Render_state($U,$A), target : Render_texture, loc := #caller_location){
+end_texture_mode :: proc(using s : ^Render_state($U,$A), target : Render_texture, loc := #caller_location){
 	
 	fmt.assertf(target.id == bound_frame_buffer_id, "You are unbinding a texture that is not currently bound, currently bound : %v, what you are undbinding : %v\n", bound_frame_buffer_id, target.id, loc = loc);
 
@@ -304,7 +304,7 @@ end_texture_mode :: proc(using s : Render_state($U,$A), target : Render_texture,
 
 ////////////////////////
 
-get_white_texture :: proc(using s : Render_state($U,$A)) -> Texture2D {
+get_white_texture :: proc(using s : ^Render_state($U,$A)) -> Texture2D {
 
 	if !is_texture_ready(white_texture) {
 		white_texture = load_texture_from_raw_bytes({255, 255, 255, 255}, 1, 1, .uncompressed_RGBA8);

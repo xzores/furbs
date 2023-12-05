@@ -61,18 +61,18 @@ something_setup :: proc () {
 
 Font :: distinct int;
 
-load_font_from_file :: proc(font_name : string, path : string) -> Font {
+load_font_from_file :: proc(using s : ^Render_state($U,$A), font_name : string, path : string) -> Font {
 	return auto_cast fs.AddFontPath(&font_context, font_name, path);
 }
 
-load_font_from_memory :: proc(font_name : string, data : []u8) -> Font {
+load_font_from_memory :: proc(using s : ^Render_state($U,$A), font_name : string, data : []u8) -> Font {
 
 	data_cpy := slice.clone(data);
 
 	return auto_cast fs.AddFontMem(&font_context, font_name, data_cpy, true);
 }
 
-getTextDimensions :: proc(text : string, font : Font, size : f32, spacing : f32 = 0) -> [2]f32 {
+get_text_dimensions :: proc(using s : ^Render_state($U,$A), text : string, font : Font, size : f32, spacing : f32) -> [2]f32 {
 	
 	fs.SetFont(&font_context, auto_cast font);
 	fs.SetSize(&font_context, size);
@@ -84,7 +84,7 @@ getTextDimensions :: proc(text : string, font : Font, size : f32, spacing : f32 
 	return bounds.zw;
 }
 
-get_max_text_height :: proc(font : Font, size : f32) -> f32 {
+get_max_text_height :: proc(using s : ^Render_state($U,$A), font : Font, size : f32) -> f32 {
 	
 	fs.SetFont(&font_context, auto_cast font);
 	fs.SetSize(&font_context, size);
@@ -93,7 +93,7 @@ get_max_text_height :: proc(font : Font, size : f32) -> f32 {
 	return max + min;
 }
 
-getTextBounds :: proc(text : string, position : [2]f32, font : Font, size : f32, spacing : f32 = 0) -> (bounds : [4]f32) {
+get_text_bounds :: proc(using s : ^Render_state($U,$A), text : string, position : [2]f32, font : Font, size : f32, spacing : f32 = 0) -> (bounds : [4]f32) {
 	
 	fs.SetFont(&font_context, auto_cast font);
 	fs.SetSize(&font_context, size);
@@ -105,7 +105,7 @@ getTextBounds :: proc(text : string, position : [2]f32, font : Font, size : f32,
 	return;
 }
 
-draw_text :: proc (text : string, position : [2]f32, font : Font, size : f32, spacing : f32, color : [4]f32, shader : Shader, loc := #caller_location) {
+draw_text :: proc (using s : ^Render_state($U,$A), text : string, position : [2]f32, font : Font, size : f32, spacing : f32, color : [4]f32, shader : Shader(U, A), loc := #caller_location) {
 	
 	shader := shader;
 

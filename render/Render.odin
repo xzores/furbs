@@ -11,6 +11,8 @@ import "core:reflect"
 import "core:strconv"
 import "core:fmt"
 import "core:runtime"
+import "core:sync"
+import "core:container/queue"
 
 import c "core:c/libc"
 
@@ -38,7 +40,7 @@ Vertex_buffer_targets :: enum {
 ///////////// STATE ////////////
 Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrinsics.type_is_enum(A) {
 
-	default_shader : Shader,
+	default_shader : Shader(U, A),
 
 	font_texture : Texture2D,
 	font_context : fs.FontContext,
@@ -57,22 +59,21 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 	current_render_target_height : f32,
 	current_render_target_unit : f32, //TODO
 
-	bound_window : Maybe(Window),
-
 	opengl_version : GL_version,
 
+	//Window stuff
+	bound_window : Maybe(^Window),
+	
 	/////////// Optional helpers stuff ////////////
-
-	shapes_buffer : Mesh_buffer, //TODO unused
+	shapes_buffer : Mesh_buffer(A), //TODO unused
 	white_texture : Texture2D, //Use get_white_texture to get it as it will init it if it is not.
 
 	//TODO make this a single mesh buffer
-	shape_quad : Mesh,
-	shape_circle : Mesh,
+	shape_quad : Mesh(A),
+	shape_circle : Mesh(A),
 
 	/////////// Camera ///////////
 	bound_camera : union {
-		Camera_pixel,
 		Camera2D,
 		Camera3D,
 	},
@@ -80,33 +81,6 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 	/////////// Shaders ///////////
 	loaded_vertex_shaders : map[string]Shader_vertex_id,
 	loaded_fragment_shaders : map[string]Shader_fragment_id,
-
-	/////////// Input ///////////
-	input_events_mutex : sync.Mutex,
-	key_input_events : queue.Queue(Key_input_event),
-	key_release_input_events : queue.Queue(Key_input_event),
-	char_input_buffer : queue.Queue(rune),
-	char_input : queue.Queue(rune),
-
-	//Current key state
-	keys_down 		: #sparse [Key_code]bool,
-	keys_released 	: #sparse [Key_code]bool,
-	keys_pressed 	: #sparse [Key_code]bool,
-	keys_triggered 	: #sparse [Key_code]bool,
-
-	button_input_events : queue.Queue(Mouse_input_event),
-	button_release_input_events : queue.Queue(Mouse_input_event),
-
-	scroll_input_event : queue.Queue([2]f32),
-	
-	//Current key state
-	button_down 	: [Mouse_code]bool,
-	button_released : [Mouse_code]bool,
-	button_pressed 	: [Mouse_code]bool,
-
-	mouse_pos : [2]f32,
-	mouse_delta : [2]f32,
-	scroll_delta : [2]f32,
 
 	/////////// Debug state, only used when compiled with "-debug" ///////////
 	using debug_state : Debug_state,
@@ -116,9 +90,6 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 ///////////// DEBUG STATE ////////////
 
 when ODIN_DEBUG {
-	Debug_state :: struct {};
-}
-else {
 	Debug_state :: struct {
 
 		render_has_been_init : bool,
@@ -157,6 +128,9 @@ else {
 		bound_write_frame_buffer_id : Frame_buffer_id,
 	};
 }
+else {
+	Debug_state :: struct {};
+}
 
 ////////////////////////////////////////////////////////////////////
 
@@ -165,7 +139,7 @@ error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstring) {
 	fmt.panicf("Recvied GLFW error : %v, text : %s", error, description);
 }
 
-begin_render :: proc(s : Render_state($U,$A), uniform_spec : [$U]Uniform_info, attribute_spec : [$A]Attribute_info, shader_defines : map[string]string, shader_folder : string,
+init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, attribute_spec : [A]Attribute_info, shader_defines : map[string]string, shader_folder : string,
 						loc := #caller_location) where intrinsics.type_is_enum(U) && intrinsics.type_is_enum(A) {
 
 	
@@ -178,70 +152,73 @@ begin_render :: proc(s : Render_state($U,$A), uniform_spec : [$U]Uniform_info, a
 	glfw.SetErrorCallback(error_callback);
 
 	/////////////////////
+	/*
 
-	uniform_enum_type = U;
-	attribute_enum_type = A;
-	
-	allowed_uniforms = make([dynamic]Uniform_info, len(U));
-	allowed_attributes = make([dynamic]Attribute_info, len(U));
+		uniform_enum_type = U;
+		attribute_enum_type = A;
+		
+		allowed_uniforms = make([dynamic]Uniform_info, len(U));
+		allowed_attributes = make([dynamic]Attribute_info, len(U));
 
-	requied_uniforms : map[string]Uniform_info = get_requied_uniforms();
-	requied_attributes : map[string]Attribute_info = get_requied_attributes();
-	defer delete(requied_uniforms);
-	defer delete(requied_attributes);
-	
-	for enum_val in reflect.enum_fields_zipped(U) {
-		if enum_val.name in requied_uniforms {
-			v : Uniform_info = requied_uniforms[enum_val.name];
-			value : Uniform_info = uniform_spec[auto_cast enum_val.value];
+		requied_uniforms : map[string]Uniform_info = get_requied_uniforms();
+		requied_attributes : map[string]Attribute_info = get_requied_attributes();
+		defer delete(requied_uniforms);
+		defer delete(requied_attributes);
+		
+		for enum_val in reflect.enum_fields_zipped(U) {
+			if enum_val.name in requied_uniforms {
+				v : Uniform_info = requied_uniforms[enum_val.name];
+				value : Uniform_info = uniform_spec[auto_cast enum_val.value];
+				
+				fmt.assertf(v.location == value.location || v.location == -1, "The location of uniform %v does not match, required location %v, given location : %v", enum_val.name, v.location, value.location, loc = loc);
+				fmt.assertf(v.uniform_type == value.uniform_type || v.uniform_type == .invalid, "The uniform type of uniform %v does not match, required type %v, given type : %v", enum_val.name, v.uniform_type, value.uniform_type, loc = loc);
+				fmt.assertf(v.array_size == value.array_size || v.array_size == -1, "The array size of uniform %v does not match, required array size %v, given array size : %v", enum_val.name, v.array_size, value.array_size, loc = loc);
+
+				delete_key(&requied_uniforms, enum_val.name);
+			}
 			
-			fmt.assertf(v.location == value.location || v.location == -1, "The location of uniform %v does not match, required location %v, given location : %v", enum_val.name, v.location, value.location, loc = loc);
-			fmt.assertf(v.uniform_type == value.uniform_type || v.uniform_type == .invalid, "The uniform type of uniform %v does not match, required type %v, given type : %v", enum_val.name, v.uniform_type, value.uniform_type, loc = loc);
-			fmt.assertf(v.array_size == value.array_size || v.array_size == -1, "The array size of uniform %v does not match, required array size %v, given array size : %v", enum_val.name, v.array_size, value.array_size, loc = loc);
+			allowed_uniforms[auto_cast enum_val.value] = uniform_spec[auto_cast enum_val.value];
+		}
 
-			delete_key(&requied_uniforms, enum_val.name);
+		for enum_val in reflect.enum_fields_zipped(A) {
+			if enum_val.name in requied_attributes {
+				v : Attribute_info = requied_attributes[enum_val.name];
+				value : Attribute_info = attribute_spec[auto_cast enum_val.value];
+				
+				fmt.assertf(v.attribute_type == value.attribute_type || v.attribute_type == .invalid, "The attribute type of uniform %v does not match, required type %v, given type : %v", enum_val.name, v.attribute_type, value.attribute_type, loc = loc);
+
+				delete_key(&requied_attributes, enum_val.name);
+			}
+
+			allowed_attributes[auto_cast enum_val.value] = attribute_spec[auto_cast enum_val.value];
 		}
 		
-		allowed_uniforms[auto_cast enum_val.value] = uniform_spec[auto_cast enum_val.value];
-	}
-
-	for enum_val in reflect.enum_fields_zipped(A) {
-		if enum_val.name in requied_attributes {
-			v : Attribute_info = requied_attributes[enum_val.name];
-			value : Attribute_info = attribute_spec[auto_cast enum_val.value];
-			
-			fmt.assertf(v.attribute_type == value.attribute_type || v.attribute_type == .invalid, "The attribute type of uniform %v does not match, required type %v, given type : %v", enum_val.name, v.attribute_type, value.attribute_type, loc = loc);
-
-			delete_key(&requied_attributes, enum_val.name);
+		if len(requied_uniforms) != 0 {
+			fmt.panicf("The following uniforms are required but not included : \n %v \n", requied_uniforms);
 		}
 
-		allowed_attributes[auto_cast enum_val.value] = attribute_spec[auto_cast enum_val.value];
-	}
+		if len(requied_attributes) != 0 {
+			fmt.panicf("The following attributes are required but not included : \n %v \n", requied_attributes);
+		}
+
+		if shader_defines != nil {
+
+			for e, v in shader_defines {
+				add_shader_defines(e,v);
+			}
+		}
+	*/
 	
-	if len(requied_uniforms) != 0 {
-		fmt.panicf("The following uniforms are required but not included : \n %v \n", requied_uniforms);
-	}
-
-	if len(requied_attributes) != 0 {
-		fmt.panicf("The following attributes are required but not included : \n %v \n", requied_attributes);
-	}
-
-	if shader_defines != nil {
-
-		for e, v in shader_defines {
-			add_shader_defines(e,v);
-		}
-	}
-
 	if shader_folder == "" {
 		panic("Unimplemented, todo");
 	}	
+
 	//shader_folder_location = strings.clone(shader_folder);
 }
 
-end_render :: proc(s : Render_state($U,$A)) {
-	delete(allowed_uniforms);
-	delete(allowed_attributes);
+destroy_render :: proc(s : ^Render_state($U,$A)) {
+	//delete(allowed_uniforms);
+	//delete(allowed_attributes);
 }
 
 add_shader_defines :: proc (s : Render_state($U,$A), k : string, v : string) {

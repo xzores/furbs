@@ -82,7 +82,7 @@ Style :: struct {
  	using font_style : Font_style,
 	
 	//Mesh
-	rect_mesh : render.Mesh,
+	rect_mesh : render.Mesh(A),
 }
 
 Anchor_point :: enum {
