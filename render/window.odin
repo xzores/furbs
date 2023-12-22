@@ -182,6 +182,8 @@ destroy_window :: proc(window : ^Window, loc :=  #caller_location) {
 	window_context = {};
 	delete(window.title);
 	glfw.Terminate();
+
+	render_has_been_init = false;
 }
 
 bind_window :: proc(window : Window, loc := #caller_location) {

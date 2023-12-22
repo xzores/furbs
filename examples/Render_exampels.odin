@@ -14,6 +14,7 @@ import "vendor:glfw"
 import "../render"
 
 /*
+main :: proc() {
 */
 @test
 Draw_quad_2D :: proc(t : ^testing.T) {
@@ -22,7 +23,8 @@ Draw_quad_2D :: proc(t : ^testing.T) {
 	window := init_window(600, 400, "Hello world", "res/shaders");
 	
 	my_quad := generate_quad();
-	
+	upload_mesh_single(&my_quad);
+
 	my_shader : Shader;
 	load_shader(&my_shader, "gui", "gui");
 
@@ -58,7 +60,7 @@ Draw_quad_2D :: proc(t : ^testing.T) {
 	}
 	
 	for !should_close(window) {
-		begin_frame(window, {1,0,1,1});
+		begin_frame(window, {1,1,1,1});
 		
 		//////// LOGIC ////////
 
@@ -95,6 +97,9 @@ Draw_quad_2D :: proc(t : ^testing.T) {
 	fmt.printf("Shutdown succesfull");
 }
 
+/*
+main :: proc() {
+*/
 @test
 Draw_quad_3D :: proc(t : ^testing.T) {
 	using render;
@@ -102,7 +107,8 @@ Draw_quad_3D :: proc(t : ^testing.T) {
 	window := init_window(600, 400, "Hello world", "res/shaders");
 	
 	my_quad := generate_quad();
-	
+	upload_mesh_single(&my_quad);
+
 	my_shader : Shader;
 	load_shader(&my_shader, "gui", "gui");
 	
@@ -121,7 +127,7 @@ Draw_quad_3D :: proc(t : ^testing.T) {
 	mouse_mode(.locked);
 	
 	for !should_close(window) {
-		begin_frame(window);
+		begin_frame(window, {1,1,1,1});
 
 		//////// LOGIC ////////
 		
@@ -171,7 +177,7 @@ Draw_quad_3D :: proc(t : ^testing.T) {
 main :: proc() {
 */
 @test
-Draw_shapes :: proc (t : ^testing.T) {
+Draw_shapes :: proc (t : ^testing.T) {	
 	using render;
 	
 	window := init_window(600, 400, "Hello world", "res/shaders", culling = false);
@@ -231,7 +237,7 @@ Draw_text :: proc (t : ^testing.T) {
 	my_rect : [4][2]f32 = {};
 	
 	//my_texture := load_texture_from_file("res/textures/test.png");
-	my_font := load_font_from_file("some_font", "res/fonts/NotoSansRegular.ttf");
+	my_font := load_font_from_file("some_font", "res/fonts/FirstTimeWriting.ttf");
 	//my_text_shader : Shader;
 	//load_shader(&my_text_shader, "text_shader_vs", "text_shader");
 	
@@ -253,7 +259,7 @@ Draw_text :: proc (t : ^testing.T) {
 		//draw_shape(Circle{100, [2]f32{0,0}}, color = {0,0,1,0.5});
 
 		//Drawing text, note this should happen in pixel space
-		draw_text("汉字 Hello Albz, TEXT IS WORKING! (YES WTF det tog langt tid) 汉字", {50, 50}, my_font, 50);
+		draw_text("Here is some text!", {50, 50}, my_font, 50);
 
 		end_mode_2D(cam);
 
@@ -266,11 +272,11 @@ Draw_text :: proc (t : ^testing.T) {
 
 
 /* 
+main :: proc () {
+*/
 @test
 Draw_to_render_target :: proc (t : ^testing.T) {
-*/
-main :: proc () {
-using render;
+	using render;
 
 	window := init_window(600, 400, "Hello world", "res/shaders", culling = false);
 
@@ -354,9 +360,10 @@ shared_meshs : [size][size][size]render.Mesh;
 
 //In this example we want to draw many different shapes on the screen (please ignore that there is only 3 types, imagine every draw call has a different mesh).
 /*
-*/
 @test
 Voxel_game_a_slow_way :: proc(t : ^testing.T) {
+*/
+main :: proc () {
 	using render;
 
 	window := init_window(800, 600, "Hello world", "res/shaders", required_gl_verion = .opengl_3_0);
