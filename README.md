@@ -59,5 +59,22 @@ main :: proc {
 ```
 
 Tutorials, documentation and more exampels are on the way.
-
 Codeveloped by albe194e
+
+
+Examples are included to do the following:
+    -Drawing 2D<br />
+![Drawing_a_quad](https://github.com/xzores/furbs/assets/17770917/af20e297-bbad-422a-b0a1-90c6a34333d7)
+
+    -Drawing 3D<br />
+![Drawing_a_quad_3D](https://github.com/xzores/furbs/assets/17770917/df6b56d2-5fe3-49fd-b045-4ecaecfbbe4e)
+
+    -Drawing 2D shapes, transparetcy and textures 3D<br />
+![Drawing_shapes](https://github.com/xzores/furbs/assets/17770917/4d89a90a-9518-4967-8636-f11c02e11bbf)
+
+    -Drawing text<br />
+![Drawing_text](https://github.com/xzores/furbs/assets/17770917/9e2c1360-17cd-4d08-a3c3-a0a00f867dac)
+
+    -Drawing 3D<br />
+![Drawing_3D](https://github.com/xzores/furbs/assets/17770917/fdf7f63d-a190-41eb-9c47-4cfdccfd5597)
+![Skærmbillede 2023-12-23 000822](https://github.com/xzores/furbs/assets/17770917/8146e1c2-8aa6-4fe7-9923-9bdd1b1468b1)
