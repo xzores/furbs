@@ -280,7 +280,7 @@ pop_theme :: proc (style : Theme, loc := #caller_location) {
 }
 
 push_panel :: proc (panel : ^Panel, loc := #caller_location) {
-
+	
 	if ctx, ok := current_context.?; ok {
 
 		old_panel := current_panel;
@@ -308,7 +308,7 @@ push_panel :: proc (panel : ^Panel, loc := #caller_location) {
 			}
 			fmt.assertf(render.is_render_texture_ready(panel.render_texture), "texture is not ready : \n%#v\n", panel.render_texture);
 
-			render.draw_shape([4]f32{100, 100, 400, 400}, color = {1,1,1,1}, texture = panel.render_texture.texture);
+			//render.draw_shape([4]f32{100, 100, 400, 400}, color = {1,1,1,1}, texture = panel.render_texture.texture);
 			render.begin_texture_mode(panel.render_texture);
 			render.clear_color_depth(clear_color = {1,0,1,0})
 		}
@@ -341,7 +341,7 @@ pop_panel :: proc (panel : ^Panel, loc := #caller_location) {
 		}
 	}
 
-	render.draw_shape([4]f32{100, 100, 400, 400}, color = {1,1,1,1}, texture = panel.render_texture.texture);
+	//render.draw_shape([4]f32{100, 100, 400, 400}, color = {1,1,1,1}, texture = panel.render_texture.texture);
 }
 
 /////////////////////////////////////////////////////////////////
@@ -353,7 +353,7 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 	assert(container.element != nil, "Element is nil", loc);
 	
 	stl : Style = current_theme.default_style;
-
+	
 	if ctx, ok := ctx.?; ok {
 		
 		//anchor_rect_pixel : [4]f32 = get_screen_space_position_rect(current_panel.dest.rect, current_panel.anchor, current_panel.self_anchor, anchor_rect_pixel, {ctx.width, ctx.height}, unit_size);

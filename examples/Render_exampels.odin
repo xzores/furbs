@@ -360,10 +360,10 @@ shared_meshs : [size][size][size]render.Mesh;
 
 //In this example we want to draw many different shapes on the screen (please ignore that there is only 3 types, imagine every draw call has a different mesh).
 /*
+main :: proc () {
+*/
 @test
 Voxel_game_a_slow_way :: proc(t : ^testing.T) {
-*/
-main :: proc () {
 	using render;
 
 	window := init_window(800, 600, "Hello world", "res/shaders", required_gl_verion = .opengl_3_0);
