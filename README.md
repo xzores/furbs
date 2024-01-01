@@ -77,4 +77,33 @@ Examples are included to do the following:
 
     -Drawing 3D<br />
 ![Drawing_3D](https://github.com/xzores/furbs/assets/17770917/fdf7f63d-a190-41eb-9c47-4cfdccfd5597)
-![Skærmbillede 2023-12-23 000822](https://github.com/xzores/furbs/assets/17770917/8146e1c2-8aa6-4fe7-9923-9bdd1b1468b1)
+
+
+Furbs also include a gui library.<br />
+The gui library includes the following elements:<br />
+ 	-Rect<br />
+    	-Button<br />
+	-Checkbox<br />
+	-Slide_input<br />
+	-Slider<br />
+	-Input_field<br />
+	-Selector<br />
+	-Slot<br />
+	-Label<br />
+
+Below is an example with a button:<br />
+![Skærmbillede 2024-01-01 201929](https://github.com/xzores/furbs/assets/17770917/6a34fc64-dff5-42b5-a364-a693a62c661f) <br />
+
+and here is a little menu:<br />
+![Skærmbillede 2024-01-01 202136](https://github.com/xzores/furbs/assets/17770917/5ba1545e-3a0d-4082-a905-bf1f038e6f2a) <br />
+resizing happens automagicly.<br />
+![Skærmbillede 2024-01-01 202311](https://github.com/xzores/furbs/assets/17770917/19cf8897-fd62-4f06-b04f-d27a8abdd6fa) <br />
+this gui system is suitable for in-game guis. Once can retrive events like: hover, active and  triggered. <br />
+hover : being true when the elements is hovered over. <br />
+active : being trie when the element is currently selected in one way or another, this is element dependent.<br />
+triggered : being true when the element recives an 1 time event (like being clicked) also element dependent.<br />
+
+A collection of gui elements are shown below:<br />
+![Skærmbillede 2024-01-01 202400](https://github.com/xzores/furbs/assets/17770917/e76d26b1-7091-40c5-a6b7-51162db3527c)
+
+
