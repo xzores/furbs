@@ -335,113 +335,118 @@ get_scroll_delta :: proc(using s : ^Render_state($U,$A), loc := #caller_location
 
 //Called by begin_frame
 @(private)
-begin_inputs :: proc(s : ^Render_state($U,$A), loc := #caller_location) {
+begin_inputs :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
 
 	assert(bound_window != nil, "A window must be bound", loc = loc);
-	assert(queue.len(s.window.key_release_input_events) == 0, "key_release_input_events is not zero, did  you forget to call end_inputs?", loc = loc);
+	assert(queue.len(key_release_input_events) == 0, "key_release_input_events is not zero, did  you forget to call end_inputs?", loc = loc);
 
-	sync.lock(&s.window.input_events_mutex);
-	defer sync.unlock(&s.window.input_events_mutex);
+	sync.lock(&input_events_mutex);
+	defer sync.unlock(&input_events_mutex);
 	
-	mx, my := glfw.GetCursorPos(s.window.glfw_window);
-	new_mouse_pos := [2]f32{auto_cast mx, auto_cast my};
-	
-	s.window.mouse_delta = new_mouse_pos - s.window.mouse_pos;
-	s.window.mouse_pos = new_mouse_pos;
-
-	for queue.len(s.window.char_input_buffer) != 0 {
-		queue.append(&s.window.char_input, queue.pop_front(&s.window.char_input_buffer));
-	}
-
-	for queue.len(s.window.scroll_input_event) != 0 {
-		s.window.scroll_delta += queue.pop_front(&s.window.scroll_input_event);
-	}
-
-	for queue.len(s.window.button_input_events) != 0 {
-		event := queue.pop_front(&s.window.button_input_events);
+	if window, ok := bound_window.?; ok {
+		mx, my := glfw.GetCursorPos(window.glfw_window);
+		new_mouse_pos := [2]f32{auto_cast mx, auto_cast my};
 		
-		switch event.action {
-			case .press:
-				s.window.button_pressed[event.button] = true;
-				s.window.button_down[event.button] = true;
-			case .release:
-				s.window.button_released[event.button] = true;
-				queue.append(&s.window.button_release_input_events, event);
-			case .repeat:
-				panic("unimplemented");
+		mouse_delta = new_mouse_pos - mouse_pos;
+		mouse_pos = new_mouse_pos;
+
+		for queue.len(char_input_buffer) != 0 {
+			queue.append(&char_input, queue.pop_front(&window.char_input_buffer));
+		}
+
+		for queue.len(scroll_input_event) != 0 {
+			scroll_delta += queue.pop_front(&window.scroll_input_event);
+		}
+
+		for queue.len(button_input_events) != 0 {
+			event := queue.pop_front(&window.button_input_events);
+			
+			switch event.action {
+				case .press:
+					button_pressed[event.button] = true;
+					button_down[event.button] = true;
+				case .release:
+					button_released[event.button] = true;
+					queue.append(&button_release_input_events, event);
+				case .repeat:
+					panic("unimplemented");
+			}
+		}
+
+		for queue.len(key_input_events) != 0 {
+			event := queue.pop_front(&key_input_events);
+			
+			switch event.action {
+				case .press:
+					keys_pressed[event.key] = true;
+					keys_triggered[event.key] = true;
+					keys_down[event.key] = true;
+				case .release:
+					keys_released[event.key] = true;
+					queue.append(&key_release_input_events, event);
+				case .repeat:
+					keys_triggered[event.key] = true;
+			}
 		}
 	}
-
-	for queue.len(s.window.key_input_events) != 0 {
-		event := queue.pop_front(&s.window.key_input_events);
-		
-		switch event.action {
-			case .press:
-				s.window.keys_pressed[event.key] = true;
-				s.window.keys_triggered[event.key] = true;
-				s.window.keys_down[event.key] = true;
-			case .release:
-				s.window.keys_released[event.key] = true;
-				queue.append(&s.window.key_release_input_events, event);
-			case .repeat:
-				s.window.keys_triggered[event.key] = true;
-		}
+	else {
+		panic("No window is bound!", loc = loc);
 	}
 }
 
 @(private)
-end_inputs :: proc(s : ^Render_state($U,$A), loc := #caller_location) {
+end_inputs :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
 
 	assert(bound_window != nil, "A window must be bound", loc = loc);
 
-	sync.lock(&s.window.input_events_mutex);
-	defer sync.unlock(&s.window.input_events_mutex);
+	sync.lock(&input_events_mutex);
+	defer sync.unlock(&input_events_mutex);
 	
-	s.window.scroll_delta = [2]f32{0,0};
+	scroll_delta = [2]f32{0,0};
 
-	for queue.len(s.window.button_release_input_events) != 0 {
-		event := queue.pop_front(&s.window.button_release_input_events);
+	for queue.len(button_release_input_events) != 0 {
+		event := queue.pop_front(&button_release_input_events);
 
 		if event.action == .release {
-			s.window.button_down[event.button] = false;
+			button_down[event.button] = false;
 		}
 		else {
 			panic("Only release buttons in button_release_input_events");
 		}
 	}
 
-	for queue.len(s.window.key_release_input_events) != 0 {
-		event := queue.pop_front(&s.window.key_release_input_events);
+	for queue.len(key_release_input_events) != 0 {
+		event := queue.pop_front(&key_release_input_events);
 
 		if event.action == .release {
-			s.window.keys_down[event.key] = false;
+			keys_down[event.key] = false;
 		}
 		else {
 			panic("Only release keys in key_release_input_events");
 		}
 	}
 
-	for &button in s.window.button_released {
+	for &button in button_released {
 		button = false;
 	}
 
-	for &button in s.window.button_pressed {
+	for &button in button_pressed {
 		button = false;
 	}
 
-	for &key in s.window.keys_released {
+	for &key in keys_released {
 		key = false;
 	}
 
-	for &key in s.window.keys_pressed {
+	for &key in keys_pressed {
 		key = false;
 	}
 
-	for &key in s.window.keys_triggered {
+	for &key in keys_triggered {
 		key = false;
 	}
 
-	queue.clear(&s.window.char_input);
+	queue.clear(&char_input);
 
 }
 

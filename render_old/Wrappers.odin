@@ -13,10 +13,8 @@ import "../utils"
 
 /////////////////////
 
-load_vertex_buffer :: proc(using s : ^Render_state($U,$A), data : []$T, size : int, dyn : bool) -> Vbo_ID {
+load_vertex_buffer :: proc(using s : ^Render_state($U,$A), data : rawptr, size : int, dyn : bool) -> Vbo_ID {
 	using gl;
-
-	assert(data == nil || len(data) * size_of(u32), "the size of the data must match size, or be nil")
 
  	id : Vbo_ID = 0;
 	
@@ -67,7 +65,6 @@ disable_vertex_buffer :: proc(using s : ^Render_state($U,$A), id : Vbo_ID, loc :
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0);
 }
-
 /////////////////////
 
 //VBO element
@@ -164,52 +161,34 @@ disable_vertex_attribute :: proc(index : u32) {
 
 load_program :: proc(using s : ^Render_state($U,$A)) -> Shader_program_id {
 	id : Shader_program_id = auto_cast gl.CreateProgram();
-	when ODIN_DEBUG {
-		shader_program_alive[id] = true;
-	}
+	shader_program_alive[id] = true;
 	return id;
 }
 
-load_vertex_shader :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> Shader_vertex_id {
-	when ODIN_DEBUG {
-		id : Shader_vertex_id = auto_cast gl.CreateShader(gl.VERTEX_SHADER, loc);
-		shader_vertex_alive[id] = true;
-	}
-	else {
-		id : Shader_vertex_id = auto_cast gl.CreateShader(gl.VERTEX_SHADER);
-	}
+load_vertex_shader :: proc(using s : ^Render_state($U,$A)) -> Shader_vertex_id {
+	id : Shader_vertex_id = auto_cast gl.CreateShader(gl.VERTEX_SHADER);
+	shader_vertex_alive[id] = true;
 	return id;
 }
 
-load_fragment_shader :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> Shader_fragment_id {
-	when ODIN_DEBUG {
-		id : Shader_fragment_id = auto_cast gl.CreateShader(gl.FRAGMENT_SHADER, loc);
-		shader_fragment_alive[id] = true;
-	}
-	else {
-		id : Shader_fragment_id = auto_cast gl.CreateShader(gl.FRAGMENT_SHADER);
-	}
+load_fragment_shader :: proc(using s : ^Render_state($U,$A)) -> Shader_fragment_id {
+	id : Shader_fragment_id = auto_cast gl.CreateShader(gl.FRAGMENT_SHADER);
+	shader_fragment_alive[id] = true;
 	return id;
 }
 
 unload_vertex_shader :: proc(using s : ^Render_state($U,$A), shader_id : Shader_vertex_id){
-	when ODIN_DEBUG {
-		shader_vertex_alive[shader_id] = false;
-	}
+	shader_vertex_alive[shader_id] = false;
 	gl.DeleteShader(auto_cast shader_id);
 }
 
 unload_fragment_shader :: proc(using s : ^Render_state($U,$A), shader_id : Shader_fragment_id){
-	when ODIN_DEBUG {
-		shader_fragment_alive[shader_id] = false;
-	}
+	shader_fragment_alive[shader_id] = false;
 	gl.DeleteShader(auto_cast shader_id);
 }
 
 unload_program :: proc(using s : ^Render_state($U,$A), shader_id : Shader_program_id) {
-	when ODIN_DEBUG {
-		shader_program_alive[shader_id] = false;
-	}
+	shader_program_alive[shader_id] = false;
 	gl.DeleteProgram(auto_cast shader_id);
 }
 
@@ -331,7 +310,7 @@ load_depth_render_buffer_id :: proc(using s : ^Render_state($U,$A), width : i32,
 	return id;
 }
 
-unload_render_buffer_id :: proc(using s : ^Render_state($U,$A), depth_id : Render_buffer_id) {
+unload_render_buffer_id :: proc(depth_id : Render_buffer_id) {
 	depth_id := depth_id;
 	render_buffer_alive[depth_id] = false;
 	gl.DeleteRenderbuffers(1, auto_cast &depth_id)
@@ -496,7 +475,7 @@ set_vertex_attribute_divisor :: proc(index : u32, divisor : u32) {
 //////////////////////////////
 
 // Draw vertex array
-draw_vertex_array :: proc(using s : ^Render_state($U,$A), #any_int offset : i32, #any_int count : i32, loc := #caller_location) {
+draw_vertex_array :: proc(using s : ^Render_state($U,$A), offset : i32, count : i32, loc := #caller_location) {
 	//assert(offset < count, "Offset is greater or equal to count", loc = loc);
 	assert(count != 0, "Count is zero", loc = loc);
 	assert(count % 3 == 0, "Count is not a multiable of 3", loc = loc);
@@ -544,18 +523,18 @@ draw_vertex_array_indirect :: proc(using s : ^Render_state($U,$A), offset : i32,
 }
 
 // Draw vertex array elements
-draw_vertex_array_elements :: proc(using s : ^Render_state($U,$A), #any_int count : i32, loc := #caller_location) {
+draw_vertex_array_elements :: proc(using s : ^Render_state($U,$A), count : i32, loc := #caller_location) {
 	assert(bound_element_buffer != 0, "There is not a bound element buffer", loc = loc);
     gl.DrawElements(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, nil);
 }
 
 // Draw vertex array instanced
-draw_vertex_array_instanced :: proc(using s : ^Render_state($U,$A), #any_int offset : i32, #any_int count : i32, #any_int instances : i32) {
+draw_vertex_array_instanced :: proc(using s : ^Render_state($U,$A), offset : i32, count : i32, instances : i32) {
 	gl.DrawArraysInstanced(gl.TRIANGLES, 0, count, instances);
 }
 
 // Draw vertex array elements instanced
-draw_vertex_array_elements_instanced :: proc(using s : ^Render_state($U,$A), #any_int count : i32, #any_int instances : i32, loc := #caller_location) {
+draw_vertex_array_elements_instanced :: proc(using s : ^Render_state($U,$A), count : i32, instances : i32, loc := #caller_location) {
 	assert(bound_element_buffer != 0, "There is not a bound element buffer", loc = loc);
     gl.DrawElementsInstanced(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, nil, instances);
 }
@@ -672,7 +651,7 @@ get_shader_attributes :: proc(using s : ^Render_state($U,$A), program_id : Shade
 
 		name : string = strings.clone_from_bytes(name_buf[:name_len]);
 		fmt.assertf(utils.is_enum_valid(shader_type), "uniform %s is not a supported type. OpenGL type : %v", name, cast(gl.GL_Enum)shader_type, loc = loc);
-		res[name] = Attribute_info{location = get_attribute_location(s, program_id, name), attribute_type = auto_cast shader_type};
+		res[name] = Attribute_info{location = get_attribute_location(program_id, name), attrib_type = auto_cast shader_type};
 	}
 
 	return;
@@ -714,7 +693,7 @@ get_shader_uniforms :: proc(using s : ^Render_state($U,$A), program_id : Shader_
 		}
 
 		fmt.assertf(utils.is_enum_valid(shader_type), "uniform %s is not a supported type. OpenGL type : %v", name, cast(gl.GL_Enum)shader_type, loc = loc);
-		res[name] = Uniform_info{location = get_uniform_location(s, program_id, name), uniform_type = auto_cast shader_type, array_size = size};
+		res[name] = Uniform_info{location = get_uniform_location(program_id, name), uniform_type = auto_cast shader_type, array_size = size};
 	}
 
 	return;
@@ -913,13 +892,13 @@ compile_shader :: proc(using s : ^Render_state($U,$A), destination : ^map[string
 
 	when shader_type == .vertex_shader {
 		assert(T == Shader_vertex_id, "Are you compiling a vertex or fragment shader?", loc = loc);
-		shader_id = load_vertex_shader(s);
+		shader_id = load_vertex_shader();
 		source_vertex_shader(shader_id, source);
 		_compile_shader(shader_id, name, loc);
 	}
 	else when shader_type == .fragment_shader {
 		assert(T == Shader_fragment_id, "Are you compiling a vertex or fragment shader?", loc = loc);
-		shader_id = load_fragment_shader(s);
+		shader_id = load_fragment_shader();
 		source_fragment_shader(shader_id, source);
 		_compile_shader(shader_id, name, loc);
 	}

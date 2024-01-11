@@ -68,40 +68,13 @@ Uniform_type :: enum u32 {
 	//TODO should we support more? : https://registry.khronos.org/OpenGL-Refpages/gl4/html/glGetActiveUniform.xhtml
 }
 
-is_sampler :: proc (u : Uniform_type) -> bool {
-	#partial switch u {
-		case .sampler_1d:
-			return true;
-		case .sampler_2d:
-			return true;
-		case .sampler_3d:
-			return true;
-		case .sampler_cube:
-			return true;
-		case .isampler_1d:
-			return true;
-		case .isampler_2d:
-			return true;
-		case .isampler_3d:
-			return true;
-		case .isampler_cube:
-			return true;
-		case .isampler_buffer:
-			return true;
-		case:
-			return false;
-	}
-
-	return false;
-}
-
 Attribute_type :: enum u32 {
 	invalid 		= 0,
 	float 			= gl.FLOAT,
 	vec2 			= gl.FLOAT_VEC2,
 	vec3 			= gl.FLOAT_VEC3,
 	vec4 			= gl.FLOAT_VEC4,
-	int 			= gl.INT,		//32 bits, not 64
+	int 			= gl.INT,
 	ivec2 			= gl.INT_VEC2,
 	ivec3 			= gl.INT_VEC3,
 	ivec4 			= gl.INT_VEC4,
@@ -112,39 +85,6 @@ Attribute_type :: enum u32 {
 	//mat2 			= gl.FLOAT_MAT2,
 	//mat3 			= gl.FLOAT_MAT3,
 	//mat4 			= gl.FLOAT_MAT4,
-}
-
-odin_type_to_attribute_type :: proc (odin_type : typeid) -> Attribute_type{
-	switch odin_type {
-		case f32:
-			return .float;
-		case [2]f32:
-			return .vec2;
-		case [3]f32:
-			return .vec3;
-		case [4]f32:
-			return .vec4;
-		case i32:
-			return .int; 
-		case [2]i32:
-			return .ivec2; 
-		case [3]i32:
-			return .ivec3; 
-		case [4]i32:
-			return .ivec4;
-		case u32:
-			return .uint;
-		case [2]u32:
-			return .uint;
-		case [3]u32:
-			return .uint;
-		case [4]u32:
-			return .uint;
-		case:
-			return .invalid;
-	}
-
-	return .invalid;
 }
 
 //return the "entries" or number of dimensions. numbers are between 0 and 4.
@@ -177,7 +117,7 @@ get_attribute_primary_type :: proc (at : Attribute_type) -> Attribute_primary_ty
 			return .uint;
 	}
 
-	return .invalid;
+	return .invalid:
 }
 
 Attribute_primary_type :: enum u32 {
@@ -198,8 +138,6 @@ get_attribute_primary_byte_len :: proc (at : Attribute_primary_type) -> int {
 		case .uint:
 			return size_of(u32); 
 	}
-
-	return 0;
 }
 
 Uniform_info :: struct {

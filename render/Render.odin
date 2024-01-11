@@ -9,10 +9,12 @@ import fs "vendor:fontstash"
 import "core:intrinsics"
 import "core:reflect"
 import "core:strconv"
+import "core:strings"
 import "core:fmt"
 import "core:runtime"
 import "core:sync"
 import "core:container/queue"
+import "core:time"
 
 import c "core:c/libc"
 
@@ -40,13 +42,12 @@ Vertex_buffer_targets :: enum {
 ///////////// STATE ////////////
 Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrinsics.type_is_enum(A) {
 
+	///////////// STATE of init ////////////
+	render_has_been_init : bool,
+
+	///////////// shader stuff ////////////
 	default_shader : Shader(U, A),
-
-	font_texture : Texture2D,
-	font_context : fs.FontContext,
-	//text_shader : Shader, renamed default_shader
-	//gui_shader : Shader, renamed default_shader
-
+	
 	prj_mat 		: matrix[4,4]f32,
 	inv_prj_mat 	: matrix[4,4]f32,
 
@@ -55,20 +56,23 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 
 	shader_folder_location : string,
 
+	///////////// render target size ////////////
 	current_render_target_width : f32,
 	current_render_target_height : f32,
-	current_render_target_unit : f32, //TODO
 
+	///////////// OPENGL stuff ////////////
 	opengl_version : GL_version,
 
 	//Window stuff
-	bound_window : Maybe(^Window),
+	window : Window,
 	
-	/////////// Optional helpers stuff ////////////
-	shapes_buffer : Mesh_buffer(A), //TODO unused
+	/////////// Texture/font stuff ////////////	
+	font_context : fs.FontContext,
+	font_texture : Texture2D,
+	
 	white_texture : Texture2D, //Use get_white_texture to get it as it will init it if it is not.
 
-	//TODO make this a single mesh buffer
+	//TODO make this a single mesh buffer (for preformance)
 	shape_quad : Mesh(A),
 	shape_circle : Mesh(A),
 
@@ -91,8 +95,6 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 
 when ODIN_DEBUG {
 	Debug_state :: struct {
-
-		render_has_been_init : bool,
 
 		////////////////
 
@@ -126,158 +128,201 @@ when ODIN_DEBUG {
 		bound_frame_buffer_id : Frame_buffer_id,
 		bound_read_frame_buffer_id : Frame_buffer_id,
 		bound_write_frame_buffer_id : Frame_buffer_id,
+
+		is_begin_render : bool,
 	};
 }
-else {
+else when !ODIN_DEBUG {
 	Debug_state :: struct {};
 }
 
 ////////////////////////////////////////////////////////////////////
 
-error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstring) {
-	context = runtime.default_context();
-	fmt.panicf("Recvied GLFW error : %v, text : %s", error, description);
+renders_count : int = 0;
+
+@(private)
+init_glfw :: proc () {	
+	if renders_count == 0 {
+		if(!cast(bool)glfw.Init()){
+			panic("Failed to init glfw");
+		}
+		glfw.SetErrorCallback(error_callback);
+		fmt.printf("inited glfw\n");
+	}	
+	renders_count += 1;
 }
 
-init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, attribute_spec : [A]Attribute_info, shader_defines : map[string]string, shader_folder : string,
-						loc := #caller_location) where intrinsics.type_is_enum(U) && intrinsics.type_is_enum(A) {
-
-	
-	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
-
-	if(!cast(bool)glfw.Init()){
-		panic("Failed to init glfw");
+@(private)
+terminate_glfw :: proc () {
+	renders_count -= 1;
+	if renders_count == 0 {
+		glfw.Terminate();
+		fmt.printf("terminated glfw\n");
 	}
+}
+
+required_uniforms 	:: 	map[string]Uniform_info {};
+required_attributes :: 	map[string]Attribute_info {};
+
+init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, attribute_spec : [A]Attribute_info, shader_defines : map[string]string, shader_folder : string, 
+						required_gl_verion : GL_version = nil, window_title : string = "furbs window", #any_int window_width : i32 = 600, #any_int window_height : i32 = 600, loc := #caller_location) where intrinsics.type_is_enum(U) && intrinsics.type_is_enum(A) {
 	
-	glfw.SetErrorCallback(error_callback);
+	assert(s.render_has_been_init == false, "renderer already initiazied");
+
+	init_glfw();
 
 	/////////////////////
-	/*
+	required_uniforms :=  required_uniforms;
+	required_attributes :=  required_attributes;
+	defer delete(required_uniforms);
+	defer delete(required_attributes);
 
-		uniform_enum_type = U;
-		attribute_enum_type = A;
-		
-		allowed_uniforms = make([dynamic]Uniform_info, len(U));
-		allowed_attributes = make([dynamic]Attribute_info, len(U));
-
-		requied_uniforms : map[string]Uniform_info = get_requied_uniforms();
-		requied_attributes : map[string]Attribute_info = get_requied_attributes();
-		defer delete(requied_uniforms);
-		defer delete(requied_attributes);
-		
-		for enum_val in reflect.enum_fields_zipped(U) {
-			if enum_val.name in requied_uniforms {
-				v : Uniform_info = requied_uniforms[enum_val.name];
-				value : Uniform_info = uniform_spec[auto_cast enum_val.value];
-				
-				fmt.assertf(v.location == value.location || v.location == -1, "The location of uniform %v does not match, required location %v, given location : %v", enum_val.name, v.location, value.location, loc = loc);
-				fmt.assertf(v.uniform_type == value.uniform_type || v.uniform_type == .invalid, "The uniform type of uniform %v does not match, required type %v, given type : %v", enum_val.name, v.uniform_type, value.uniform_type, loc = loc);
-				fmt.assertf(v.array_size == value.array_size || v.array_size == -1, "The array size of uniform %v does not match, required array size %v, given array size : %v", enum_val.name, v.array_size, value.array_size, loc = loc);
-
-				delete_key(&requied_uniforms, enum_val.name);
-			}
+	for enum_val in reflect.enum_fields_zipped(U) {
+		if enum_val.name in required_uniforms {
+			v : Uniform_info = required_uniforms[enum_val.name];
+			value : Uniform_info = uniform_spec[auto_cast enum_val.value];
 			
-			allowed_uniforms[auto_cast enum_val.value] = uniform_spec[auto_cast enum_val.value];
+			fmt.assertf(v.location == value.location || v.location == -1, "The location of uniform %v does not match, required location %v, given location : %v", enum_val.name, v.location, value.location, loc = loc);
+			fmt.assertf(v.uniform_type == value.uniform_type || v.uniform_type == .invalid, "The uniform type of uniform %v does not match, required type %v, given type : %v", enum_val.name, v.uniform_type, value.uniform_type, loc = loc);
+			fmt.assertf(v.array_size == value.array_size || v.array_size == -1, "The array size of uniform %v does not match, required array size %v, given array size : %v", enum_val.name, v.array_size, value.array_size, loc = loc);
+
+			delete_key(&required_uniforms, enum_val.name);
 		}
+	}
 
-		for enum_val in reflect.enum_fields_zipped(A) {
-			if enum_val.name in requied_attributes {
-				v : Attribute_info = requied_attributes[enum_val.name];
-				value : Attribute_info = attribute_spec[auto_cast enum_val.value];
-				
-				fmt.assertf(v.attribute_type == value.attribute_type || v.attribute_type == .invalid, "The attribute type of uniform %v does not match, required type %v, given type : %v", enum_val.name, v.attribute_type, value.attribute_type, loc = loc);
+	for enum_val in reflect.enum_fields_zipped(A) {
+		if enum_val.name in required_attributes {
+			v : Attribute_info = required_attributes[enum_val.name];
+			value : Attribute_info = attribute_spec[auto_cast enum_val.value];
+			
+			fmt.assertf(v.attribute_type == value.attribute_type || v.attribute_type == .invalid, "The attribute type of uniform %v does not match, required type %v, given type : %v", enum_val.name, v.attribute_type, value.attribute_type, loc = loc);
 
-				delete_key(&requied_attributes, enum_val.name);
-			}
-
-			allowed_attributes[auto_cast enum_val.value] = attribute_spec[auto_cast enum_val.value];
+			delete_key(&required_attributes, enum_val.name);
 		}
+	}
 		
-		if len(requied_uniforms) != 0 {
-			fmt.panicf("The following uniforms are required but not included : \n %v \n", requied_uniforms);
-		}
+	if len(required_uniforms) != 0 {
+		fmt.panicf("The following uniforms are required but not included : \n %v \n", required_uniforms);
+	}
 
-		if len(requied_attributes) != 0 {
-			fmt.panicf("The following attributes are required but not included : \n %v \n", requied_attributes);
-		}
+	if len(required_attributes) != 0 {
+		fmt.panicf("The following attributes are required but not included : \n %v \n", required_attributes);
+	}
 
-		if shader_defines != nil {
-
-			for e, v in shader_defines {
-				add_shader_defines(e,v);
-			}
+	if shader_defines != nil {
+		for e, v in shader_defines {
+			set_shader_define(s,e,v);
 		}
-	*/
-	
+	}
+
 	if shader_folder == "" {
-		panic("Unimplemented, todo");
-	}	
+		panic("Unimplemented, todo, you must have a shader folder!");
+	}
 
-	//shader_folder_location = strings.clone(shader_folder);
+	s.shader_folder_location = strings.clone(shader_folder);
+
+	//////////////////////////////// WINDOW CODE BELOW ////////////////////////////////
+
+	time.stopwatch_start(&s.window.startup_timer);
+
+	if required_gl_verion >= GL_version.opengl_3_2 {
+		glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
+	}
+
+	if required_gl_verion != nil {
+		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, auto_cast get_gl_major(required_gl_verion));
+		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, auto_cast get_gl_minor(required_gl_verion));
+	}
+
+    // Create render window.
+    glfw_window := glfw.CreateWindow(window_width, window_height, fmt.ctprintf("%s", window_title), nil, nil);
+    fmt.assertf(glfw_window != nil, "Window or OpenGL context creation failed, glfw_window is : %v", glfw_window);
+	s.window.glfw_window = glfw_window;
+
+	glfw.MakeContextCurrent(s.window.glfw_window);
+	
+	glfw.SetKeyCallback(s.window.glfw_window, key_callback);
+	glfw.SetMouseButtonCallback(s.window.glfw_window, button_callback);
+	glfw.SetScrollCallback(s.window.glfw_window, scroll_callback);
+	glfw.SetCharModsCallback(s.window.glfw_window, input_callback);
+	glfw.SetInputMode(s.window.glfw_window, glfw.STICKY_KEYS, 1);
+
+	//Load 1.0 to get access to the "get_gl_version" function and then load the actual verison afterwards.
+	gl.load_up_to(1, 0, glfw.gl_set_proc_address);
+	version := get_gl_version(s);
+
+	//TODO, enum cannot be below 3.3 //assert(version >= .opengl_3_3, "This library only supports OpenGL 3.0 or higher")
+	if required_gl_verion != nil {
+		//load the specified
+		assert(version >= required_gl_verion, "OpenGL version is not new enough for the required version");
+		gl.load_up_to(get_gl_major(required_gl_verion), get_gl_major(required_gl_verion), glfw.gl_set_proc_address);
+		s.opengl_version = required_gl_verion;
+	}
+	else {
+		//load the newest
+		gl.load_up_to(get_gl_major(version), get_gl_major(version), glfw.gl_set_proc_address);
+		s.opengl_version = version;
+	}
+
+	s.window.window_context = context;
+
+	fmt.printf("Loaded opengl version : %v\n", s.opengl_version);
+
+	//TODO check that we dont exceed max textures assert(get_max_supported_active_textures() >= auto_cast len(texture_locations));
+	init_shaders(s);
+	glfw.MakeContextCurrent(nil);
+	
+	bind_window(s);
+
+	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
+	fs.Init(&s.font_context, 1, 1, .BOTTOMLEFT);
+
+	glfw.SetWindowUserPointer(s.window.glfw_window, &s.window); // :: proc(window.glfw_window, window) //TODO this window and then pointer
+
+	s.render_has_been_init = true;
 }
 
-destroy_render :: proc(s : ^Render_state($U,$A)) {
-	//delete(allowed_uniforms);
-	//delete(allowed_attributes);
+destroy_render :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
+	
+	assert(bound_window == &s.window, "The window must be bound when calling destroy_render", loc = loc);
+
+	unload_shader(s, &s.default_shader);
+	delete(shader_folder_location);
+	
+	unbind_window(s);
+
+	/////////// Texture/font stuff ////////////	
+	/*
+	if font_context != nil {
+		fs.destroy_font(font_context);
+	}
+	
+	if is_texture_real(font_texture) {
+		destroy_texture(font_texture);
+	}
+	
+	if is_texture_real(white_texture) {
+		destroy_texture(white_texture);
+	}
+
+	//TODO make this a single mesh buffer (for preformance)
+	destroy_mesh(shape_quad);
+	destroy_mesh(shape_circle);
+	
+	/////////// Shaders ///////////
+	destroy_shaders(s);
+
+	//TODO check that all things has been destroyed in debug mode.
+	*/
+
+	glfw.DestroyWindow(s.window.glfw_window);
+
+	terminate_glfw();
+	
 }
 
-add_shader_defines :: proc (s : Render_state($U,$A), k : string, v : string) {
+set_shader_define :: proc (s : ^Render_state($U,$A), k : string, v : string) {
 	panic("TODO");
 }
 
-get_requied_uniforms :: proc() -> (s : Render_state($U,$A), res : map[string]Uniform_info) {
-
-	fields := reflect.struct_fields_zipped(Builtin_uniforms);
-	
-	for field in fields {
-		
-		req_type : Uniform_info;
-
-		if req_type_str, ok := reflect.struct_tag_lookup(field.tag, "type"); ok {
-			val, type_spes := reflect.enum_from_name(Uniform_type, auto_cast req_type_str);
-			fmt.assertf(type_spes, "the name %v is not part of the Uniform_type enum, furbs interal error...", req_type_str);
-			req_type.uniform_type = auto_cast val;
-		}
-		else {
-			panic("Type must be specified, furbs interal error...")
-		}
-		
-		if req_arr_size_str, ok := reflect.struct_tag_lookup(field.tag, "array_size"); ok {
-			val, is_int_ok := strconv.parse_int(auto_cast req_arr_size_str);
-			assert(is_int_ok, "Builtin_uniforms has an invalid int for array_size");
-			
-			req_type.array_size = auto_cast val;
-		}
-		else {
-			req_type.array_size = -1;
-		}
-
-		res[field.name] = req_type;
-	}
-
-	return;
-}
-
-get_requied_attributes :: proc(s : Render_state($U,$A)) -> map[string]Attribute_info {
-
-	fields := reflect.struct_fields_zipped(Builtin_uniforms);
-
-	for field in fields {
-		
-		req_type : Attribute_info;
-
-		if req_type_str, ok := reflect.struct_tag_lookup(field.tag, "type"); ok {
-			val, type_spes := reflect.enum_from_name(Attribute_type, auto_cast req_type_str);
-			fmt.assertf(type_spes, "the name %v is not part of the Attribute_type enum, furbs interal error...", req_type_str);
-			req_type.attribute_type = auto_cast val;
-		}
-		else {
-			panic("Type must be specified, furbs interal error...")
-		}
-
-		res[field.name] = req_type;
-	}
-
-	return;
-}
 
