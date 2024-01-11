@@ -311,6 +311,17 @@ get_gl_minor :: proc(version : GL_version) -> int {
 	return 0;
 }
 
+Cull_method :: enum {
+	no_cull,
+	front_cull,
+	back_cull,
+}
+
+Render_target :: union {
+	Render_texture,
+	Window,
+}
+
 //////////////////
 Anchor_point :: enum {
     top_left,

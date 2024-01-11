@@ -299,7 +299,6 @@ end_texture_mode :: proc(using s : ^Render_state($U,$A), target : Render_texture
 	set_view();
 	
 	//fmt.printf("current_render_target_width : %v, current_render_target_height : %v\n", current_render_target_width, current_render_target_height);
-
 }
 
 ////////////////////////

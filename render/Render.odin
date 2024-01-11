@@ -44,7 +44,7 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 
 	///////////// STATE of init ////////////
 	render_has_been_init : bool,
-
+	
 	///////////// shader stuff ////////////
 	default_shader : Shader(U, A),
 	
@@ -55,6 +55,8 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 	inv_view_mat	: matrix[4,4]f32,
 
 	shader_folder_location : string,
+
+	texture_locations : map[U]Texture_slot,
 
 	///////////// render target size ////////////
 	current_render_target_width : f32,
@@ -164,7 +166,7 @@ terminate_glfw :: proc () {
 required_uniforms 	:: 	map[string]Uniform_info {};
 required_attributes :: 	map[string]Attribute_info {};
 
-init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, attribute_spec : [A]Attribute_info, shader_defines : map[string]string, shader_folder : string, 
+init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, attribute_spec : [A]Attribute_info, texture_locations : map[U]Texture_slot, shader_defines : map[string]string, shader_folder : string, 
 						required_gl_verion : GL_version = nil, window_title : string = "furbs window", #any_int window_width : i32 = 600, #any_int window_height : i32 = 600, loc := #caller_location) where intrinsics.type_is_enum(U) && intrinsics.type_is_enum(A) {
 	
 	assert(s.render_has_been_init == false, "renderer already initiazied");
@@ -172,6 +174,11 @@ init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, at
 	init_glfw();
 
 	/////////////////////
+	
+	//Copy the map
+	s.texture_locations = make(map[U]Texture_slot);
+	for k,v in texture_locations {s.texture_locations[k]=v};
+
 	required_uniforms :=  required_uniforms;
 	required_attributes :=  required_attributes;
 	defer delete(required_uniforms);
@@ -289,6 +296,8 @@ destroy_render :: proc(using s : ^Render_state($U,$A), loc := #caller_location) 
 	unload_shader(s, &s.default_shader);
 	delete(shader_folder_location);
 	
+	delete_map(s.texture_locations);
+
 	unbind_window(s);
 
 	/////////// Texture/font stuff ////////////	

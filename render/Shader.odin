@@ -225,7 +225,6 @@ get_default_shader :: proc(using s : ^Render_state($U,$A), loc := #caller_locati
 
 //Shader must be bound before this is called.
 place_uniform :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), uniform_loc : U, value : $T, loc := #caller_location) {
-	
 	//TODO check that shader is the currently bound shader.
 	//TODO this should be bound to uniform block and there should be at least 12 uniforms blocks advaliable, so we can assert by using "GL_MAX_VERTEX_UNIFORM_BLOCKS"
 	//Then we bind the UBO to the shader when we draw, this is faster because many shaders share many uniforms.
@@ -238,9 +237,10 @@ place_uniform :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), uni
 
 	fmt.assertf(uniform_info.uniform_type != .invalid, "Shader uniform type is %v, but the location is : %v for shader : %s", uniform_info.uniform_type, uniform_info.location, shader.name, loc = loc);
 
-	if  is_sampler(shader.uniform_locations[uniform_loc].uniform_type) { //uniform_loc in texture_locations 
+	if  is_sampler(shader.uniform_locations[uniform_loc].uniform_type) { //uniform_loc in texture_locations
+		fmt.assertf(uniform_loc in s.texture_locations, "%v is a sampler, but does not have a texture slot", uniform_loc, loc = loc);
 		//it is a texture
-		set_uniform_sampler(s, uniform_info, texture_locations[uniform_loc], value, loc = loc);
+		set_uniform_sampler(s, uniform_info, s.texture_locations[uniform_loc], value, loc = loc);
 	} else if uniform_info.array_size != 1 {
 		set_uniform_array(s, uniform_info, value, loc = loc);
 	} else {
@@ -248,6 +248,7 @@ place_uniform :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), uni
 	}
 }
 
+@(private)
 bind_shader :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), loc := #caller_location) {
 	
 	when ODIN_DEBUG {
@@ -257,14 +258,15 @@ bind_shader :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), loc :
 
 	enable_shader(s, shader.id, loc = loc);
 
-	place_uniform(s, shader, .prj_mat, prj_mat);
-	place_uniform(s, shader, .inv_prj_mat, inv_prj_mat);
+	place_uniform(s, shader, U.prj_mat, prj_mat);
+	place_uniform(s, shader, U.inv_prj_mat, inv_prj_mat);
 
-	place_uniform(s, shader, .view_mat, view_mat);
-	place_uniform(s, shader, .inv_view_mat, inv_view_mat);
+	place_uniform(s, shader, U.view_mat, view_mat);
+	place_uniform(s, shader, U.inv_view_mat, inv_view_mat);
 	
 }
 
+@(private)
 unbind_shader :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), loc := #caller_location){
 	assert(bound_camera != {}, "A camera must first be unbound after the shader is unbound", loc = loc);
 	disable_shader(s, shader.id);

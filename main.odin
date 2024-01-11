@@ -109,15 +109,19 @@ attribute_types : [Attribute_location]render.Attribute_info = {
 						attribute_type = .vec3},		
 }
 
+texture_locations : map[Uniform_location]render.Texture_slot = {
+	.diffuse_texture = 0,
+}
+
 //When opening 2 windows you must manually bind and unbind the windows, this is not required when using a single window as it is just always bound.
 open_two_windows :: proc() {
-	
+
 	state1 : render.Render_state(Uniform_location, Attribute_location);
 	state2 : render.Render_state(Uniform_location, Attribute_location);
 
-	render.init_render(&state1, uniforms_types, attribute_types, nil, "examples/res/shaders");
+	render.init_render(&state1, uniforms_types, attribute_types, texture_locations, nil, "examples/res/shaders");
 	render.unbind_window(&state1);
-	render.init_render(&state2, uniforms_types, attribute_types, nil, "examples/res/shaders");
+	render.init_render(&state2, uniforms_types, attribute_types, texture_locations, nil, "examples/res/shaders");
 	render.unbind_window(&state2);
 	fmt.printf("render inited %v\n", state1.opengl_version);
 	fmt.printf("render inited %v\n", state2.opengl_version);
@@ -160,7 +164,7 @@ main :: proc () {
 
 	state1 : render.Render_state(Uniform_location, Attribute_location);
 	
-	render.init_render(&state1, uniforms_types, attribute_types, nil, "examples/res/shaders");
+	render.init_render(&state1, uniforms_types, attribute_types, texture_locations, nil, "examples/res/shaders");
 	fmt.printf("render inited %v\n", state1.opengl_version);
 
 	my_quad := render.generate_quad(&state1, size = {1,1,1}, position = {0,0,0}, use_index_buffer=false);
@@ -178,14 +182,22 @@ main :: proc () {
 		near 				= -1,
 	};
 	
+	shader := render.get_default_shader(&state1);
+	
+	opaque := render.make_pipeline(.....);
+
 	for !render.should_close(&state1) {
-		render.begin_frame(&state1);
+		
+		TODO also make it so you have a single render_state and multiple windows, this allows for sharing resources in multiple windows and is the best way to not have bugs.
+		TODO make it so the window is not bound by default, and it gets bound in begin_pipeline
+		render.being_pipeline(opaque);
 
-		//shader := render.get_default_shader(&state1);
 		render.draw_mesh_single(&state1, render.get_default_shader(&state1), my_quad, linalg.MATRIX4F32_IDENTITY);
-
-		render.end_frame(&state1);
+		
+		render.end_pipeline(opaque);
 	}
+
+	destroy_pipeline(&opaque);
 
 	render.destroy_render(&state1);
 
