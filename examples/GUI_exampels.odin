@@ -8,7 +8,7 @@ import "core:bytes"
 import "core:math/rand"
 
 import "vendor:glfw"
-import ma "vendor:miniaudio"
+//import ma "vendor:miniaudio"
 
 import "../render"
 import "../gui"
@@ -176,11 +176,11 @@ loading_a_theme :: proc (t : ^testing.T) {
 }
 
 /*
-main :: proc () {
-*/
-//It is also possaible to load en entire theme from a file.
 @test
 menu_example :: proc (t : ^testing.T) {
+*/
+//It is also possaible to load en entire theme from a file.
+main :: proc () {
 	using render;
 
 	window := init_window(600, 600, "Hello world", "res/shaders");
@@ -318,6 +318,7 @@ panels_and_panels :: proc (t : ^testing.T) {
 	fmt.printf("Shutdown succesfull");
 }
 
+/* 
 /*
 @test
 Gui_crazy_showoff :: proc (t : ^testing.T) {
@@ -742,3 +743,4 @@ main :: proc () {
 
 	fmt.printf("Shutdown succesfull");
 }
+*/
