@@ -252,7 +252,7 @@ place_uniform :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), uni
 bind_shader :: proc(using s : ^Render_state($U,$A), shader : Shader(U, A), loc := #caller_location) {
 	
 	when ODIN_DEBUG {
-		assert(bound_camera != {}, "A camera must be bound when binding a shader", loc = loc);
+		//TODO remove? do we still bind a camera? assert(bound_camera != {}, "A camera must be bound when binding a shader", loc = loc);
 		assert(shader.id != 0, "Shader is not initizalized", loc = loc);
 	}
 

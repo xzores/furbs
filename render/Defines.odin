@@ -322,6 +322,24 @@ Render_target :: union {
 	Window,
 }
 
+Primitive :: enum {
+	points 			= GL_POINTS,
+	line_strip 		= GL_LINE_STRIP,
+	lines 			= GL_LINES,
+	triangle_strip 	= GL_TRIANGLE_STRIP,
+	triangles 		= GL_TRIANGLES,
+}
+
+fill_mode : Fill_method = .fill
+
+Fill_method :: enum {
+	.fill = GL_FILL,
+	.outline = GL_LINE,
+	.point = GL_POINT,
+}
+
+Blend_mode
+
 //////////////////
 Anchor_point :: enum {
     top_left,

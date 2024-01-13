@@ -181,15 +181,7 @@ init_window :: proc(using s : ^Render_state($U,$A), width, height : i32, title :
 	assert(get_max_supported_active_textures() >= auto_cast len(texture_locations));
 	init_shaders();
 	glfw.MakeContextCurrent(nil);
-	
-	bind_window(window);
-	
-	if culling {
-		gl.Enable(gl.CULL_FACE);
-		//gl.CullFace(gl.BACK);
-		//gl.FrontFace(GL_CCW);
-	}
-	
+
 	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
 	fs.Init(&font_context, 1, 1, .BOTTOMLEFT); //TODO try TOPLEFT and BOTTOMLEFT
 
@@ -199,8 +191,6 @@ init_window :: proc(using s : ^Render_state($U,$A), width, height : i32, title :
 }
 
 destroy_window :: proc(using s : ^Render_state($U,$A), window : ^Window, loc :=  #caller_location) {
-	
-	unbind_window(window^);
 
 	if v, ok := bound_window.?; ok {
 		assert(v != window^, "The window must be unbound before it can be delelted", loc = loc);

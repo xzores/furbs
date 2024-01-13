@@ -113,6 +113,7 @@ texture_locations : map[Uniform_location]render.Texture_slot = {
 	.diffuse_texture = 0,
 }
 
+/*
 //When opening 2 windows you must manually bind and unbind the windows, this is not required when using a single window as it is just always bound.
 open_two_windows :: proc() {
 
@@ -157,6 +158,7 @@ open_two_windows :: proc() {
 
 	fmt.printf("successfull shutdown\n");
 }
+*/
 
 main :: proc () {
 
@@ -170,7 +172,7 @@ main :: proc () {
 	my_quad := render.generate_quad(&state1, size = {1,1,1}, position = {0,0,0}, use_index_buffer=false);
 	
 	//my_shader : render.Shader(Uniform_location, Attribute_location);
-	//render.load_shader(&state1, &my_shader, "gui", "gui");
+	//render.load_shader(&state1, &my_shader, "gui", "gui");q
 	
 	my_camera : render.Camera2D = {
 		position 			= {0,0},
@@ -183,18 +185,19 @@ main :: proc () {
 	};
 	
 	shader := render.get_default_shader(&state1);
-	
-	opaque := render.make_pipeline(.....);
+	opaque := render.make_pipeline(&state1, window, shader);
 
 	for !render.should_close(&state1) {
+		render.begin_frame(&state1);
 		
-		TODO also make it so you have a single render_state and multiple windows, this allows for sharing resources in multiple windows and is the best way to not have bugs.
-		TODO make it so the window is not bound by default, and it gets bound in begin_pipeline
-		render.being_pipeline(opaque);
+		//TODO also make it so you have a single render_state and multiple windows, this allows for sharing resources in multiple windows and is the best way to not have bugs.
+		//TODO make it so the window is not bound by default, and it gets bound in begin_pipeline
+		render.being_pipeline(opaque, my_camera);
 
 		render.draw_mesh_single(&state1, render.get_default_shader(&state1), my_quad, linalg.MATRIX4F32_IDENTITY);
 		
 		render.end_pipeline(opaque);
+		render.end_frame(&state1);
 	}
 
 	destroy_pipeline(&opaque);
@@ -203,4 +206,3 @@ main :: proc () {
 
 	fmt.printf("successfull shutdown\n");
 }
-
