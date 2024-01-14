@@ -859,12 +859,14 @@ compile_shader :: proc(destination : ^map[string]$T, name, source : string, $sha
 
 	source_vertex_shader :: proc(shader_id : Shader_vertex_id, shader_source : string, loc := #caller_location) {
 		shader_sources : [1]cstring = { fmt.ctprintf("%s",shader_source) };
-		gl.ShaderSource(auto_cast shader_id, 1, auto_cast &shader_sources, nil);
+		shader_lengths : [1]i32 = { auto_cast len(shader_source) };
+		gl.ShaderSource(auto_cast shader_id, 1, auto_cast &shader_sources, raw_data(shader_lengths[:]));
 	}
 
 	source_fragment_shader :: proc(shader_id : Shader_fragment_id, shader_source : string, loc := #caller_location) {
 		shader_sources : [1]cstring = { fmt.ctprintf("%s",shader_source) };
-		gl.ShaderSource(auto_cast shader_id, 1, auto_cast &shader_sources, nil);
+		shader_lengths : [1]i32 = { auto_cast len(shader_source) };
+		gl.ShaderSource(auto_cast shader_id, 1, auto_cast &shader_sources, raw_data(shader_lengths[:]));
 	}
 
 	_compile_shader :: proc (shader_id : $TT, shader_name : string, loc := #caller_location) {

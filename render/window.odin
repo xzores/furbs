@@ -106,12 +106,22 @@ init_window :: proc(width, height : i32, title : string, shader_folder : string,
 	assert(render_has_been_init == false, "init_render has already been called!", loc = loc);
 	render_has_been_init = true;
 
-	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 
 	if(!cast(bool)glfw.Init()){
 		panic("Failed to init glfw");
 	}
 	
+	when ODIN_OS == .Windows {
+
+	}
+	else when ODIN_OS == .Darwin {
+		glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
+		glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE);
+	}
+	else {
+		panic("TODO");
+	}
+
 	shader_folder_location = strings.clone(shader_folder);
 	
 	glfw.SetErrorCallback(error_callback);

@@ -57,18 +57,18 @@
 		"front_margin": 0.03000000
 	},
 	"styles": {
-		"Label": [
+		"Checkbox": [
 			{
 				"bg_color": [
-					1.00000000,
-					1.00000000,
-					1.00000000,
+					0.69999999,
+					0.69999999,
+					0.69999999,
 					1.00000000
 				],
-				"texture": "res/GUI/label.png",
-				"line_width": 0.00000000,
+				"texture": "res/GUI/Checkbox.png",
+				"line_width": 0.02000000,
 				"line_margin": 0.00000000,
-				"line_texture": "",
+				"line_texture": "res/GUI/line.png",
 				"front_color": [
 					1.00000000,
 					1.00000000,
@@ -84,10 +84,10 @@
 					1.00000000,
 					1.00000000
 				],
-				"texture": "res/GUI/label.png",
-				"line_width": 0.00000000,
-				"line_margin": 0.00000000,
-				"line_texture": "",
+				"texture": "res/GUI/Checkbox.png",
+				"line_width": 0.02000000,
+				"line_margin": 0.01000000,
+				"line_texture": "res/GUI/line.png",
 				"front_color": [
 					1.00000000,
 					1.00000000,
@@ -103,10 +103,10 @@
 					1.00000000,
 					1.00000000
 				],
-				"texture": "res/GUI/label.png",
-				"line_width": 0.00000000,
+				"texture": "res/GUI/Checkbox.png",
+				"line_width": 0.02000000,
 				"line_margin": 0.00000000,
-				"line_texture": "",
+				"line_texture": "res/GUI/line.png",
 				"front_color": [
 					1.00000000,
 					1.00000000,
@@ -175,18 +175,18 @@
 				"front_margin": 0.03000000
 			}
 		],
-		"Checkbox": [
+		"Label": [
 			{
 				"bg_color": [
-					0.69999999,
-					0.69999999,
-					0.69999999,
+					1.00000000,
+					1.00000000,
+					1.00000000,
 					1.00000000
 				],
-				"texture": "res/GUI/Checkbox.png",
-				"line_width": 0.02000000,
+				"texture": "res/GUI/label.png",
+				"line_width": 0.00000000,
 				"line_margin": 0.00000000,
-				"line_texture": "res/GUI/line.png",
+				"line_texture": "",
 				"front_color": [
 					1.00000000,
 					1.00000000,
@@ -202,10 +202,10 @@
 					1.00000000,
 					1.00000000
 				],
-				"texture": "res/GUI/Checkbox.png",
-				"line_width": 0.02000000,
-				"line_margin": 0.01000000,
-				"line_texture": "res/GUI/line.png",
+				"texture": "res/GUI/label.png",
+				"line_width": 0.00000000,
+				"line_margin": 0.00000000,
+				"line_texture": "",
 				"front_color": [
 					1.00000000,
 					1.00000000,
@@ -221,10 +221,10 @@
 					1.00000000,
 					1.00000000
 				],
-				"texture": "res/GUI/Checkbox.png",
-				"line_width": 0.02000000,
+				"texture": "res/GUI/label.png",
+				"line_width": 0.00000000,
 				"line_margin": 0.00000000,
-				"line_texture": "res/GUI/line.png",
+				"line_texture": "",
 				"front_color": [
 					1.00000000,
 					1.00000000,
