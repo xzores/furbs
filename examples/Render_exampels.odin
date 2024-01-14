@@ -14,10 +14,10 @@ import "vendor:glfw"
 import "../render"
 
 /*
-main :: proc() {
-*/
 @test
 Draw_quad_2D :: proc(t : ^testing.T) {
+*/
+main :: proc() {
 	using render;
 
 	window := init_window(600, 400, "Hello world", "res/shaders");

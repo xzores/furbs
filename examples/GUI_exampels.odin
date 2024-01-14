@@ -176,11 +176,11 @@ loading_a_theme :: proc (t : ^testing.T) {
 }
 
 /*
-@test
-menu_example :: proc (t : ^testing.T) {
+main :: proc () {
 */
 //It is also possaible to load en entire theme from a file.
-main :: proc () {
+@test
+menu_example :: proc (t : ^testing.T) {
 	using render;
 
 	window := init_window(600, 600, "Hello world", "res/shaders");
