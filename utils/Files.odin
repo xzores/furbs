@@ -6,7 +6,6 @@ import "core:runtime"
 import "core:encoding/json"
 import "core:strings"
 import "core:os"
-import "core:os/os2"
 
 load_all_as_txt :: proc(directory_path : string, extension : string, include_extension : bool = false, alloc := context.allocator) -> (res : map[string]string) {
 

@@ -8,13 +8,15 @@ import "core:bytes"
 import "core:math/rand"
 
 import "vendor:glfw"
-import ma "vendor:miniaudio"
+//import ma "vendor:miniaudio"
 
 import "../render"
 import "../gui"
 
-//main :: proc () {
 
+/*
+main :: proc () {
+*/
 @test
 minimum_implementation_button :: proc(t : ^testing.T) {
 	using render;
@@ -120,7 +122,11 @@ loading_style_from_file :: proc (t : ^testing.T) {
 	fmt.printf("Shutdown succesfull");
 }
 
+/*
+main :: proc () {
+*/
 //It is also possaible to load en entire theme from a file.
+@test
 loading_a_theme :: proc (t : ^testing.T) {
 	using render;
 
@@ -169,10 +175,10 @@ loading_a_theme :: proc (t : ^testing.T) {
 	fmt.printf("Shutdown succesfull");
 }
 
-//It is also possaible to load en entire theme from a file.
 /*
 main :: proc () {
 */
+//It is also possaible to load en entire theme from a file.
 @test
 menu_example :: proc (t : ^testing.T) {
 	using render;
@@ -312,10 +318,14 @@ panels_and_panels :: proc (t : ^testing.T) {
 	fmt.printf("Shutdown succesfull");
 }
 
-//This does not use the simplified API, instead it uses an API that lets you have a little more controll.
-//One would easyliy be able to manage these Element_containers in their own GUI manager.
+/* 
+/*
 @test
 Gui_crazy_showoff :: proc (t : ^testing.T) {
+*/
+//This does not use the simplified API, instead it uses an API that lets you have a little more controll.
+//One would easyliy be able to manage these Element_containers in their own GUI manager.
+main :: proc () {
 	using render;
 
 	///////// SOUND /////////
@@ -733,3 +743,4 @@ Gui_crazy_showoff :: proc (t : ^testing.T) {
 
 	fmt.printf("Shutdown succesfull");
 }
+*/

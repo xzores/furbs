@@ -106,12 +106,15 @@ init_window :: proc(width, height : i32, title : string, shader_folder : string,
 	assert(render_has_been_init == false, "init_render has already been called!", loc = loc);
 	render_has_been_init = true;
 
-	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
-
 	if(!cast(bool)glfw.Init()){
 		panic("Failed to init glfw");
 	}
 	
+	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
+	glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE);
+	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
+	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 1);
+
 	shader_folder_location = strings.clone(shader_folder);
 	
 	glfw.SetErrorCallback(error_callback);
@@ -182,6 +185,8 @@ destroy_window :: proc(window : ^Window, loc :=  #caller_location) {
 	window_context = {};
 	delete(window.title);
 	glfw.Terminate();
+
+	render_has_been_init = false;
 }
 
 bind_window :: proc(window : Window, loc := #caller_location) {
