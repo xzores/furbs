@@ -63,11 +63,11 @@ init_label :: proc (text : string) -> Label{
 	return {strings.clone(text)};
 }
 
-init_slide_input :: proc(value : ^f32, upper_bound, lower_bound : f32) -> Slide_input {
+init_slide_input :: proc(value : ^f32, lower_bound, upper_bound : f32) -> Slide_input {
 
 	return {value, 
-		    upper_bound, 
 			lower_bound,
+			upper_bound,
 			false,
 			strings.builder_make(),
 			}
