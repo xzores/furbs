@@ -319,26 +319,34 @@ Cull_method :: enum {
 
 Render_target :: union {
 	Render_texture,
-	Window,
+	^Window,
 }
 
+Polygon_mode :: enum {
+	points 			= gl.POINTS,
+	lines 			= gl.LINES,
+	triangles 		= gl.TRIANGLES,
+}
 Primitive :: enum {
-	points 			= GL_POINTS,
-	line_strip 		= GL_LINE_STRIP,
-	lines 			= GL_LINES,
-	triangle_strip 	= GL_TRIANGLE_STRIP,
-	triangles 		= GL_TRIANGLES,
+	points 			= gl.POINTS,
+	line_strip 		= gl.LINE_STRIP,
+	lines 			= gl.LINES,
+	triangle_strip 	= gl.TRIANGLE_STRIP,
+	triangles 		= gl.TRIANGLES,
 }
 
 fill_mode : Fill_method = .fill
 
 Fill_method :: enum {
-	.fill = GL_FILL,
-	.outline = GL_LINE,
-	.point = GL_POINT,
+	fill 		= gl.FILL,
+	outline 	= gl.LINE,
+	point 		= gl.POINT,
 }
 
-Blend_mode
+Blend_mode :: enum {
+	no_blend,
+	one_minus_src_alpha = gl.ONE_MINUS_SRC_ALPHA,
+}
 
 //////////////////
 Anchor_point :: enum {

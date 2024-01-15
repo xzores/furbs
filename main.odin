@@ -192,15 +192,15 @@ main :: proc () {
 		
 		//TODO also make it so you have a single render_state and multiple windows, this allows for sharing resources in multiple windows and is the best way to not have bugs.
 		//TODO make it so the window is not bound by default, and it gets bound in begin_pipeline
-		render.being_pipeline(opaque, my_camera);
+		render.being_pipeline(&state1, opaque, my_camera);
 
 		render.draw_mesh_single(&state1, render.get_default_shader(&state1), my_quad, linalg.MATRIX4F32_IDENTITY);
 		
-		render.end_pipeline(opaque);
+		render.end_pipeline(&state1, opaque);
 		render.end_frame(&state1);
 	}
 
-	destroy_pipeline(&opaque);
+	render.destroy_pipeline(&state1, &opaque);
 
 	render.destroy_render(&state1);
 

@@ -258,8 +258,8 @@ enable_frame_buffer :: proc(using s : ^Render_state($U,$A), id : Frame_buffer_id
 	assert(bound_fbo == auto_cast id, "FBO did not bind");
 }
 
-disable_frame_buffer :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_buffer_id, loc := #caller_location) {
-	fmt.assertf(fbo_id == bound_frame_buffer_id, "enable_frame_buffer and disable_frame_buffer was not called on the same frame_buffer, bound_frame_buffer_id : %v, fbo_id : %v", bound_frame_buffer_id, fbo_id, loc = loc);
+disable_frame_buffer :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
+	//fmt.assertf(fbo_id == bound_frame_buffer_id, "enable_frame_buffer and disable_frame_buffer was not called on the same frame_buffer, bound_frame_buffer_id : %v, fbo_id : %v", bound_frame_buffer_id, fbo_id, loc = loc);
 	gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
 	bound_frame_buffer_id = 0;
 }
@@ -269,8 +269,8 @@ enable_frame_buffer_read :: proc(using s : ^Render_state($U,$A), id : Frame_buff
 	bound_read_frame_buffer_id = id;
 }
 
-disable_frame_buffer_read :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_buffer_id, loc := #caller_location) {
-	assert(fbo_id == bound_read_frame_buffer_id, "enable_frame_buffer_read and disable_frame_buffer_read was not called on the same frame_buffer", loc = loc);
+disable_frame_buffer_read :: proc(using s : ^Render_state($U,$A),loc := #caller_location) {
+	//assert(fbo_id == bound_read_frame_buffer_id, "enable_frame_buffer_read and disable_frame_buffer_read was not called on the same frame_buffer", loc = loc);
 	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, 0);
 	bound_read_frame_buffer_id = 0;
 }
@@ -280,8 +280,8 @@ enable_frame_buffer_draw :: proc(using s : ^Render_state($U,$A), id : Frame_buff
 	bound_write_frame_buffer_id = id;
 }
 
-disable_frame_buffer_draw :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_buffer_id, loc := #caller_location) {
-	assert(fbo_id == bound_write_frame_buffer_id, "enable_frame_buffer_write and disable_frame_buffer_write was not called on the same frame_buffer", loc = loc);
+disable_frame_buffer_draw :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
+	//assert(fbo_id == bound_write_frame_buffer_id, "enable_frame_buffer_write and disable_frame_buffer_write was not called on the same frame_buffer", loc = loc);
 	gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0);
 	bound_write_frame_buffer_id = 0;
 }
@@ -445,20 +445,67 @@ unbind_texture_id :: proc() {
 
 /////////////////////////////////////////////////////////
 
-enable_depth_test :: proc(using s : ^Render_state($U,$A)) {
+set_cull_method :: proc(using s : ^Render_state($U,$A), culling : Cull_method) {
+	if culling == .no_cull {
+		gl.Disable(gl.CULL_FACE);
+	}
+	else {
+		gl.FrontFace(gl.CCW);
+		gl.Enable(gl.CULL_FACE);
+		
+		if culling == .front_cull {
+			gl.CullFace(gl.FRONT);
+		} else {
+			gl.CullFace(gl.BACK);
+		}
+	}
+} 
+
+set_depth_test :: proc(using s : ^Render_state($U,$A), do_test : bool) {
 	//TODO check it is disabled
-	gl.Enable(gl.DEPTH_TEST);
+	if do_test {
+		gl.Enable(gl.DEPTH_TEST);
+	} else {
+		gl.Disable(gl.DEPTH_TEST);
+	}
 }
 
-disable_depth_test :: proc(using s : ^Render_state($U,$A)) {
-	//TODO check it is enabled
-	gl.Disable(gl.DEPTH_TEST);
+set_depth_write :: proc(using s : ^Render_state($U,$A), do_write : bool) {
+	if do_write {
+		gl.DepthMask(true);
+	} else {
+		gl.DepthMask(false);
+	}
+}
+
+set_blend_mode :: proc(using s : ^Render_state($U,$A), mode : Blend_mode) {
+	if mode == .no_blend {
+		gl.Disable(gl.BLEND);
+	}
+	else {
+		gl.Enable(gl.BLEND);
+		if mode == .one_minus_src_alpha {
+			gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		}  
+	}
+}
+
+set_polygon_mode :: proc(using s : ^Render_state($U,$A), mode : Polygon_mode) {
+	panic("todo")	
+}
+
+set_fill_mode :: proc(using s : ^Render_state($U,$A), mode : Fill_method) {
+	panic("todo")	
 }
 
 clear_color_depth :: proc(using s : ^Render_state($U,$A), clear_color : [4]f32) {
 	gl.ClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
+
+/*
+disable_depth_test replaced by enable_depth_test
+*/
 
 //////////////////////////////
 
@@ -880,11 +927,13 @@ compile_shader :: proc(using s : ^Render_state($U,$A), destination : ^map[string
 
 	source_vertex_shader :: proc(shader_id : Shader_vertex_id, shader_source : string, loc := #caller_location) {
 		shader_sources : [1]cstring = { fmt.ctprintf("%s",shader_source) };
+		//shader_lengths : [1]i32 = { len(shader_source) }; //TODO should we pass in shadersource
 		gl.ShaderSource(auto_cast shader_id, 1, auto_cast &shader_sources, nil);
 	}
 
 	source_fragment_shader :: proc(shader_id : Shader_fragment_id, shader_source : string, loc := #caller_location) {
 		shader_sources : [1]cstring = { fmt.ctprintf("%s",shader_source) };
+		//shader_lengths : [1]i32 = { len(shader_source) }; //TODO should we pass in shadersource
 		gl.ShaderSource(auto_cast shader_id, 1, auto_cast &shader_sources, nil);
 	}
 
@@ -955,16 +1004,6 @@ link_program :: proc(using s : ^Render_state($U,$A), shader_program : Shader_pro
 set_viewport :: proc(using s : ^Render_state($U,$A), x : i32, y : i32, width : i32, height : i32) {
 	assert(gl.Viewport != nil, "gl.Viewport not loaded")
     gl.Viewport(x, y, width, height);
-}
-
-enable_transparency :: proc(using s : ^Render_state($U,$A), use : bool) {
-	if use {
-		gl.Enable(gl.BLEND);
-		gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-	}
-	else {
-		gl.Disable(gl.BLEND);
-	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////

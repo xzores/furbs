@@ -270,6 +270,7 @@ blit_render_texture_to_screen :: proc(using s : ^Render_state($U,$A), render_tex
 	disable_frame_buffer_read(render_texture.id);
 }
 
+/* 
 begin_texture_mode :: proc(using s : ^Render_state($U,$A), target : Render_texture, loc := #caller_location){
 	
 	fmt.assertf(bound_frame_buffer_id == 0, "Another frame buffer (render texture) is already bound, its id is : %v", bound_frame_buffer_id, loc = loc);
@@ -300,6 +301,7 @@ end_texture_mode :: proc(using s : ^Render_state($U,$A), target : Render_texture
 	
 	//fmt.printf("current_render_target_width : %v, current_render_target_height : %v\n", current_render_target_width, current_render_target_height);
 }
+*/
 
 ////////////////////////
 
