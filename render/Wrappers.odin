@@ -658,7 +658,7 @@ get_shader_attributes :: proc(program_id : Shader_program_id, alloc := context.a
 }
 
 get_shader_uniforms :: proc(program_id : Shader_program_id, alloc := context.allocator, loc := #caller_location) -> (res : map[string]Uniform_info) {
-
+	
 	context.allocator = alloc;
 
 	count : i32;

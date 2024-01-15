@@ -11,4 +11,4 @@ void main()
 {
 	frag_texcoord = texcoord; 
 	gl_Position = mvp * vec4(position, 1.0);
-};
+}
