@@ -123,9 +123,9 @@ upload_mesh_single :: proc (using s : ^Render_state($U,$A), mesh : ^Mesh(A), dyn
 				prim_type := get_attribute_primary_type(attrib.data_type);
 				size_of_prim_type := get_attribute_primary_byte_len(prim_type);
 				
-				identifiers.vbo_id[a] = load_vertex_buffer(nil, mesh.vertex_count * dims * size_of_prim_type, dyn); //TODO upload data here instead of below. nil = attrib.data?
-				setup_vertex_attribute(identifiers.vao_id, identifiers.vbo_id[a], dims, prim_type, a, loc = loc);
-				upload_vertex_sub_buffer_data(identifiers.vbo_id[a], 0, mesh.vertex_count * dims * size_of_prim_type, attrib.data);
+				identifiers.vbo_id[a] = load_vertex_buffer(s, nil, mesh.vertex_count * dims * size_of_prim_type, dyn); //TODO upload data here instead of below. nil = attrib.data?
+				setup_vertex_attribute(s, identifiers.vao_id, identifiers.vbo_id[a], dims, prim_type, a, loc = loc);
+				upload_vertex_sub_buffer_data(s, identifiers.vbo_id[a], 0, mesh.vertex_count * dims * size_of_prim_type, attrib.data);
 			}
 		}
 
@@ -202,7 +202,6 @@ draw_mesh_single :: proc (using s : ^Render_state($U,$A), shader : Shader(U, A),
 	
 	when ODIN_DEBUG {
 		assert(shader.id == s.bound_shader_program, "The shader must be bound before drawing with it", loc = loc);
-		assert(bound_camera != nil, "A camera must be bound before a mesh can be drawn", loc = loc);
 		assert(mesh.implementation != nil, "The mesh is not uploaded", loc = loc);
 	}
 

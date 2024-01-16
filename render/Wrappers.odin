@@ -13,7 +13,7 @@ import "../utils"
 
 /////////////////////
 
-load_vertex_buffer :: proc(using s : ^Render_state($U,$A), data : []$T, size : int, dyn : bool) -> Vbo_ID {
+load_vertex_buffer :: proc(using s : ^Debug_state, data : []$T, size : int, dyn : bool) -> Vbo_ID {
 	using gl;
 
 	assert(data == nil || len(data) * size_of(u32), "the size of the data must match size, or be nil")
@@ -37,20 +37,20 @@ load_vertex_buffer :: proc(using s : ^Render_state($U,$A), data : []$T, size : i
     return id;
 }
 
-upload_vertex_sub_buffer_data :: proc(using s : ^Render_state($U,$A), vbo : Vbo_ID, offset : int, size : int, data : rawptr) {
+upload_vertex_sub_buffer_data :: proc(using s : ^Debug_state, vbo : Vbo_ID, offset : int, size : int, data : rawptr) {
 	enable_vertex_buffer(vbo);
 	gl.BufferSubData(gl.ARRAY_BUFFER, offset, size, data);
 	disable_vertex_buffer(vbo);
 }
 
-unload_vertex_buffer :: proc(using s : ^Render_state($U,$A), vbo_id : Vbo_ID, loc := #caller_location) { 	
+unload_vertex_buffer :: proc(using s : ^Debug_state, vbo_id : Vbo_ID, loc := #caller_location) { 	
 	vbo_id := vbo_id;
 	assert(vbo_id in vertex_buffers_alive, "Vbo is not created", loc = loc);
 	vertex_buffers_alive[vbo_id] = false;
 	gl.DeleteBuffers(1, auto_cast &vbo_id);
 }
 
-enable_vertex_buffer :: proc(using s : ^Render_state($U,$A), id : Vbo_ID, loc := #caller_location) {
+enable_vertex_buffer :: proc(using s : ^Debug_state, id : Vbo_ID, loc := #caller_location) {
 	assert(id in vertex_buffers_alive, "Vbo is not created", loc = loc)
 	assert(vertex_buffers_alive[id] == true, "Vbo is deleted", loc = loc)
 	assert(vertex_buffer_targets[.array_buffer] == 0, "Another vbo is already bound", loc = loc);
@@ -59,7 +59,7 @@ enable_vertex_buffer :: proc(using s : ^Render_state($U,$A), id : Vbo_ID, loc :=
 	gl.BindBuffer(gl.ARRAY_BUFFER, auto_cast id);
 }
 
-disable_vertex_buffer :: proc(using s : ^Render_state($U,$A), id : Vbo_ID, loc := #caller_location) {
+disable_vertex_buffer :: proc(using s : ^Debug_state, id : Vbo_ID, loc := #caller_location) {
 	assert(id in vertex_buffers_alive, "Vbo is not created")
 	assert(vertex_buffers_alive[id] == true, "Vbo is deleted")
 	assert(vertex_buffer_targets[.array_buffer] == id, "The vbo that is trying to be disabled is not enabled", loc = loc);
@@ -71,7 +71,7 @@ disable_vertex_buffer :: proc(using s : ^Render_state($U,$A), id : Vbo_ID, loc :
 /////////////////////
 
 //VBO element
-load_vertex_array :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> Vao_ID {
+load_vertex_array :: proc(using s : ^Debug_state, loc := #caller_location) -> Vao_ID {
 	using gl;
 
     vao_id : Vao_ID = 0;
@@ -84,7 +84,7 @@ load_vertex_array :: proc(using s : ^Render_state($U,$A), loc := #caller_locatio
     return vao_id;
 }
 
-unload_vertex_array :: proc(using s : ^Render_state($U,$A), vao_id : Vao_ID, loc := #caller_location) {
+unload_vertex_array :: proc(using s : ^Debug_state, vao_id : Vao_ID, loc := #caller_location) {
 
 	vao_id := vao_id;
 
@@ -94,22 +94,25 @@ unload_vertex_array :: proc(using s : ^Render_state($U,$A), vao_id : Vao_ID, loc
     gl.DeleteVertexArrays(1, auto_cast &vao_id);
 }
 
-enable_vertex_array :: proc(using s : ^Render_state($U,$A), id : Vao_ID, loc := #caller_location) {
+enable_vertex_array :: proc(using s : ^Debug_state, id : Vao_ID, loc := #caller_location) {
 	when ODIN_DEBUG {
 		assert(id in array_buffers_alive, "Vao is not created", loc = loc);
 		assert(array_buffers_alive[id].is_alive == true, "Vao is deleted", loc = loc);
 		assert(bound_array_buffer == 0, "Another vao is already bound", loc = loc);
+		bound_array_buffer = id;
 	}
 	
+	/*
+	TODO for speed
 	if bound_array_buffer == id {
 		return;
 	}
+	*/
 	
-	bound_array_buffer = id;
     gl.BindVertexArray(auto_cast id);
 }
 
-disable_vertex_array :: proc(using s : ^Render_state($U,$A), id : Vao_ID, loc := #caller_location) {
+disable_vertex_array :: proc(using s : ^Debug_state, id : Vao_ID, loc := #caller_location) {
 	when ODIN_DEBUG {
 		assert(id in array_buffers_alive, "Vao is not created", loc = loc);
 		assert(array_buffers_alive[id].is_alive == true, "Vao is deleted", loc = loc);
@@ -121,22 +124,26 @@ disable_vertex_array :: proc(using s : ^Render_state($U,$A), id : Vao_ID, loc :=
 }
 
 // Enable vertex attribute index
-setup_vertex_attribute :: proc(using s : ^Render_state($U,$A), vao : Vao_ID, vbo : Vbo_ID, components : i32, type : Attribute_primary_type, index : A, loc := #caller_location) {
+setup_vertex_attribute :: proc(using s : ^Debug_state, vao : Vao_ID, vbo : Vbo_ID, components : i32, type : Attribute_primary_type, index : A, loc := #caller_location) {
 	//TODO this should take all the information and do in one swop,
 	//use vertex_buffers_alive 
 	//enable_vertex_attribute :: proc(vao : Vao_ID, vbo : Vbo_ID, index : u32)
 	//array_buffers_alive.vertex_attrib_enabled[id] = true;
 
-	assert(vbo in vertex_buffers_alive, "Vbo is not created")
-	assert(vertex_buffers_alive[vbo] == true, "Vbo is deleted")
-	assert(vertex_buffer_targets[.array_buffer] == 0, "Another vbo is already bound", loc = loc);
+	when ODIN_DEBUG {
+		assert(vbo in vertex_buffers_alive, "Vbo is not created")
+		assert(vertex_buffers_alive[vbo] == true, "Vbo is deleted")
+		assert(vertex_buffer_targets[.array_buffer] == 0, "Another vbo is already bound", loc = loc);
+		
+		assert(vao in array_buffers_alive, "Vao is not created", loc = loc);
+		assert(array_buffers_alive[vao].is_alive == true, "Vao is deleted", loc = loc);
+		assert(bound_array_buffer == 0, "Another vao is already bound", loc = loc);
+
+		fmt.assertf(array_buffers_alive[vao].vertex_attrib_enabled[index] == false, "The attribute location is already bound, at : %v", index, loc = loc);
+		
+		(&(array_buffers_alive[vao])).vertex_attrib_enabled[index] = true;
+	}
 	
-	assert(vao in array_buffers_alive, "Vao is not created", loc = loc);
-	assert(array_buffers_alive[vao].is_alive == true, "Vao is deleted", loc = loc);
-	assert(bound_array_buffer == 0, "Another vao is already bound", loc = loc);
-
-	fmt.assertf(array_buffers_alive[vao].vertex_attrib_enabled[index] == false, "The attribute location is already bound, at : %v", index, loc = loc);
-
 	gl.BindVertexArray(auto_cast vao);
 
 	gl.EnableVertexAttribArray(auto_cast index);
@@ -146,8 +153,6 @@ setup_vertex_attribute :: proc(using s : ^Render_state($U,$A), vao : Vao_ID, vbo
 
     gl.BindBuffer(gl.ARRAY_BUFFER, 0);
 	gl.BindVertexArray(0);
-
-	(&(array_buffers_alive[vao])).vertex_attrib_enabled[index] = true;
 }
 
 /*
@@ -170,7 +175,7 @@ load_program :: proc(using s : ^Render_state($U,$A)) -> Shader_program_id {
 	return id;
 }
 
-load_vertex_shader :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> Shader_vertex_id {
+load_vertex_shader :: proc(using s : ^Debug_state, loc := #caller_location) -> Shader_vertex_id {
 	when ODIN_DEBUG {
 		id : Shader_vertex_id = auto_cast gl.CreateShader(gl.VERTEX_SHADER, loc);
 		shader_vertex_alive[id] = true;
@@ -181,7 +186,7 @@ load_vertex_shader :: proc(using s : ^Render_state($U,$A), loc := #caller_locati
 	return id;
 }
 
-load_fragment_shader :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> Shader_fragment_id {
+load_fragment_shader :: proc(using s : ^Debug_state, loc := #caller_location) -> Shader_fragment_id {
 	when ODIN_DEBUG {
 		id : Shader_fragment_id = auto_cast gl.CreateShader(gl.FRAGMENT_SHADER, loc);
 		shader_fragment_alive[id] = true;
@@ -192,21 +197,21 @@ load_fragment_shader :: proc(using s : ^Render_state($U,$A), loc := #caller_loca
 	return id;
 }
 
-unload_vertex_shader :: proc(using s : ^Render_state($U,$A), shader_id : Shader_vertex_id){
+unload_vertex_shader :: proc(using s : ^Debug_state, shader_id : Shader_vertex_id){
 	when ODIN_DEBUG {
 		shader_vertex_alive[shader_id] = false;
 	}
 	gl.DeleteShader(auto_cast shader_id);
 }
 
-unload_fragment_shader :: proc(using s : ^Render_state($U,$A), shader_id : Shader_fragment_id){
+unload_fragment_shader :: proc(using s : ^Debug_state, shader_id : Shader_fragment_id){
 	when ODIN_DEBUG {
 		shader_fragment_alive[shader_id] = false;
 	}
 	gl.DeleteShader(auto_cast shader_id);
 }
 
-unload_program :: proc(using s : ^Render_state($U,$A), shader_id : Shader_program_id) {
+unload_program :: proc(using s : ^Debug_state, shader_id : Shader_program_id) {
 	when ODIN_DEBUG {
 		shader_program_alive[shader_id] = false;
 	}
@@ -214,23 +219,27 @@ unload_program :: proc(using s : ^Render_state($U,$A), shader_id : Shader_progra
 }
 
 // Enable shader program
-enable_shader :: proc(using s : ^Render_state($U,$A), id : Shader_program_id, loc := #caller_location) {
-	assert(bound_shader_program == 0, "A shader program is already bound", loc);
-	bound_shader_program = id;
+enable_shader :: proc(using s : ^Debug_state, id : Shader_program_id, loc := #caller_location) {
+	when ODIN_DEBUG {
+		assert(s.bound_shader_program == 0, "A shader program is already bound", loc);
+		s.bound_shader_program = id;
+	}
 	gl.UseProgram(auto_cast id);
 }
 
 // Disable shader program
-disable_shader :: proc(using s : ^Render_state($U,$A), id : Shader_program_id, loc := #caller_location) {
-	assert(bound_shader_program != 0, "A shader program is not bound", loc);
-	assert(bound_shader_program == id, "A shader program is not bound", loc);
-	bound_shader_program = 0;
+disable_shader :: proc(using s : ^Debug_state, id : Shader_program_id, loc := #caller_location) {
+	when ODIN_DEBUG {
+		assert(s.bound_shader_program != 0, "A shader program is not bound", loc);
+		assert(s.bound_shader_program == id, "A shader program is not bound", loc);
+		s.bound_shader_program = 0;
+	}
 	gl.UseProgram(0);
 }
 
 /////////////////////
 
-load_frame_buffer :: proc(using s : ^Render_state($U,$A), width : i32, height : i32) -> Frame_buffer_id {
+load_frame_buffer :: proc(using s : ^Debug_state, width : i32, height : i32) -> Frame_buffer_id {
 
 	//TODO glTexImage2DMultisample, somehow...
 	
@@ -241,60 +250,48 @@ load_frame_buffer :: proc(using s : ^Render_state($U,$A), width : i32, height : 
     return fbo_id;
 }
 
-unload_frame_buffer :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_buffer_id) {
+unload_frame_buffer :: proc(using s : ^Debug_state, fbo_id : Frame_buffer_id) {
 	fbo_id := fbo_id;
 	frame_buffer_alive[fbo_id] = false;
     gl.DeleteFramebuffers(1, auto_cast &fbo_id);
 }
 
-enable_frame_buffer :: proc(using s : ^Render_state($U,$A), id : Frame_buffer_id, loc := #caller_location) {
-	assert(bound_frame_buffer_id == 0, "A frame buffer is already bound", loc = loc);
+enable_frame_buffer :: proc(using s : ^Debug_state, id : Frame_buffer_id, loc := #caller_location) {
 	gl.BindFramebuffer(gl.FRAMEBUFFER, auto_cast id);
-	bound_frame_buffer_id = id;
-
-	//Check if it is bound
-	bound_fbo : i32;
-	gl.GetIntegerv(gl.FRAMEBUFFER_BINDING, &bound_fbo);
-	assert(bound_fbo == auto_cast id, "FBO did not bind");
 }
 
-disable_frame_buffer :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
-	//fmt.assertf(fbo_id == bound_frame_buffer_id, "enable_frame_buffer and disable_frame_buffer was not called on the same frame_buffer, bound_frame_buffer_id : %v, fbo_id : %v", bound_frame_buffer_id, fbo_id, loc = loc);
+disable_frame_buffer :: proc(using s : ^Debug_state, loc := #caller_location) {
 	gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
-	bound_frame_buffer_id = 0;
 }
 
-enable_frame_buffer_read :: proc(using s : ^Render_state($U,$A), id : Frame_buffer_id, loc := #caller_location) {
+enable_frame_buffer_read :: proc(using s : ^Debug_state, id : Frame_buffer_id, loc := #caller_location) {
 	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, auto_cast id);
-	bound_read_frame_buffer_id = id;
 }
 
-disable_frame_buffer_read :: proc(using s : ^Render_state($U,$A),loc := #caller_location) {
-	//assert(fbo_id == bound_read_frame_buffer_id, "enable_frame_buffer_read and disable_frame_buffer_read was not called on the same frame_buffer", loc = loc);
+disable_frame_buffer_read :: proc(using s : ^Debug_state, loc := #caller_location) {
 	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, 0);
-	bound_read_frame_buffer_id = 0;
 }
 
-enable_frame_buffer_draw :: proc(using s : ^Render_state($U,$A), id : Frame_buffer_id, loc := #caller_location) {
+enable_frame_buffer_draw :: proc(using s : ^Debug_state, id : Frame_buffer_id, loc := #caller_location) {
 	gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, auto_cast id);
-	bound_write_frame_buffer_id = id;
 }
 
-disable_frame_buffer_draw :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
-	//assert(fbo_id == bound_write_frame_buffer_id, "enable_frame_buffer_write and disable_frame_buffer_write was not called on the same frame_buffer", loc = loc);
+disable_frame_buffer_draw :: proc(using s : ^Debug_state, loc := #caller_location) {
 	gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0);
-	bound_write_frame_buffer_id = 0;
 }
 
-draw_buffers :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_buffer_id, loc := #caller_location) {
+draw_buffers :: proc(using s : ^Debug_state, fbo_id : Frame_buffer_id, loc := #caller_location) {
 	drawbuf : []i32 = {gl.COLOR_ATTACHMENT0};
     gl.DrawBuffers(auto_cast len(drawbuf), auto_cast &drawbuf);
 }
 
+set_view :: proc(using s : ^Render_state($U,$A)) {
+	set_viewport(s, 0, 0, auto_cast current_render_target_width, auto_cast current_render_target_height);
+}
 
 ////////
 
-load_depth_texture_id :: proc(using s : ^Render_state($U,$A), width : i32, height : i32, use_render_buffer : bool, bit_depth : Depth_format) -> Texture_id {
+load_depth_texture_id :: proc(using s : ^Debug_state, width : i32, height : i32, use_render_buffer : bool, bit_depth : Depth_format) -> Texture_id {
 	
 	id : Texture_id;
 
@@ -316,7 +313,7 @@ load_depth_texture_id :: proc(using s : ^Render_state($U,$A), width : i32, heigh
 	return id;
 }
 
-load_depth_render_buffer_id :: proc(using s : ^Render_state($U,$A), width : i32, height : i32, use_render_buffer : bool, bit_depth : Depth_format) -> Render_buffer_id {
+load_depth_render_buffer_id :: proc(using s : ^Debug_state, width : i32, height : i32, use_render_buffer : bool, bit_depth : Depth_format) -> Render_buffer_id {
 	
 	id : Render_buffer_id;
 
@@ -331,13 +328,13 @@ load_depth_render_buffer_id :: proc(using s : ^Render_state($U,$A), width : i32,
 	return id;
 }
 
-unload_render_buffer_id :: proc(using s : ^Render_state($U,$A), depth_id : Render_buffer_id) {
+unload_render_buffer_id :: proc(using s : ^Debug_state, depth_id : Render_buffer_id) {
 	depth_id := depth_id;
 	render_buffer_alive[depth_id] = false;
 	gl.DeleteRenderbuffers(1, auto_cast &depth_id)
 }
 
-load_texture_id :: proc(using s : ^Render_state($U,$A), data : []u8, width : i32, height : i32, format : Pixel_format, loc := #caller_location) -> Texture_id {
+load_texture_id :: proc(using s : ^Debug_state, data : []u8, width : i32, height : i32, format : Pixel_format, loc := #caller_location) -> Texture_id {
     
     //TODO assert bound_texture2D == nil
 
@@ -386,13 +383,13 @@ load_texture_id :: proc(using s : ^Render_state($U,$A), data : []u8, width : i32
     return id;
 }
 
-unload_texture_id :: proc(using s : ^Render_state($U,$A), tex_id : Texture_id) {
+unload_texture_id :: proc(using s : ^Debug_state, tex_id : Texture_id) {
 	tex_id := tex_id;
 	textures_alive[tex_id] = false;
 	gl.DeleteTextures(1, auto_cast &tex_id);
 }
 
-generate_mip_maps :: proc(using s : ^Render_state($U,$A), tex : Texture2D) {
+generate_mip_maps :: proc(using s : ^Debug_state, tex : Texture2D) {
 	gl.BindTexture(gl.TEXTURE_2D, auto_cast tex.id);
 	gl.GenerateMipmap(gl.TEXTURE_2D);
 	gl.BindTexture(gl.TEXTURE_2D, 0);
@@ -420,15 +417,19 @@ reload_texture_data :: proc(data : []u8, width : i32, height : i32, format : Pix
 /////////////////////
 
 // Enable vertex buffer element (VBO element)
-enable_vertex_buffer_element :: proc(using s : ^Render_state($U,$A), id : Vbo_ID, loc := #caller_location) {
-	assert(bound_element_buffer == 0, "There is already a bound element buffer", loc = loc);
-	bound_element_buffer = id;
+enable_vertex_buffer_element :: proc(using s : ^Debug_state, id : Vbo_ID, loc := #caller_location) {
+	when ODIN_DEBUG {
+		assert(s.bound_element_buffer == 0, "There is already a bound element buffer", loc = loc);
+		s.bound_element_buffer = id;
+	}
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, auto_cast id);
 }
 // Disable vertex buffer element (VBO element)
-disable_vertex_buffer_element :: proc(using s : ^Render_state($U,$A), id : Vbo_ID, loc := #caller_location) {
-	assert(bound_element_buffer == id, "The element buffer your are trying to unbind is not bound", loc = loc);
-	bound_element_buffer = 0;
+disable_vertex_buffer_element :: proc(using s : ^Debug_state, id : Vbo_ID, loc := #caller_location) {
+	when ODIN_DEBUG {
+		assert(s.bound_element_buffer == id, "The element buffer your are trying to unbind is not bound", loc = loc);
+		s.bound_element_buffer = 0;
+	}
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0);
 }
 
@@ -445,7 +446,7 @@ unbind_texture_id :: proc() {
 
 /////////////////////////////////////////////////////////
 
-set_cull_method :: proc(using s : ^Render_state($U,$A), culling : Cull_method) {
+set_cull_method :: proc(using s : ^Debug_state, culling : Cull_method) {
 	if culling == .no_cull {
 		gl.Disable(gl.CULL_FACE);
 	}
@@ -461,7 +462,7 @@ set_cull_method :: proc(using s : ^Render_state($U,$A), culling : Cull_method) {
 	}
 } 
 
-set_depth_test :: proc(using s : ^Render_state($U,$A), do_test : bool) {
+set_depth_test :: proc(using s : ^Debug_state, do_test : bool) {
 	//TODO check it is disabled
 	if do_test {
 		gl.Enable(gl.DEPTH_TEST);
@@ -470,7 +471,7 @@ set_depth_test :: proc(using s : ^Render_state($U,$A), do_test : bool) {
 	}
 }
 
-set_depth_write :: proc(using s : ^Render_state($U,$A), do_write : bool) {
+set_depth_write :: proc(using s : ^Debug_state, do_write : bool) {
 	if do_write {
 		gl.DepthMask(true);
 	} else {
@@ -478,7 +479,7 @@ set_depth_write :: proc(using s : ^Render_state($U,$A), do_write : bool) {
 	}
 }
 
-set_blend_mode :: proc(using s : ^Render_state($U,$A), mode : Blend_mode) {
+set_blend_mode :: proc(using s : ^Debug_state, mode : Blend_mode) {
 	if mode == .no_blend {
 		gl.Disable(gl.BLEND);
 	}
@@ -490,15 +491,11 @@ set_blend_mode :: proc(using s : ^Render_state($U,$A), mode : Blend_mode) {
 	}
 }
 
-set_polygon_mode :: proc(using s : ^Render_state($U,$A), mode : Polygon_mode) {
-	panic("todo")	
+set_polygon_mode :: proc(using s : ^Debug_state, mode : Polygon_mode) {
+	gl.PolygonMode(gl.FRONT_AND_BACK, auto_cast mode);
 }
 
-set_fill_mode :: proc(using s : ^Render_state($U,$A), mode : Fill_method) {
-	panic("todo")	
-}
-
-clear_color_depth :: proc(using s : ^Render_state($U,$A), clear_color : [4]f32) {
+clear_color_depth :: proc(using s : ^Debug_state, clear_color : [4]f32) {
 	gl.ClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
@@ -543,28 +540,32 @@ set_vertex_attribute_divisor :: proc(index : u32, divisor : u32) {
 //////////////////////////////
 
 // Draw vertex array
-draw_vertex_array :: proc(using s : ^Render_state($U,$A), #any_int offset : i32, #any_int count : i32, loc := #caller_location) {
+draw_vertex_array :: proc(using s : ^Debug_state, #any_int offset : i32, #any_int count : i32, loc := #caller_location) {
 	//assert(offset < count, "Offset is greater or equal to count", loc = loc);
-	assert(count != 0, "Count is zero", loc = loc);
-	assert(count % 3 == 0, "Count is not a multiable of 3", loc = loc);
-	assert(bound_array_buffer != 0, "No array buffer is bound", loc = loc);
-	
-	found_attrib : bool = false;
-	for b in array_buffers_alive[bound_array_buffer].vertex_attrib_enabled {
-		if b {
-			found_attrib = true;
-			break;
-		}
-	}
 
-	if !found_attrib {
-		panic("The currently bound VAO has no atributes bound", loc = loc);
+	when ODIN_DEBUG {
+		assert(count != 0, "Count is zero", loc = loc);
+		assert(count % 3 == 0, "Count is not a multiable of 3", loc = loc);
+		
+		assert(bound_array_buffer != 0, "No array buffer is bound", loc = loc);
+		
+		found_attrib : bool = false;
+		for b in array_buffers_alive[bound_array_buffer].vertex_attrib_enabled {
+			if b {
+				found_attrib = true;
+				break;
+			}
+		}
+
+		if !found_attrib {
+			panic("The currently bound VAO has no atributes bound", loc = loc);
+		}
 	}
 	
     gl.DrawArrays(gl.TRIANGLES, offset, count);
 }
 
-draw_vertex_array_indirect :: proc(using s : ^Render_state($U,$A), offset : i32, count : i32, loc := #caller_location) {
+draw_vertex_array_indirect :: proc(using s : ^Debug_state, offset : i32, count : i32, loc := #caller_location) {
 	assert(offset < count, "Offset is greater or equal to count", loc = loc);
 	assert(count != 0, "Count is zero", loc = loc);
 	assert(count % 3 == 0, "Count is not a multiable of 3", loc = loc);
@@ -591,19 +592,23 @@ draw_vertex_array_indirect :: proc(using s : ^Render_state($U,$A), offset : i32,
 }
 
 // Draw vertex array elements
-draw_vertex_array_elements :: proc(using s : ^Render_state($U,$A), #any_int count : i32, loc := #caller_location) {
-	assert(bound_element_buffer != 0, "There is not a bound element buffer", loc = loc);
+draw_vertex_array_elements :: proc(using s : ^Debug_state, #any_int count : i32, loc := #caller_location) {
+	when ODIN_DEBUG {
+		assert(bound_element_buffer != 0, "There is not a bound element buffer", loc = loc);
+	}
     gl.DrawElements(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, nil);
 }
 
 // Draw vertex array instanced
-draw_vertex_array_instanced :: proc(using s : ^Render_state($U,$A), #any_int offset : i32, #any_int count : i32, #any_int instances : i32) {
+draw_vertex_array_instanced :: proc(using s : ^Debug_state, #any_int offset : i32, #any_int count : i32, #any_int instances : i32) {
 	gl.DrawArraysInstanced(gl.TRIANGLES, 0, count, instances);
 }
 
 // Draw vertex array elements instanced
-draw_vertex_array_elements_instanced :: proc(using s : ^Render_state($U,$A), #any_int count : i32, #any_int instances : i32, loc := #caller_location) {
-	assert(bound_element_buffer != 0, "There is not a bound element buffer", loc = loc);
+draw_vertex_array_elements_instanced :: proc(using s : ^Debug_state, #any_int count : i32, #any_int instances : i32, loc := #caller_location) {
+	when ODIN_DEBUG {
+		assert(bound_element_buffer != 0, "There is not a bound element buffer", loc = loc);
+	}
     gl.DrawElementsInstanced(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, nil, instances);
 }
 
@@ -693,7 +698,7 @@ get_gl_version :: proc(using s : ^Render_state($U,$A)) -> GL_version {
 	unreachable();
 }
 
-get_shader_attributes :: proc(using s : ^Render_state($U,$A), program_id : Shader_program_id, alloc := context.allocator, loc := #caller_location) -> (res : map[string]Attribute_info) {
+get_shader_attributes :: proc(using s : ^Debug_state, program_id : Shader_program_id, alloc := context.allocator, loc := #caller_location) -> (res : map[string]Attribute_info) {
 	
 	context.allocator = alloc;
 
@@ -725,7 +730,7 @@ get_shader_attributes :: proc(using s : ^Render_state($U,$A), program_id : Shade
 	return;
 }
 
-get_shader_uniforms :: proc(using s : ^Render_state($U,$A), program_id : Shader_program_id, alloc := context.allocator, loc := #caller_location) -> (res : map[string]Uniform_info) {
+get_shader_uniforms :: proc(using s : ^Debug_state, program_id : Shader_program_id, alloc := context.allocator, loc := #caller_location) -> (res : map[string]Uniform_info) {
 
 	context.allocator = alloc;
 
@@ -769,17 +774,17 @@ get_shader_uniforms :: proc(using s : ^Render_state($U,$A), program_id : Shader_
 
 //////////////////////////////
 
-get_attribute_location :: proc(using s : ^Render_state($U,$A), shader_id : Shader_program_id, attrib_name : string) -> Attribute_id {
+get_attribute_location :: proc(using s : ^Debug_state, shader_id : Shader_program_id, attrib_name : string) -> Attribute_id {
 	return auto_cast gl.GetAttribLocation(auto_cast shader_id, fmt.ctprintf(attrib_name));
 }
 
-get_uniform_location :: proc(using s : ^Render_state($U,$A), shader_id : Shader_program_id, uniform_name : string) -> Uniform_id {
+get_uniform_location :: proc(using s : ^Debug_state, shader_id : Shader_program_id, uniform_name : string) -> Uniform_id {
 	return auto_cast gl.GetUniformLocation(auto_cast shader_id, fmt.ctprintf(uniform_name));
 }
 
 /////////////
 
-set_uniform_array :: proc(using s : ^Render_state($U,$A), using uniform : Uniform_info, value : $T, loc := #caller_location) {
+set_uniform_array :: proc(using s : ^Debug_state, using uniform : Uniform_info, value : $T, loc := #caller_location) {
 	
 	assert(array_size != 0, "array_size is 0, you are doing something wrong", loc = loc);
 	
@@ -835,7 +840,7 @@ set_uniform_array :: proc(using s : ^Render_state($U,$A), using uniform : Unifor
 }
 
 // Set shader value uniform
-set_uniform_single :: proc(using s : ^Render_state($U,$A), using uniform : Uniform_info, value : $T, loc := #caller_location) {
+set_uniform_single :: proc(using s : ^Debug_state, using uniform : Uniform_info, value : $T, loc := #caller_location) {
 
 	when T == f32 {
 		fmt.assertf(uniform_type == .float, "Value passed was float, but shader uniform type differs as it is type %v", uniform_type, loc = loc);
@@ -879,7 +884,7 @@ set_uniform_single :: proc(using s : ^Render_state($U,$A), using uniform : Unifo
 	}
 }
 
-set_uniform_sampler :: proc(using s : ^Render_state($U,$A), using uniform : Uniform_info, slot : Texture_slot, value : $T, loc := #caller_location) {
+set_uniform_sampler :: proc(using s : ^Debug_state, using uniform : Uniform_info, slot : Texture_slot, value : $T, loc := #caller_location) {
 	
 	when T == Texture2D {
 		fmt.assertf(uniform_type == .sampler_2d, "Value passed was sampler_2d, but shader uniform type differs as it is type %v", uniform_type, loc = loc);
@@ -923,7 +928,7 @@ void rlSetUniformSampler(int locIndex, unsigned int textureId)
 
 //////////////////////////////
 
-compile_shader :: proc(using s : ^Render_state($U,$A), destination : ^map[string]$T, name, source : string, $shader_type : Shader_type, loc := #caller_location) {
+compile_shader :: proc(using s : ^Debug_state, destination : ^map[string]$T, name, source : string, $shader_type : Shader_type, loc := #caller_location) {
 
 	source_vertex_shader :: proc(shader_id : Shader_vertex_id, shader_source : string, loc := #caller_location) {
 		shader_sources : [1]cstring = { fmt.ctprintf("%s",shader_source) };
@@ -979,15 +984,15 @@ compile_shader :: proc(using s : ^Render_state($U,$A), destination : ^map[string
 	destination[name] = shader_id;
 }
 
-attach_vertex_shader :: proc(using s : ^Render_state($U,$A), shader_program : Shader_program_id, vertex_shader : Shader_vertex_id) {
+attach_vertex_shader :: proc(using s : ^Debug_state, shader_program : Shader_program_id, vertex_shader : Shader_vertex_id) {
 	gl.AttachShader(auto_cast shader_program, auto_cast vertex_shader);
 }
 
-attach_fragment_shader :: proc(using s : ^Render_state($U,$A), shader_program : Shader_program_id, fragment_shader : Shader_fragment_id) {
+attach_fragment_shader :: proc(using s : ^Debug_state, shader_program : Shader_program_id, fragment_shader : Shader_fragment_id) {
 	gl.AttachShader(auto_cast shader_program, auto_cast fragment_shader);
 }
 
-link_program :: proc(using s : ^Render_state($U,$A), shader_program : Shader_program_id, vs_name : string, fs_name : string, loc := #caller_location) {
+link_program :: proc(using s : ^Debug_state, shader_program : Shader_program_id, vs_name : string, fs_name : string, loc := #caller_location) {
 	gl.LinkProgram(auto_cast shader_program);
 
 	success : i32;
@@ -1001,18 +1006,18 @@ link_program :: proc(using s : ^Render_state($U,$A), shader_program : Shader_pro
 
 /////////////////////////////////////////////////////////////////////////////////
 
-set_viewport :: proc(using s : ^Render_state($U,$A), x : i32, y : i32, width : i32, height : i32) {
+set_viewport :: proc(using s : ^Debug_state, x : i32, y : i32, width : i32, height : i32) {
 	assert(gl.Viewport != nil, "gl.Viewport not loaded")
     gl.Viewport(x, y, width, height);
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-blit_frame_buffer :: proc(using s : ^Render_state($U,$A), width, height : i32, loc := #caller_location) {
+blit_frame_buffer :: proc(using s : ^Debug_state, width, height : i32, loc := #caller_location) {
 	gl.BlitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT, gl.NEAREST);
 }
 
-attach_framebuffer_color :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_buffer_id, tex_id : Texture_id, use_render_buffer : bool) {
+attach_framebuffer_color :: proc(using s : ^Debug_state, fbo_id : Frame_buffer_id, tex_id : Texture_id, use_render_buffer : bool) {
 	
 	gl.BindFramebuffer(gl.FRAMEBUFFER, auto_cast fbo_id);
 
@@ -1026,7 +1031,7 @@ attach_framebuffer_color :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_
 	//TODO cube maps FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + attachType, GL_TEXTURE_CUBE_MAP_POSITIVE_X + texType, texId, mipLevel);
 }
 
-attach_framebuffer_depth :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_buffer_id, depth_attach_id : Depth_attachment) {
+attach_framebuffer_depth :: proc(using s : ^Debug_state, fbo_id : Frame_buffer_id, depth_attach_id : Depth_attachment) {
 
 	gl.BindFramebuffer(gl.FRAMEBUFFER, auto_cast fbo_id);
 
@@ -1042,7 +1047,7 @@ attach_framebuffer_depth :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_
 
 }
 
-attach_framebuffer_stencil :: proc(using s : ^Render_state($U,$A), fbo_id : Frame_buffer_id, tex_id : Texture_id, use_render_buffer : bool) {
+attach_framebuffer_stencil :: proc(using s : ^Debug_state, fbo_id : Frame_buffer_id, tex_id : Texture_id, use_render_buffer : bool) {
 
 	gl.BindFramebuffer(gl.FRAMEBUFFER, auto_cast fbo_id);
 
@@ -1055,7 +1060,7 @@ attach_framebuffer_stencil :: proc(using s : ^Render_state($U,$A), fbo_id : Fram
 
 }
 
-verify_render_texture :: proc(using s : ^Render_state($U,$A), using render_tex : Render_texture) -> bool {
+verify_render_texture :: proc(using s : ^Debug_state, using render_tex : Render_texture) -> bool {
 	
 	gl.BindFramebuffer(gl.FRAMEBUFFER, auto_cast id);
 	
@@ -1081,7 +1086,7 @@ verify_render_texture :: proc(using s : ^Render_state($U,$A), using render_tex :
 
 // Textures data management
 
-get_frame_buffer_depth_info :: proc(using s : ^Render_state($U,$A), id : Frame_buffer_id) -> (depth_type, depth_id : i32) {
+get_frame_buffer_depth_info :: proc(using s : ^Debug_state, id : Frame_buffer_id) -> (depth_type, depth_id : i32) {
     gl.BindFramebuffer(gl.FRAMEBUFFER, auto_cast id); 
     gl.GetFramebufferAttachmentParameteriv(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &depth_type);
     gl.GetFramebufferAttachmentParameteriv(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &depth_id);

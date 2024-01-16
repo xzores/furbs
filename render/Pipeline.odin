@@ -11,13 +11,12 @@ Pipeline :: struct(U, A : typeid) {
 	depth_write : bool,
 	depth_test : bool,
 	polygon_mode : Polygon_mode,
-	fill_mode : Fill_method,
 	culling : Cull_method,
 }
 
 make_pipeline :: proc(s : ^Render_state($U, $A), render_target : Render_target, shader : Shader(U, A),
 						clear_color : [4]f32 = {0,0,0,1}, blend_mode : Blend_mode = .one_minus_src_alpha, depth_write : bool = true, depth_test : bool = true,
-						polygon_mode : Polygon_mode = .triangles, fill_mode : Fill_method = .fill, culling : Cull_method = .no_cull, loc := #caller_location) -> (pipeline : Pipeline(U, A)) {
+						polygon_mode : Polygon_mode = .fill, culling : Cull_method = .no_cull, loc := #caller_location) -> (pipeline : Pipeline(U, A)) {
 	
 	pipeline = Pipeline(U, A) {
 		render_target = render_target,
@@ -27,7 +26,6 @@ make_pipeline :: proc(s : ^Render_state($U, $A), render_target : Render_target, 
 		depth_write = depth_write,
 		depth_test = depth_test,
 		polygon_mode = polygon_mode,
-		fill_mode = fill_mode,
 		culling = culling,
 	}
 
@@ -39,7 +37,11 @@ destroy_pipeline :: proc(s : ^Render_state($U, $A), pipeline : ^Pipeline(U, A)) 
 }
 
 being_pipeline :: proc (s : ^Render_state($U, $A), using pipeline : Pipeline(U, A), cam : union {Camera2D, Camera3D}, loc := #caller_location) {
-	
+
+	if target, ok := render_target.(^Window); ok {
+		check_window(s, target, loc);
+	}
+
 	bind_shader(s, shader);
 	
 	////////////////////////////
@@ -49,12 +51,11 @@ being_pipeline :: proc (s : ^Render_state($U, $A), using pipeline : Pipeline(U, 
 	set_depth_write(s, depth_write);
 	set_depth_test(s, depth_test);
 	set_polygon_mode(s, polygon_mode);
-	set_fill_mode(s, fill_mode);
 	set_cull_method(s, culling);
 
 	//Clear the screen
 	clear_color_depth(s, clear_color);
-	
+
 	//Set render target
 	if target, ok := render_target.(Render_texture); ok {
 		s.current_render_target_width = cast(f32)target.texture.width;
@@ -70,8 +71,8 @@ being_pipeline :: proc (s : ^Render_state($U, $A), using pipeline : Pipeline(U, 
 
 		disable_frame_buffer(s, loc);
 		
-		s.current_render_target_width = auto_cast get_screen_width(s);
-		s.current_render_target_height = auto_cast get_screen_height(s);
+		s.current_render_target_width = auto_cast get_screen_width(s, target);
+		s.current_render_target_height = auto_cast get_screen_height(s, target);
 		
 		set_view(s);
 	}
@@ -122,6 +123,8 @@ being_pipeline :: proc (s : ^Render_state($U, $A), using pipeline : Pipeline(U, 
 	} else {
 		panic("TODO");
 	}
+
+	disable_frame_buffer(s, );
 }
 
 

@@ -169,10 +169,14 @@ main :: proc () {
 	render.init_render(&state1, uniforms_types, attribute_types, texture_locations, nil, "examples/res/shaders");
 	fmt.printf("render inited %v\n", state1.opengl_version);
 
+	window := render.init_window(&state1, 800, 800, "My window", "res/shaders");
+	render.bind_window(&state1, window);
+
 	my_quad := render.generate_quad(&state1, size = {1,1,1}, position = {0,0,0}, use_index_buffer=false);
-	
+	//render.upload_mesh_single(&state1, &my_quad);
+
 	//my_shader : render.Shader(Uniform_location, Attribute_location);
-	//render.load_shader(&state1, &my_shader, "gui", "gui");q
+	//render.load_shader(&state1, &my_shader, "gui", "gui");
 	
 	my_camera : render.Camera2D = {
 		position 			= {0,0},
@@ -187,8 +191,8 @@ main :: proc () {
 	shader := render.get_default_shader(&state1);
 	opaque := render.make_pipeline(&state1, window, shader);
 
-	for !render.should_close(&state1) {
-		render.begin_frame(&state1);
+	for !render.should_close(&state1, window) {
+		render.begin_frame(&state1, window);
 		
 		//TODO also make it so you have a single render_state and multiple windows, this allows for sharing resources in multiple windows and is the best way to not have bugs.
 		//TODO make it so the window is not bound by default, and it gets bound in begin_pipeline
@@ -197,7 +201,7 @@ main :: proc () {
 		render.draw_mesh_single(&state1, render.get_default_shader(&state1), my_quad, linalg.MATRIX4F32_IDENTITY);
 		
 		render.end_pipeline(&state1, opaque);
-		render.end_frame(&state1);
+		render.end_frame(&state1, window);
 	}
 
 	render.destroy_pipeline(&state1, &opaque);

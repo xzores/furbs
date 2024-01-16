@@ -18,9 +18,8 @@ import "core:time"
 
 import c "core:c/libc"
 
-
-/* 
-		NOTES ON INTERFACE
+/*
+	NOTES ON INTERFACE
 
 A common vulkan/opengl interface, calling a wrapper should abscract away vulkan/opengl. Wrappers are not called by the user.
 Intead a high level interface is used, optimized for vulkan/opengl 4.6. Calling these functions will append the work to another thread.
@@ -65,9 +64,6 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 	///////////// OPENGL stuff ////////////
 	opengl_version : GL_version,
 
-	//Window stuff
-	window : Window,
-	
 	/////////// Texture/font stuff ////////////	
 	font_context : fs.FontContext,
 	font_texture : Texture2D,
@@ -93,75 +89,7 @@ Render_state :: struct(U, A : typeid) where intrinsics.type_is_enum(U) && intrin
 
 }
 
-///////////// DEBUG STATE ////////////
-
-when ODIN_DEBUG {
-	Debug_state :: struct {
-
-		////////////////
-
-		//What is alive
-		//not it map = not created,
-		//false = deleted,
-		//true = alive,
-		shader_program_alive : map[Shader_program_id]bool, //All array_buffers alive
-		shader_vertex_alive : map[Shader_vertex_id]bool, //All array_buffers alive
-		shader_fragment_alive : map[Shader_fragment_id]bool, //All array_buffers alive
-
-		textures_alive : map[Texture_id]bool, //All array_buffers alive
-		render_buffer_alive : map[Render_buffer_id]bool, //All array_buffers alive
-		frame_buffer_alive : map[Frame_buffer_id]bool, //All array_buffers alive
-
-		vertex_buffers_alive : map[Vbo_ID]bool, //All array_buffers alive
-		array_buffers_alive : map[Vao_ID]struct{
-			is_alive : bool,
-			vertex_attrib_enabled : [8]bool,
-		}, //All array_buffers alive
-
-		texture_slots_binds : map[Texture_slot]Texture_id,
-
-		//What is bound
-		bound_shader_program : Shader_program_id,
-		bound_array_buffer : Vao_ID,
-		bound_element_buffer : Vbo_ID,
-		//TODO check bound_texture2D 	: Texture_id;
-		vertex_buffer_targets : [Vertex_buffer_targets]Vbo_ID,
-
-		bound_frame_buffer_id : Frame_buffer_id,
-		bound_read_frame_buffer_id : Frame_buffer_id,
-		bound_write_frame_buffer_id : Frame_buffer_id,
-
-		is_begin_render : bool,
-	};
-}
-else when !ODIN_DEBUG {
-	Debug_state :: struct {};
-}
-
 ////////////////////////////////////////////////////////////////////
-
-renders_count : int = 0;
-
-@(private)
-init_glfw :: proc () {	
-	if renders_count == 0 {
-		if(!cast(bool)glfw.Init()){
-			panic("Failed to init glfw");
-		}
-		glfw.SetErrorCallback(error_callback);
-		fmt.printf("inited glfw\n");
-	}	
-	renders_count += 1;
-}
-
-@(private)
-terminate_glfw :: proc () {
-	renders_count -= 1;
-	if renders_count == 0 {
-		glfw.Terminate();
-		fmt.printf("terminated glfw\n");
-	}
-}
 
 required_uniforms 	:: 	map[string]Uniform_info {};
 required_attributes :: 	map[string]Attribute_info {};
@@ -171,16 +99,14 @@ init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, at
 	
 	assert(s.render_has_been_init == false, "renderer already initiazied");
 
-	init_glfw();
-
 	/////////////////////
 	
 	//Copy the map
 	s.texture_locations = make(map[U]Texture_slot);
 	for k,v in texture_locations {s.texture_locations[k]=v};
 
-	required_uniforms :=  required_uniforms;
-	required_attributes :=  required_attributes;
+	required_uniforms := required_uniforms;
+	required_attributes := required_attributes;
 	defer delete(required_uniforms);
 	defer delete(required_attributes);
 
@@ -207,7 +133,7 @@ init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, at
 			delete_key(&required_attributes, enum_val.name);
 		}
 	}
-		
+	
 	if len(required_uniforms) != 0 {
 		fmt.panicf("The following uniforms are required but not included : \n %v \n", required_uniforms);
 	}
@@ -228,14 +154,21 @@ init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, at
 
 	s.shader_folder_location = strings.clone(shader_folder);
 
-	//////////////////////////////// WINDOW CODE BELOW ////////////////////////////////
+	//////////////////////////////// glfw CODE BELOW ////////////////////////////////
 
+	if(!cast(bool)glfw.Init()){
+		panic("Failed to init glfw");
+	}
+	glfw.SetErrorCallback(error_callback);
+	fmt.printf("inited glfw\n");
+
+
+	/*
 	time.stopwatch_start(&s.window.startup_timer);
 
 	if required_gl_verion >= GL_version.opengl_3_2 {
 		glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 	}
-
 	if required_gl_verion != nil {
 		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, auto_cast get_gl_major(required_gl_verion));
 		glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, auto_cast get_gl_minor(required_gl_verion));
@@ -272,7 +205,6 @@ init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, at
 	}
 
 	s.window.window_context = context;
-
 	fmt.printf("Loaded opengl version : %v\n", s.opengl_version);
 
 	//TODO check that we dont exceed max textures assert(get_max_supported_active_textures() >= auto_cast len(texture_locations));
@@ -285,13 +217,14 @@ init_render :: proc(s : ^Render_state($U,$A), uniform_spec : [U]Uniform_info, at
 	fs.Init(&s.font_context, 1, 1, .BOTTOMLEFT);
 
 	glfw.SetWindowUserPointer(s.window.glfw_window, &s.window); // :: proc(window.glfw_window, window) //TODO this window and then pointer
+	*/
 
 	s.render_has_been_init = true;
 }
 
 destroy_render :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
 	
-	assert(bound_window == &s.window, "The window must be bound when calling destroy_render", loc = loc);
+	//assert(bound_window == &s.window, "The window must be bound when calling destroy_render", loc = loc);
 
 	unload_shader(s, &s.default_shader);
 	delete(shader_folder_location);
@@ -323,10 +256,9 @@ destroy_render :: proc(using s : ^Render_state($U,$A), loc := #caller_location) 
 
 	//TODO check that all things has been destroyed in debug mode.
 	*/
-
-	glfw.DestroyWindow(s.window.glfw_window);
-
-	terminate_glfw();
+	
+	glfw.Terminate();
+	fmt.printf("terminated glfw\n");
 	
 }
 

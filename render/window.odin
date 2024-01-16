@@ -19,6 +19,16 @@ Mouse_mode :: enum {
 	normal = glfw.CURSOR_NORMAL,
 }
 
+check_window :: proc(s : ^Render_state($U,$A), window : ^Window, loc := #caller_location) {
+	when ODIN_DEBUG {
+		if s.bound_window != nil {
+			assert(s.bound_window == window, "The window that was passes in not the bound window", loc = loc);
+		} else {
+			panic("No window is bound", loc = loc);
+		}
+	}
+}
+
 key_callback : glfw.KeyProc : proc "c" (glfw_window : glfw.WindowHandle, key : i32, scancode : i32, action : i32, mods : i32) {	
 	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
 
@@ -102,8 +112,6 @@ input_callback : glfw.CharModsProc : proc "c" (glfw_window : glfw.WindowHandle, 
 	queue.append(&window.char_input_buffer, codepoint);
 }
 
-bound_window : Maybe(^Window) = nil;
-
 Window :: struct {
 	
 	glfw_window : glfw.WindowHandle, //dont touch
@@ -140,101 +148,148 @@ Window :: struct {
 	char_input : queue.Queue(rune),
 }
 
-destroy_window :: proc(using s : ^Render_state($U,$A), loc :=  #caller_location) {
+init_window :: proc(s : ^Render_state($U,$A), width, height : i32, title : string, shader_folder : string, required_gl_verion : Maybe(GL_version) = nil, loc := #caller_location) -> (window : ^Window) {
+	assert(s.render_has_been_init == true, "You must call init_render", loc = loc)
 	
+	window = new(Window);
+
+	window.window_context = context;
+
+	s.shader_folder_location = strings.clone(shader_folder);
+	
+	time.stopwatch_start(&window.startup_timer);
+
+	if required_verion, ok := required_gl_verion.?; ok {
+		if required_verion >= GL_version.opengl_3_2 {
+			glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
+		}
+		if required_verion != nil {
+			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, auto_cast get_gl_major(required_verion));
+			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, auto_cast get_gl_minor(required_verion));
+		}
+	}
+
+    // Create render window.
+    window.glfw_window = glfw.CreateWindow(width, height, fmt.ctprintf("%s", title), nil, nil)
+    assert(window.glfw_window != nil, "Window or OpenGL context creation failed");
+
+	glfw.MakeContextCurrent(window.glfw_window);
+	
+	glfw.SetKeyCallback(window.glfw_window, key_callback);
+	glfw.SetMouseButtonCallback(window.glfw_window, button_callback);
+	glfw.SetScrollCallback(window.glfw_window, scroll_callback);
+	glfw.SetCharModsCallback(window.glfw_window, input_callback);
+	glfw.SetInputMode(window.glfw_window, glfw.STICKY_KEYS, 1);
+
+	//Load 1.0 to get access to the "get_gl_version" function and then load the actual verison afterwards.
+	gl.load_up_to(1, 0, glfw.gl_set_proc_address);
+	version := get_gl_version(s);
+
+	//TODO, enum cannot be below 3.3 //assert(version >= .opengl_3_3, "This library only supports OpenGL 3.0 or higher")
+	if required_verion, ok := required_gl_verion.?; ok {
+		//load the specified
+		assert(version >= required_verion, "OpenGL version is not new enough for the required version");
+		gl.load_up_to(get_gl_major(required_verion), get_gl_major(required_verion), glfw.gl_set_proc_address);
+	}
+	else {
+		//load the newest
+		gl.load_up_to(get_gl_major(version), get_gl_major(version), glfw.gl_set_proc_address);
+	}
+	s.opengl_version = version;
+
+	fmt.printf("Loaded opengl version : %v\n", s.opengl_version);
+
+	//TODO only for the first window...
+	//TODO assert(get_max_supported_active_textures() >= auto_cast len(texture_locations));
+	init_shaders(s);
+	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
+	fs.Init(&s.font_context, 1, 1, .BOTTOMLEFT); //TODO try TOPLEFT and BOTTOMLEFT
+	
+	glfw.SetWindowUserPointer(window.glfw_window, window);
+
+	glfw.MakeContextCurrent(nil);
+
+	return;
+}
+
+destroy_window :: proc(using s : ^Render_state($U,$A), window : ^Window, loc :=  #caller_location) {
+	
+	/*
+	TODO what here
 	unbind_window(s, window);
 
-	if v, ok := bound_window.?; ok {
+	if v, ok :=s.bound_window.?; ok {
 		assert(v != window^, "The window must be unbound before it can be delelted", loc = loc);
 	}
+	*/
 	
 	fs.Destroy(&font_context);
 
 	glfw.DestroyWindow(window.glfw_window);
 	window.glfw_window = nil;
 	//TODO //window_context = {};
-	delete(window.title);
-	glfw.Terminate();
+	free(window);
 }
 
-bind_window :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
+bind_window :: proc(using s : ^Render_state($U,$A), window : ^Window, loc := #caller_location) {
 	
-	if bound_window != nil {
-		panic("Another window is already bound", loc = loc);
+	when ODIN_DEBUG {
+		if s.bound_window != nil {
+			panic("Another window is already bound", loc = loc);
+		}
+		s.bound_window = window;
 	}
 
 	glfw.MakeContextCurrent(window.glfw_window);
-	bound_window = &s.window;
 
-	w, h := glfw.GetFramebufferSize(window.glfw_window)
-	current_render_target_width = auto_cast w;
-	current_render_target_height = auto_cast h;
-	set_view(s);
 }
 
 unbind_window :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
-	
-	if v, ok := bound_window.?; ok {
-		assert(v == &s.window, "You are not unbinding the currently bound window", loc = loc);
-	}
-	else {
-		panic("Ther is currently no bound window", loc = loc);
+
+	when ODIN_DEBUG {
+		assert(s.bound_window != nil, "There is no window bound in the first place", loc);
+		s.bound_window = nil;
 	}
 
 	glfw.MakeContextCurrent(nil);
-	bound_window = nil;
 }
 
-begin_frame :: proc(using s : ^Render_state($U,$A), clear_color : [4]f32 = {0,0,0,1}, loc := #caller_location) {
+begin_frame :: proc(using s : ^Render_state($U,$A), window : ^Window, clear_color : [4]f32 = {0,0,0,1}, loc := #caller_location) {
+
+	check_window(s, window, loc);
 
 	when ODIN_DEBUG {
 		assert(s.is_begin_render == false, "begin render has already been called this frame.", loc = loc);
 		s.is_begin_render = true;
 	}
 
-	time.stopwatch_start(&s.window.frame_timer);
-
-	w, h := glfw.GetWindowSize(window.glfw_window)
-	current_render_target_width = auto_cast w;
-	current_render_target_height = auto_cast h;
-
-	set_view(s);
+	time.stopwatch_start(&window.frame_timer);
 	
 	glfw.PollEvents();
 	clear_color_depth(s, clear_color);
 
-	begin_inputs(s);
+	begin_inputs(s, window);
+
 } 
 
-end_frame :: proc(using s : ^Render_state($U,$A), loc := #caller_location) {
-	
+end_frame :: proc(using s : ^Render_state($U,$A), window : ^Window, loc := #caller_location) {
+	check_window(s, window, loc);
 	when ODIN_DEBUG {
 		assert(s.is_begin_render == true, "begin render has not been called this frame.", loc = loc);
 		s.is_begin_render = false;
 	}
 
-	end_inputs(s);
-	
-	if v, ok := bound_window.?; ok {
-		assert(&s.window == v, "the window you are updating is not the bound window", loc = loc);
-	}
-	else {
-		panic("There must be a bound window", loc = loc);
-	}
+	end_inputs(s, window);
 
 	glfw.SwapBuffers(window.glfw_window);
 	
-	time.stopwatch_stop(&s.window.frame_timer);
-	ms := time.duration_seconds(time.stopwatch_duration(s.window.frame_timer));
+	time.stopwatch_stop(&window.frame_timer);
+	ms := time.duration_seconds(time.stopwatch_duration(window.frame_timer));
 	glfw.SetWindowTitle(window.glfw_window, fmt.ctprintf("%s (%iFPS)", "my window : ", i32(1.0/(ms))));
-	time.stopwatch_reset(&s.window.frame_timer);
+	time.stopwatch_reset(&window.frame_timer);
 }
 
-set_view :: proc(using s : ^Render_state($U,$A)) {
-	set_viewport(s, 0, 0, auto_cast current_render_target_width, auto_cast current_render_target_height);
-}
-
-should_close :: proc(using s : ^Render_state($U,$A)) -> bool {
+should_close :: proc(using s : ^Render_state($U,$A), window : ^Window, loc := #caller_location) -> bool {
 	return auto_cast glfw.WindowShouldClose(window.glfw_window);
 }
 
@@ -242,13 +297,13 @@ enable_vsync :: proc(using s : ^Render_state($U,$A), enable : bool) {
 	glfw.SwapInterval(auto_cast enable);
 }
 
-get_screen_width :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> i32{
+get_screen_width :: proc(using s : ^Render_state($U,$A), window : ^Window, loc := #caller_location) -> i32{
 	
 	w, h := glfw.GetFramebufferSize(window.glfw_window);
 	return w;
 }
 
-get_screen_height :: proc(using s : ^Render_state($U,$A), loc := #caller_location) -> i32 {
+get_screen_height :: proc(using s : ^Render_state($U,$A), window : ^Window, loc := #caller_location) -> i32 {
 	
 	w, h := glfw.GetFramebufferSize(window.glfw_window);
 	return h;
