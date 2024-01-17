@@ -1,1 +1,0 @@
-Made these beauties myself, they are public domain, use as you wish.

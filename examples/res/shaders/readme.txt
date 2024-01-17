@@ -1,1 +1,0 @@
-These shaders are in public domain.
