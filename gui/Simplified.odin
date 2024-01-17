@@ -71,7 +71,7 @@ draw_checkbox :: proc (checked : bool, dest : Destination) -> bool {
 }
 
 //TODO this might not be possaible with a slider_input...
-draw_slide_input :: proc (v : f32, selected: bool, lower_bound, upper_bound : f32, dest : Destination) -> (f32, bool) {
+draw_slide_input :: proc (v : f32, selected: bool, lower_bound, upper_bound : f32, dest : Destination) -> (f32, bool) { //TODO we could do #optional_ok
 	v := v;
 	
 	element := init_slide_input(&v, lower_bound, upper_bound);

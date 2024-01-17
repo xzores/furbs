@@ -206,6 +206,8 @@ menu_example :: proc (t : ^testing.T) {
 	p1 : gui.Destination = {self_anchor = .center_center, anchor = .center_center, rect = {0, 0, 0.7, 0.7}};
 	panel1 := gui.init_panel(p1, scrollable_y = true);
 
+	slide_selected : bool;
+
 	for !should_close(window) {
 		
 		begin_frame(window, {0.2,0.2,0.2,1});
@@ -225,7 +227,7 @@ menu_example :: proc (t : ^testing.T) {
 			}
 
 			checked = gui.draw_checkbox(checked, {.center_right, .center_right, [4]f32{-0.05,-0.2,0.1,0.1}});
-			slide_input_value = gui.draw_slide_input(slide_input_value, 0, 5, {.bottom_center, .bottom_center, [4]f32{-0.05,-0.2,0.1,0.1}});
+			slide_input_value, slide_selected = gui.draw_slide_input(slide_input_value, slide_selected, 0, 5, {.bottom_center, .bottom_center, [4]f32{-0.05,-0.2,0.1,0.1}});
 
 			gui.draw_label("Enable cheats:", {.center_left, .center_left, [4]f32{0.05,-0.2,0.3,0.1}}, no_style);
 

@@ -99,18 +99,20 @@ Window :: struct {
 	startup_timer : time.Stopwatch,
 }
 
-init_window :: proc(width, height : i32, title : string, shader_folder : string, required_gl_verion : Maybe(GL_version) = nil, culling : bool = true, loc := #caller_location) -> (window : Window) {
+@(private)
+window_cnt : int = 0;
+
+init_window :: proc(width, height : i32, title : string, shader_folder : string, required_gl_verion : Maybe(GL_version) = nil, loc := #caller_location) -> (window : Window) {
 	
 	window_context = context;
 
-	assert(render_has_been_init == false, "init_render has already been called!", loc = loc);
-	render_has_been_init = true;
-
-
-	if(!cast(bool)glfw.Init()){
-		panic("Failed to init glfw");
+	if window_cnt == 0 {
+		if(!cast(bool)glfw.Init()){
+			panic("Failed to init glfw\n");
+		}
+		fmt.printf("glfw initialized\n");
 	}
-	
+
 	when ODIN_OS == .Windows {
 
 	}
@@ -128,7 +130,6 @@ init_window :: proc(width, height : i32, title : string, shader_folder : string,
 	
 	glfw.SetErrorCallback(error_callback);
 
-	assert(render_has_been_init == true, "You must call init_render", loc = loc)
 	window.title = fmt.aprintf("%s",title);
 	time.stopwatch_start(&window.startup_timer);
 
@@ -160,42 +161,48 @@ init_window :: proc(width, height : i32, title : string, shader_folder : string,
 	}
 
 	fmt.printf("Loaded opengl version : %v\n", opengl_version);
-
-	assert(get_max_supported_active_textures() >= auto_cast len(texture_locations));
-	init_shaders();
+	
 	glfw.MakeContextCurrent(nil);
-	
 	bind_window(window);
-	
-	if culling {
-		gl.Enable(gl.CULL_FACE);
-		//gl.CullFace(gl.BACK);
-		//gl.FrontFace(GL_CCW);
+
+	///// 
+	if window_cnt == 0 {
+		assert(get_max_supported_active_textures() >= auto_cast len(texture_locations));
+		init_shaders();
+		//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
+		fs.Init(&font_context, 1, 1, .BOTTOMLEFT); //TODO try TOPLEFT and BOTTOMLEFT
 	}
 	
-	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
-	fs.Init(&font_context, 1, 1, .BOTTOMLEFT); //TODO try TOPLEFT and BOTTOMLEFT
-		
+	window_cnt += 1;
+
 	return;
 }
 
 destroy_window :: proc(window : ^Window, loc :=  #caller_location) {
 	
+
+	window_cnt -= 1;
+
 	unbind_window(window^);
 
 	if v, ok := bound_window.?; ok {
 		assert(v != window^, "The window must be unbound before it can be delelted", loc = loc);
 	}
 	
-	fs.Destroy(&font_context);
-
 	glfw.DestroyWindow(window.glfw_window);
-	window.glfw_window = nil;
-	window_context = {};
+	
 	delete(window.title);
-	glfw.Terminate();
 
-	render_has_been_init = false;
+	if window_cnt == 0 {
+		destroy_shaders();
+		fs.Destroy(&font_context);
+		fmt.printf("fontstash destroyed\n");
+
+		glfw.Terminate();
+		fmt.printf("glfw destroyed\n");
+	}
+
+	fmt.printf("destroyed window, new window_cnt : %v\n", window_cnt);
 }
 
 bind_window :: proc(window : Window, loc := #caller_location) {

@@ -27,6 +27,7 @@ main :: proc() {
 
 	my_shader : Shader;
 	load_shader(&my_shader, "gui", "gui");
+	defer unload_shader(&my_shader);
 
 	my_camera : Camera2D = {
 		position 			= {0,0},
@@ -111,6 +112,7 @@ Draw_quad_3D :: proc(t : ^testing.T) {
 
 	my_shader : Shader;
 	load_shader(&my_shader, "gui", "gui");
+	defer unload_shader(&my_shader);
 	
 	my_camera : Camera3D = {
 		position 	= {0,0,-1},
@@ -180,7 +182,7 @@ main :: proc() {
 Draw_shapes :: proc (t : ^testing.T) {	
 	using render;
 	
-	window := init_window(600, 400, "Hello world", "res/shaders", culling = false);
+	window := init_window(600, 400, "Hello world", "res/shaders");
 	
 	my_texture := load_texture_from_file("res/textures/test.png");
 
@@ -229,7 +231,7 @@ main :: proc () {
 Draw_text :: proc (t : ^testing.T) {
 	using render;
 	
-	window := init_window(1000, 800, "Hello world", "res/shaders", culling = false);
+	window := init_window(1000, 800, "Hello world", "res/shaders");
 	
 	//mouse_mode(.normal);
 	//enable_vsync(false); //disable Vsync
@@ -277,8 +279,8 @@ main :: proc () {
 @test
 Draw_to_render_target :: proc (t : ^testing.T) {
 	using render;
-
-	window := init_window(600, 400, "Hello world", "res/shaders", culling = false);
+	
+	window := init_window(600, 400, "Hello world", "res/shaders");
 
 	mouse_mode(.normal);
 	enable_vsync(false); //disable Vsync

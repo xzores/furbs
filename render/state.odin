@@ -46,37 +46,40 @@ render_has_been_init : bool = false;
 
 ////////////////
 
-//What is alive
-//not it map = not created,
-//false = deleted,
-//true = alive,
-shader_program_alive : map[Shader_program_id]bool; //All array_buffers alive
-shader_vertex_alive : map[Shader_vertex_id]bool; //All array_buffers alive
-shader_fragment_alive : map[Shader_fragment_id]bool; //All array_buffers alive
+when ODIN_DEBUG {
 
-textures_alive : map[Texture_id]bool; //All array_buffers alive
-render_buffer_alive : map[Render_buffer_id]bool; //All array_buffers alive
-frame_buffer_alive : map[Frame_buffer_id]bool; //All array_buffers alive
+	//What is alive
+	//not it map = not created,
+	//false = deleted,
+	//true = alive,
+	shader_program_alive : map[Shader_program_id]bool; //All array_buffers alive
+	shader_vertex_alive : map[Shader_vertex_id]bool; //All array_buffers alive
+	shader_fragment_alive : map[Shader_fragment_id]bool; //All array_buffers alive
 
-vertex_buffers_alive : map[Vbo_ID]bool; //All array_buffers alive
-array_buffers_alive : map[Vao_ID]struct{
-	is_alive : bool,
-	vertex_attrib_enabled : [8]bool,
-}; //All array_buffers alive
+	textures_alive : map[Texture_id]bool; //All array_buffers alive
+	render_buffer_alive : map[Render_buffer_id]bool; //All array_buffers alive
+	frame_buffer_alive : map[Frame_buffer_id]bool; //All array_buffers alive
+	
+	vertex_buffers_alive : map[Vbo_ID]bool; //All array_buffers alive
+	array_buffers_alive : map[Vao_ID]struct{
+		is_alive : bool,
+		vertex_attrib_enabled : [8]bool,
+	}; //All array_buffers alive
 
-texture_slots_binds : map[Texture_slot]Texture_id;
+	texture_slots_binds : map[Texture_slot]Texture_id;
 
-//What is bound
+	//What is bound
+	bound_shader_program : Shader_program_id;
+	bound_array_buffer : Vao_ID;
+	bound_element_buffer : Vbo_ID;
+	//TODO check bound_texture2D 	: Texture_id;
+	vertex_buffer_targets : [Vertex_buffer_targets]Vbo_ID;
 
-bound_shader_program : Shader_program_id;
-bound_array_buffer : Vao_ID;
-bound_element_buffer : Vbo_ID;
-//TODO check bound_texture2D 	: Texture_id;
-vertex_buffer_targets : [Vertex_buffer_targets]Vbo_ID;
+	bound_frame_buffer_id : Frame_buffer_id;
+	bound_read_frame_buffer_id : Frame_buffer_id;
+	bound_write_frame_buffer_id : Frame_buffer_id;
 
-bound_frame_buffer_id : Frame_buffer_id;
-bound_read_frame_buffer_id : Frame_buffer_id;
-bound_write_frame_buffer_id : Frame_buffer_id;
+}
 
 ///////// camera /////////
 bound_camera : union {

@@ -25,8 +25,8 @@ Shader :: struct {
 //Will load all shaders into memory.
 init_shaders :: proc(loc := #caller_location) {
 	
-	assert(len(loaded_vertex_shaders) == 0, "Shaders has already been loaded", loc = loc);
-	assert(len(loaded_fragment_shaders) == 0, "Shaders has already been loaded", loc = loc);
+	assert(len(loaded_vertex_shaders) == 0, "Some vertex shaders has already been loaded", loc = loc);
+	assert(len(loaded_fragment_shaders) == 0, "some fragment shaders has already been loaded", loc = loc);
 
 	fmt.printf("Loading all shaders from source : %s\n", shader_folder_location);
 
@@ -60,6 +60,10 @@ init_shaders :: proc(loc := #caller_location) {
 
 destroy_shaders :: proc() {
 
+	when ODIN_DEBUG {
+		assert(len(shader_program_alive) == 0, "Not all shaders has been destroyed, pls destroy them before calling destroy_shaders.");
+	}
+
 	for name, vs in loaded_vertex_shaders {	
 		unload_vertex_shader(vs);
 	}
@@ -70,6 +74,10 @@ destroy_shaders :: proc() {
 
 	delete(loaded_vertex_shaders);
 	delete(loaded_fragment_shaders);
+	loaded_vertex_shaders = nil;
+	loaded_fragment_shaders = nil;
+
+	fmt.printf("Shaders destroyed\n");
 }
 
 /////////////////
