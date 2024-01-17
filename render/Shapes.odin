@@ -69,7 +69,7 @@ draw_shape :: proc(shape : Shape, rot : f32 = 0, texture : Maybe(Texture2D) = ni
 
 	bind_shader(shader);
 	
-	place_uniform(shader, .col_diffuse, color);
+	place_uniform(shader, .color_diffuse, color);
 	
 	if tex_diffuse, ok := texture.?; ok {
 		place_uniform(shader, .texture_diffuse, tex_diffuse);

@@ -8,22 +8,14 @@ import linalg "core:math/linalg"
 
 import c "core:c/libc"
 
-USER_DEFS_PATH :: #config(USER_DEFS_PATH, "../../user_defs");
-
-import ex_defs USER_DEFS_PATH
+import ex_defs "../../user_defs"
 
 ////////////////////////////////////////////////////////////////////
 
 		// THESE DEFINES WHAT CANE BE IN A SHADER // 
 
 //locations may overlap as long as there is only of the overlapping in use at a time.
-Attribute_location :: enum {
-	//Default, used by the library, don't remove or rename.
-	position, // Shader location: vertex attribute: position
-    texcoord, // Shader location: vertex attribute: texcoord01
-    normal, // Shader location: vertex attribute: normal
-    tangent, // Shader location: vertex attribute: tangent
-}
+Attribute_location :: ex_defs.Attribute_location;
 
 //TODO Use this to determine what happens
 //The instance data has the location 0 and is interleaved so it only takes up a single attribute slot.
@@ -35,10 +27,7 @@ Attribute_location_instanced :: enum {
 Uniform_location :: ex_defs.Uniform_location;
 
 //If a Uniform_location is in this map, it is assumed (required?) to be a texture.
-texture_locations : map[Uniform_location]Texture_slot = {
-	.texture_diffuse = 0, ///= gl.TEXTURE0
-	.emission_tex = 1,
-}
+texture_locations := ex_defs.texture_locations;
 
 //////////////////////////////////////////////////////////
 
@@ -57,7 +46,7 @@ Vao_ID :: distinct i32; //TODO small ID
 Vbo_ID :: distinct i32; //TODO
 
 //Not an opengl thing
-Texture_slot :: distinct i32;
+Texture_slot :: ex_defs.Texture_slot;
 
 Shader_type :: enum {
 	vertex_shader,

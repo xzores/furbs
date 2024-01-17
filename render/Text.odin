@@ -120,9 +120,9 @@ draw_text :: proc (text : string, position : [2]f32, font : Font, size : f32, sp
 	fs.SetSpacing(&font_context, spacing);
 	//fs.SetAlignHorizontal(&font_context, .LEFT);
 	//fs.SetAlignVertical(&font_context, .BASELINE);
-
+	
 	bind_shader(shader);
-	place_uniform(shader, .col_diffuse, color);
+	place_uniform(shader, .color_diffuse, color);
 	place_uniform(shader, .texture_diffuse, font_texture);
 	
 	it : fs.TextIter = fs.TextIterInit(&font_context, position.x, position.y, text);
