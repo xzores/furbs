@@ -12,17 +12,17 @@ Mesh_attribute :: struct {
 	//client side
 	active : bool,
 	data_type : Attribute_type,
-	data : []u8,
 
 	//Set when uploaded (do not set)
 	vbo : Vbo_ID,
 }
 
-Mesh_data :: struct where intrinsics.type_is_enum(A) {
+
+Mesh_data :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	
 	vertex_count : int, 					//The amount of verticies
 	
-	attributes : [A]Mesh_attribute,
+	attributes_desc : [A]Mesh_attribute,
 
 	indices : union {
 		[]u16,
@@ -30,10 +30,10 @@ Mesh_data :: struct where intrinsics.type_is_enum(A) {
 	},           							// optional
 }
 
-Mesh_identifiers :: struct where intrinsics.type_is_enum(A) {
+Mesh_identifiers :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 	// OpenGL identifiers
 	vao_id		: Vao_ID,                // OpenGL Vertex Array Object id
-	vbo_id		: [Attribute_location]Vbo_ID,              // OpenGL Vertex Buffer Objects id (default vertex data)
+	vbo_id		: [A]Vbo_ID,              // OpenGL Vertex Buffer Objects id (default vertex data)
 	vbo_indices : Vbo_ID,				//special for indicies 
 }
 
@@ -43,11 +43,11 @@ Reserve_behavior :: enum {
 	thick,		//Reserve 2x needed and don't shrink.
 }
 
-Mesh :: struct where intrinsics.type_is_enum(A) {
-	using _ : Mesh_data(Attribute_location),
+Mesh :: struct(A : typeid) where intrinsics.type_is_enum(A) {
+	using _ : Mesh_data(A),
 
 	implementation : union {
-		Mesh_identifiers,	//It is a standalone mesh, drawing happens with draw_mesh_single.
+		Mesh_identifiers(A),	//It is a standalone mesh, drawing happens with draw_mesh_single.
 	},
 
 	//If set it will be used for frustum (and maybe occlusion culling).
@@ -56,7 +56,7 @@ Mesh :: struct where intrinsics.type_is_enum(A) {
 
 //TODO allow option not to copy memeory
 //makes a copy of the data, you can delete the source array afterwards.
-set_mesh_attribute :: proc(mesh_data : ^Mesh_data, attrib : Attribute_location, data : []$T, loc := #caller_location) {
+set_mesh_attribute :: proc(s : ^Render_state($U,$A), mesh_data : ^Mesh_data(A), attrib : A, data : []$T, loc := #caller_location) {
 
 	attrib_type := odin_type_to_attribute_type(T);
 	fmt.assertf(attrib_type != .invalid, "The datatype %v is not a valid attribute type", type_info_of(T), loc = loc);
@@ -78,7 +78,7 @@ set_mesh_attribute :: proc(mesh_data : ^Mesh_data, attrib : Attribute_location, 
 }
 
 //TODO allow option not to copy memeory
-set_mesh_indices :: proc(mesh_data : ^Mesh_data(A), data : union {[]u16, []u32}, loc := #caller_location) {
+set_mesh_indices :: proc(s : ^Render_state($U,$A), mesh_data : ^Mesh_data(A), data : union {[]u16, []u32}, loc := #caller_location) {
 	
 	if d, ok := data.([]u16); ok {
 		indices : []u16 = make([]u16, len(d));
@@ -96,9 +96,9 @@ set_mesh_indices :: proc(mesh_data : ^Mesh_data(A), data : union {[]u16, []u32},
 }
 
 // Creates pointers to begin async upload  
-upload_mesh_single :: proc (using mesh : ^Mesh, dyn : bool = false, loc := #caller_location) {
+upload_mesh_single :: proc (using s : ^Render_state($U,$A), mesh : ^Mesh(A), dyn : bool = false, loc := #caller_location) {
 	
-	upload_mesh_data :: proc(using mesh : ^Mesh_data, dyn : bool, loc := #caller_location) -> (identifiers : Mesh_identifiers(A)) {
+	upload_mesh_data :: proc(using s : ^Render_state($U,$A), mesh : ^Mesh_data(A), dyn : bool, loc := #caller_location) -> (identifiers : Mesh_identifiers(A)) {
 		
 		identifiers.vao_id = 0;        // Vertex Array Object
 
@@ -154,16 +154,16 @@ upload_mesh_single :: proc (using mesh : ^Mesh, dyn : bool = false, loc := #call
 }
 
 // Unload mesh from memory (RAM and VRAM)
-unload_mesh_single :: proc(using mesh : ^Mesh, loc := #caller_location) {
+unload_mesh_single :: proc(using s : ^Render_state($U,$A), mesh : ^Mesh(A), loc := #caller_location) {
 
 	assert(mesh.implementation != nil, "The mesh is not uploaded", loc = loc);
 
-	if identifiers, ok := mesh.implementation.(Mesh_identifiers); ok {
+	if identifiers, ok := mesh.implementation.(Mesh_identifiers(A)); ok {
 		
 		unload_vertex_array(s, identifiers.vao_id);
 		identifiers.vao_id = 0;
 
-		for i in Attribute_location {
+		for i in A {
 			if identifiers.vbo_id[i] != 0 {
 				unload_vertex_buffer(s, identifiers.vbo_id[i], loc = loc);
 				identifiers.vbo_id[i] = -1;
@@ -197,7 +197,7 @@ unload_mesh_single :: proc(using mesh : ^Mesh, loc := #caller_location) {
 	}
 }
 
-draw_mesh_single :: proc (using shader : Shader(U, A), mesh : Mesh(A), transform : matrix[4, 4]f32, loc := #caller_location) {
+draw_mesh_single :: proc (using s : ^Render_state($U,$A), shader : Shader(U, A), mesh : Mesh(A), transform : matrix[4, 4]f32, loc := #caller_location) {
 	
 	when ODIN_DEBUG {
 		assert(shader.id == s.bound_shader_program, "The shader must be bound before drawing with it", loc = loc);
@@ -245,27 +245,27 @@ draw_mesh_single :: proc (using shader : Shader(U, A), mesh : Mesh(A), transform
 	}
 }
 
-calculate_tangents :: proc (using mesh : ^Mesh(A)) {
+calculate_tangents :: proc (using s : ^Render_state($U,$A), mesh : ^Mesh(A)) {
 	//TODO
 	panic("TODO");
 }
 
 @(private)
-cond_free :: proc(using to_free : rawptr, loc := #caller_location) {
+cond_free :: proc(using s : ^Render_state($U,$A), to_free : rawptr, loc := #caller_location) {
 	if to_free != nil {
 		free(to_free, loc = loc);
 	}
 }	
 
 @(private)
-cond_delete :: proc(using to_delete : $T, loc := #caller_location) {
+cond_delete :: proc(using s : ^Render_state($U,$A), to_delete : $T, loc := #caller_location) {
 	if to_delete != nil {
 		delete(to_delete, loc = loc);
 	}
 }	
 
 //This will not upload it
-generate_quad :: proc(using size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> Mesh(A) {
+generate_quad :: proc(using s : ^Render_state($U,$A), size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> Mesh(A) {
 
 	quad : Mesh(A);
 
@@ -328,7 +328,7 @@ generate_quad :: proc(using size : [3]f32, position : [3]f32, use_index_buffer :
 	return quad;
 }
 
-generate_circle :: proc(using diameter : f32, positon : [2]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (circle : Mesh(A)) {
+generate_circle :: proc(using s : ^Render_state($U,$A), diameter : f32, positon : [2]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (circle : Mesh(A)) {
 
 	vertices := make([dynamic][2]f32, 0, 3 * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 3 * (sectors+1), context.temp_allocator);
@@ -403,7 +403,7 @@ generate_circle :: proc(using diameter : f32, positon : [2]f32, sectors : int, u
 }
 
 //This will not upload it
-generate_cube :: proc(using size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (cube : Mesh(A)) {
+generate_cube :: proc(using s : ^Render_state($U,$A), size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (cube : Mesh(A)) {
 
 	Cube_verts := [][3]f32{
 		
@@ -514,7 +514,7 @@ generate_cube :: proc(using size : [3]f32, position : [3]f32, use_index_buffer :
 }
 
 //This will not upload it
-generate_cylinder :: proc(using offset : [3]f32, transform : matrix[4, 4]f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (cylinder : Mesh(A)) {
+generate_cylinder :: proc(using s : ^Render_state($U,$A), offset : [3]f32, transform : matrix[4, 4]f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (cylinder : Mesh(A)) {
 
 	vertices := make([dynamic][3]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
@@ -586,7 +586,7 @@ generate_cylinder :: proc(using offset : [3]f32, transform : matrix[4, 4]f32, st
 }
 
 //This will not upload it
-generate_sphere :: proc(using offset : [3]f32 = {0,0,0}, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (sphere : Mesh(A)) {
+generate_sphere :: proc(using s : ^Render_state($U,$A), offset : [3]f32 = {0,0,0}, transform : matrix[4, 4]f32 = linalg.MATRIX4F32_IDENTITY, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (sphere : Mesh(A)) {
 
 	vertices := make([dynamic][3]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);
 	texcoords := make([dynamic][2]f32, 0, 4 * stacks * (sectors+1), context.temp_allocator);

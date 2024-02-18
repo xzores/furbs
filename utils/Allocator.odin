@@ -105,7 +105,7 @@ investigator_allocator_proc :: proc(allocator_data: rawptr, mode: mem.Allocator_
 			data.total_usage_current -= size;
 		case .Free_All:
 			panic("investigator cannot free all", loc);
-		case .Resize:
+		case .Resize, .Resize_Non_Zeroed:
 			entry.current_usage += size - old_size;
 			data.total_usage_current += size - old_size;
 		case .Query_Features:

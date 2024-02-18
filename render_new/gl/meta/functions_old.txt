@@ -1,0 +1,963 @@
+glActiveTexture(GLenum texture)->void
+glAttachShader(GLuint program, GLuint shader)->void
+glBindAttribLocation(GLuint program, GLuint index, GLchar *name)->void
+glBindBuffer(GLenum target, GLuint buffer)->void
+glBindFramebuffer(GLenum target, GLuint framebuffer)->void
+glBindRenderbuffer(GLenum target, GLuint renderbuffer)->void
+glBindTexture(GLenum target, GLuint texture)->void
+glBlendColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)->void
+glBlendEquation(GLenum mode)->void
+glBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha)->void
+glBlendFunc(GLenum sfactor, GLenum dfactor)->void
+glBlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha)->void
+glBufferData(GLenum target, GLsizeiptr size, void *data, GLenum usage)->void
+glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, void *data)->void
+glCheckFramebufferStatus(GLenum target)->GLenum
+glClear(GLbitfield mask)->void
+glClearColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)->void
+glClearDepth(GLdouble depth)->void
+glClearStencil(GLint s)->void
+glColorMask(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)->void
+glCompileShader(GLuint shader)->void
+glCompressedTexImage2D(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, void *data)->void
+glCompressedTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, void *data)->void
+glCopyTexImage2D(GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLsizei height, GLint border)->void
+glCopyTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height)->void
+glCreateProgram()->GLuint
+glCreateShader(GLenum type)->GLuint
+glCullFace(GLenum mode)->void
+glDeleteBuffers(GLsizei n, GLuint *buffers)->void
+glDeleteFramebuffers(GLsizei n, GLuint *framebuffers)->void
+glDeleteProgram(GLuint program)->void
+glDeleteRenderbuffers(GLsizei n, GLuint *renderbuffers)->void
+glDeleteShader(GLuint shader)->void
+glDeleteTextures(GLsizei n, GLuint *textures)->void
+glDepthFunc(GLenum func)->void
+glDepthMask(GLboolean flag)->void
+glDepthRange(GLdouble nearVal, GLdouble farVal)->void
+glDetachShader(GLuint program, GLuint shader)->void
+glDisable(GLenum cap)->void
+glDisableVertexAttribArray(GLuint index)->void
+glDrawArrays(GLenum mode, GLint first, GLsizei count)->void
+glDrawElements(GLenum mode, GLsizei count, GLenum type, void *indices)->void
+glEnable(GLenum cap)->void
+glEnableVertexAttribArray(GLuint index)->void
+glFinish()->void
+glFlush()->void
+glFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)->void
+glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)->void
+glFrontFace(GLenum mode)->void
+glGenBuffers(GLsizei n, GLuint *buffers)->void
+glGenFramebuffers(GLsizei n, GLuint *framebuffers)->void
+glGenRenderbuffers(GLsizei n, GLuint *renderbuffers)->void
+glGenTextures(GLsizei n, GLuint *textures)->void
+glGenerateMipmap(GLenum target)->void
+glGetActiveAttrib(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name)->void
+glGetActiveUniform(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name)->void
+glGetAttachedShaders(GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders)->void
+glGetAttribLocation(GLuint program, GLchar *name)->GLint
+glGetBooleanv(GLenum pname, GLboolean *data)->void
+glGetBufferParameteriv(GLenum target, GLenum pname, GLint *params)->void
+glGetError()->GLenum
+glGetFloatv(GLenum pname, GLfloat *data)->void
+glGetFramebufferAttachmentParameteriv(GLenum target, GLenum attachment, GLenum pname, GLint *params)->void
+glGetIntegerv(GLenum pname, GLint *data)->void
+glGetProgramInfoLog(GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog)->void
+glGetProgramiv(GLuint program, GLenum pname, GLint *params)->void
+glGetRenderbufferParameteriv(GLenum target, GLenum pname, GLint *params)->void
+glGetShaderInfoLog(GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog)->void
+glGetShaderSource(GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *source)->void
+glGetShaderiv(GLuint shader, GLenum pname, GLint *params)->void
+glGetString(GLenum name)->GLubyte *
+glGetTexParameterfv(GLenum target, GLenum pname, GLfloat *params)->void
+glGetTexParameteriv(GLenum target, GLenum pname, GLint *params)->void
+glGetUniformLocation(GLuint program, GLchar *name)->GLint
+glGetUniformfv(GLuint program, GLint location, GLfloat *params)->void
+glGetUniformiv(GLuint program, GLint location, GLint *params)->void
+glGetVertexAttribPointerv(GLuint index, GLenum pname, void **pointer)->void
+glGetVertexAttribdv(GLuint index, GLenum pname, GLdouble *params)->void
+glGetVertexAttribfv(GLuint index, GLenum pname, GLfloat *params)->void
+glGetVertexAttribiv(GLuint index, GLenum pname, GLint *params)->void
+glHint(GLenum target, GLenum mode)->void
+glIsBuffer(GLuint buffer)->GLboolean
+glIsEnabled(GLenum cap)->GLboolean
+glIsFramebuffer(GLuint framebuffer)->GLboolean
+glIsProgram(GLuint program)->GLboolean
+glIsRenderbuffer(GLuint renderbuffer)->GLboolean
+glIsShader(GLuint shader)->GLboolean
+glIsTexture(GLuint texture)->GLboolean
+glLineWidth(GLfloat width)->void
+glLinkProgram(GLuint program)->void
+glPixelStorei(GLenum pname, GLint param)->void
+glPolygonOffset(GLfloat factor, GLfloat units)->void
+glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *data)->void
+glReleaseShaderCompiler()->void
+glRenderbufferStorage(GLenum target, GLenum internalformat, GLsizei width, GLsizei height)->void
+glSampleCoverage(GLfloat value, GLboolean invert)->void
+glScissor(GLint x, GLint y, GLsizei width, GLsizei height)->void
+glShaderSource(GLuint shader, GLsizei count, GLchar **string, GLint *length)->void
+glStencilFunc(GLenum func, GLint ref, GLuint mask)->void
+glStencilFuncSeparate(GLenum face, GLenum func, GLint ref, GLuint mask)->void
+glStencilMask(GLuint mask)->void
+glStencilMaskSeparate(GLenum face, GLuint mask)->void
+glStencilOp(GLenum fail, GLenum zfail, GLenum zpass)->void
+glStencilOpSeparate(GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)->void
+glTexImage2D(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, void *data)->void
+glTexParameterf(GLenum target, GLenum pname, GLfloat param)->void
+glTexParameterfv(GLenum target, GLenum pname, GLfloat *params)->void
+glTexParameteri(GLenum target, GLenum pname, GLint param)->void
+glTexParameteriv(GLenum target, GLenum pname, GLint *params)->void
+glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, void *data)->void
+glUniform1f(GLint location, GLfloat v0)->void
+glUniform1fv(GLint location, GLsizei count, GLfloat *value)->void
+glUniform1i(GLint location, GLint v0)->void
+glUniform1iv(GLint location, GLsizei count, GLint *value)->void
+glUniform2f(GLint location, GLfloat v0, GLfloat v1)->void
+glUniform2fv(GLint location, GLsizei count, GLfloat *value)->void
+glUniform2i(GLint location, GLint v0, GLint v1)->void
+glUniform2iv(GLint location, GLsizei count, GLint *value)->void
+glUniform3f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2)->void
+glUniform3fv(GLint location, GLsizei count, GLfloat *value)->void
+glUniform3i(GLint location, GLint v0, GLint v1, GLint v2)->void
+glUniform3iv(GLint location, GLsizei count, GLint *value)->void
+glUniform4f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3)->void
+glUniform4fv(GLint location, GLsizei count, GLfloat *value)->void
+glUniform4i(GLint location, GLint v0, GLint v1, GLint v2, GLint v3)->void
+glUniform4iv(GLint location, GLsizei count, GLint *value)->void
+glUniformMatrix2fv(GLint location, GLsizei count, GLboolean transpose, GLfloat *value)->void
+glUniformMatrix3fv(GLint location, GLsizei count, GLboolean transpose, GLfloat *value)->void
+glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, GLfloat *value)->void
+glUseProgram(GLuint program)->void
+glValidateProgram(GLuint program)->void
+glVertexAttrib1f(GLuint index, GLfloat x)->void
+glVertexAttrib1fv(GLuint index, GLfloat *v)->void
+glVertexAttrib2f(GLuint index, GLfloat x, GLfloat y)->void
+glVertexAttrib2fv(GLuint index, GLfloat *v)->void
+glVertexAttrib3f(GLuint index, GLfloat x, GLfloat y, GLfloat z)->void
+glVertexAttrib3fv(GLuint index, GLfloat *v)->void
+glVertexAttrib4f(GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w)->void
+glVertexAttrib4fv(GLuint index, GLfloat *v)->void
+glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, void *pointer)->void
+glViewport(GLint x, GLint y, GLsizei width, GLsizei height)->void
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pls make a complete list of the following OpenGL functions calls in the following format:
+function_name(type arg_0, type arg_1, ....)->return_type 
+with one function per line.
+
+Examples:
+"
+glVertexAttribFormat( GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset)->void
+CullFace(GLenum mode)->void
+"
+
+Here are the functions, keep the odering:
+"
+CullFace
+FrontFace
+Hint
+LineWidth
+PointSize
+PolygonMode
+Scissor
+TexParameterf
+TexParameterfv
+TexParameteri
+TexParameteriv
+TexImage1D
+TexImage2D
+DrawBuffer
+Clear
+ClearColor
+ClearStencil
+ClearDepth
+StencilMask
+ColorMask
+DepthMask
+Disable
+Enable
+Finish
+Flush
+BlendFunc
+LogicOp
+StencilFunc
+StencilOp
+DepthFunc
+PixelStoref
+PixelStorei
+ReadBuffer
+ReadPixels
+GetBooleanv
+GetDoublev
+GetError
+GetFloatv
+GetIntegerv
+GetString
+GetTexImage
+GetTexParameterfv
+GetTexParameteriv
+GetTexLevelParameterfv
+GetTexLevelParameteriv
+IsEnabled
+DepthRange
+Viewport
+DrawArrays
+DrawElements
+PolygonOffset
+CopyTexImage1D
+CopyTexImage2D
+CopyTexSubImage1D
+CopyTexSubImage2D
+TexSubImage1D
+TexSubImage2D
+BindTexture
+DeleteTextures
+GenTextures
+IsTexture
+DrawRangeElements
+TexImage3D
+TexSubImage3D
+CopyTexSubImage3D
+ActiveTexture
+SampleCoverage
+CompressedTexImage3D
+CompressedTexImage2D
+CompressedTexImage1D
+CompressedTexSubImage3D
+CompressedTexSubImage2D
+CompressedTexSubImage1D
+GetCompressedTexImage
+BlendFuncSeparate
+MultiDrawArrays
+MultiDrawElements
+PointParameterf
+PointParameterfv
+PointParameteri
+PointParameteriv
+BlendColor
+BlendEquation
+GenQueries
+DeleteQueries
+IsQuery
+BeginQuery
+EndQuery
+GetQueryiv
+GetQueryObjectiv
+GetQueryObjectuiv
+BindBuffer
+DeleteBuffers
+GenBuffers
+IsBuffer
+BufferData
+BufferSubData
+GetBufferSubData
+MapBuffer
+UnmapBuffer
+GetBufferParameteriv
+GetBufferPointerv
+BlendEquationSeparate
+DrawBuffers
+StencilOpSeparate
+StencilFuncSeparate
+StencilMaskSeparate
+AttachShader
+BindAttribLocation
+CompileShader
+CreateProgram
+CreateShader
+DeleteProgram
+DeleteShader
+DetachShader
+DisableVertexAttribArray
+EnableVertexAttribArray
+GetActiveAttrib
+GetActiveUniform
+GetAttachedShaders
+GetAttribLocation
+GetProgramiv
+GetProgramInfoLog
+GetShaderiv
+GetShaderInfoLog
+GetShaderSource
+GetUniformLocation
+GetUniformfv
+GetUniformiv
+GetVertexAttribdv
+GetVertexAttribfv
+GetVertexAttribiv
+GetVertexAttribPointerv
+IsProgram
+IsShader
+LinkProgram
+ShaderSource
+UseProgram
+Uniform1f
+Uniform2f
+Uniform3f
+Uniform4f
+Uniform1i
+Uniform2i
+Uniform3i
+Uniform4i
+Uniform1fv
+Uniform2fv
+Uniform3fv
+Uniform4fv
+Uniform1iv
+Uniform2iv
+Uniform3iv
+Uniform4iv
+UniformMatrix2fv
+UniformMatrix3fv
+UniformMatrix4fv
+ValidateProgram
+VertexAttrib1d
+VertexAttrib1dv
+VertexAttrib1f
+VertexAttrib1fv
+VertexAttrib1s
+VertexAttrib1sv
+VertexAttrib2d
+VertexAttrib2dv
+VertexAttrib2f
+VertexAttrib2fv
+VertexAttrib2s
+VertexAttrib2sv
+VertexAttrib3d
+VertexAttrib3dv
+VertexAttrib3f
+VertexAttrib3fv
+VertexAttrib3s
+VertexAttrib3sv
+VertexAttrib4Nbv
+VertexAttrib4Niv
+VertexAttrib4Nsv
+VertexAttrib4Nub
+VertexAttrib4Nubv
+VertexAttrib4Nuiv
+VertexAttrib4Nusv
+VertexAttrib4bv
+VertexAttrib4d
+VertexAttrib4dv
+VertexAttrib4f
+VertexAttrib4fv
+VertexAttrib4iv
+VertexAttrib4s
+VertexAttrib4sv
+VertexAttrib4ubv
+VertexAttrib4uiv
+VertexAttrib4usv
+VertexAttribPointer
+UniformMatrix2x3fv
+UniformMatrix3x2fv
+UniformMatrix2x4fv
+UniformMatrix4x2fv
+UniformMatrix3x4fv
+UniformMatrix4x3fv
+ColorMaski
+GetBooleani_v
+GetIntegeri_v
+Enablei
+Disablei
+IsEnabledi
+BeginTransformFeedback
+EndTransformFeedback
+BindBufferRange
+BindBufferBase
+TransformFeedbackVaryings
+GetTransformFeedbackVarying
+ClampColor
+BeginConditionalRender
+EndConditionalRender
+VertexAttribIPointer
+GetVertexAttribIiv
+GetVertexAttribIuiv
+VertexAttribI1i
+VertexAttribI2i
+VertexAttribI3i
+VertexAttribI4i
+VertexAttribI1ui
+VertexAttribI2ui
+VertexAttribI3ui
+VertexAttribI4ui
+VertexAttribI1iv
+VertexAttribI2iv
+VertexAttribI3iv
+VertexAttribI4iv
+VertexAttribI1uiv
+VertexAttribI2uiv
+VertexAttribI3uiv
+VertexAttribI4uiv
+VertexAttribI4bv
+VertexAttribI4sv
+VertexAttribI4ubv
+VertexAttribI4usv
+GetUniformuiv
+BindFragDataLocation
+GetFragDataLocation
+Uniform1ui
+Uniform2ui
+Uniform3ui
+Uniform4ui
+Uniform1uiv
+Uniform2uiv
+Uniform3uiv
+Uniform4uiv
+TexParameterIiv
+TexParameterIuiv
+GetTexParameterIiv
+GetTexParameterIuiv
+ClearBufferiv
+ClearBufferuiv
+ClearBufferfv
+ClearBufferfi
+GetStringi
+IsRenderbuffer
+BindRenderbuffer
+DeleteRenderbuffers
+GenRenderbuffers
+RenderbufferStorage
+GetRenderbufferParameteriv
+IsFramebuffer
+BindFramebuffer
+DeleteFramebuffers
+GenFramebuffers
+CheckFramebufferStatus
+FramebufferTexture1D
+FramebufferTexture2D
+FramebufferTexture3D
+FramebufferRenderbuffer
+GetFramebufferAttachmentParameteriv
+GenerateMipmap
+BlitFramebuffer
+RenderbufferStorageMultisample
+FramebufferTextureLayer
+MapBufferRange
+FlushMappedBufferRange
+BindVertexArray
+DeleteVertexArrays
+GenVertexArrays
+IsVertexArray
+DrawArraysInstanced
+DrawElementsInstanced
+TexBuffer
+PrimitiveRestartIndex
+CopyBufferSubData
+GetUniformIndices
+GetActiveUniformsiv
+GetActiveUniformName
+GetUniformBlockIndex
+GetActiveUniformBlockiv
+GetActiveUniformBlockName
+UniformBlockBinding
+DrawElementsBaseVertex
+DrawRangeElementsBaseVertex
+DrawElementsInstancedBaseVertex
+MultiDrawElementsBaseVertex
+ProvokingVertex
+FenceSync
+IsSync
+DeleteSync
+ClientWaitSync
+WaitSync
+GetInteger64v
+GetSynciv
+GetInteger64i_v
+GetBufferParameteri64v
+FramebufferTexture
+TexImage2DMultisample
+TexImage3DMultisample
+GetMultisamplefv
+SampleMaski
+BindFragDataLocationIndexed
+GetFragDataIndex
+GenSamplers
+DeleteSamplers
+IsSampler
+BindSampler
+SamplerParameteri
+SamplerParameteriv
+SamplerParameterf
+SamplerParameterfv
+SamplerParameterIiv
+SamplerParameterIuiv
+GetSamplerParameteriv
+GetSamplerParameterIiv
+GetSamplerParameterfv
+GetSamplerParameterIuiv
+QueryCounter
+GetQueryObjecti64v
+GetQueryObjectui64v
+VertexAttribDivisor
+VertexAttribP1ui
+VertexAttribP1uiv
+VertexAttribP2ui
+VertexAttribP2uiv
+VertexAttribP3ui
+VertexAttribP3uiv
+VertexAttribP4ui
+VertexAttribP4uiv
+VertexP2ui
+VertexP2uiv
+VertexP3ui
+VertexP3uiv
+VertexP4ui
+VertexP4uiv
+TexCoordP1ui
+TexCoordP1uiv
+TexCoordP2ui
+TexCoordP2uiv
+TexCoordP3ui
+TexCoordP3uiv
+TexCoordP4ui
+TexCoordP4uiv
+MultiTexCoordP1ui
+MultiTexCoordP1uiv
+MultiTexCoordP2ui
+MultiTexCoordP2uiv
+MultiTexCoordP3ui
+MultiTexCoordP3uiv
+MultiTexCoordP4ui
+MultiTexCoordP4uiv
+NormalP3ui
+NormalP3uiv
+ColorP3ui
+ColorP3uiv
+ColorP4ui
+ColorP4uiv
+SecondaryColorP3ui
+SecondaryColorP3uiv
+MinSampleShading
+BlendEquationi
+BlendEquationSeparatei
+BlendFunci
+BlendFuncSeparatei
+DrawArraysIndirect
+DrawElementsIndirect
+Uniform1d
+Uniform2d
+Uniform3d
+Uniform4d
+Uniform1dv
+Uniform2dv
+Uniform3dv
+Uniform4dv
+UniformMatrix2dv
+UniformMatrix3dv
+UniformMatrix4dv
+UniformMatrix2x3dv
+UniformMatrix2x4dv
+UniformMatrix3x2dv
+UniformMatrix3x4dv
+UniformMatrix4x2dv
+UniformMatrix4x3dv
+GetUniformdv
+GetSubroutineUniformLocation
+GetSubroutineIndex
+GetActiveSubroutineUniformiv
+GetActiveSubroutineUniformName
+GetActiveSubroutineName
+UniformSubroutinesuiv
+GetUniformSubroutineuiv
+GetProgramStageiv
+PatchParameteri
+PatchParameterfv
+BindTransformFeedback
+DeleteTransformFeedbacks
+GenTransformFeedbacks
+IsTransformFeedback
+PauseTransformFeedback
+ResumeTransformFeedback
+DrawTransformFeedback
+DrawTransformFeedbackStream
+BeginQueryIndexed
+EndQueryIndexed
+GetQueryIndexediv
+GetTextureHandleARB
+GetTextureSamplerHandleARB
+GetImageHandleARB
+MakeTextureHandleResidentARB
+MakeImageHandleResidentARB
+MakeTextureHandleNonResidentARB
+MakeImageHandleNonResidentARB
+ReleaseShaderCompiler
+ShaderBinary
+GetShaderPrecisionFormat
+DepthRangef
+ClearDepthf
+GetProgramBinary
+ProgramBinary
+ProgramParameteri
+UseProgramStages
+ActiveShaderProgram
+CreateShaderProgramv
+BindProgramPipeline
+DeleteProgramPipelines
+GenProgramPipelines
+IsProgramPipeline
+GetProgramPipelineiv
+ProgramUniform1i
+ProgramUniform1iv
+ProgramUniform1f
+ProgramUniform1fv
+ProgramUniform1d
+ProgramUniform1dv
+ProgramUniform1ui
+ProgramUniform1uiv
+ProgramUniform2i
+ProgramUniform2iv
+ProgramUniform2f
+ProgramUniform2fv
+ProgramUniform2d
+ProgramUniform2dv
+ProgramUniform2ui
+ProgramUniform2uiv
+ProgramUniform3i
+ProgramUniform3iv
+ProgramUniform3f
+ProgramUniform3fv
+ProgramUniform3d
+ProgramUniform3dv
+ProgramUniform3ui
+ProgramUniform3uiv
+ProgramUniform4i
+ProgramUniform4iv
+ProgramUniform4f
+ProgramUniform4fv
+ProgramUniform4d
+ProgramUniform4dv
+ProgramUniform4ui
+ProgramUniform4uiv
+ProgramUniformMatrix2fv
+ProgramUniformMatrix3fv
+ProgramUniformMatrix4fv
+ProgramUniformMatrix2dv
+ProgramUniformMatrix3dv
+ProgramUniformMatrix4dv
+ProgramUniformMatrix2x3fv
+ProgramUniformMatrix3x2fv
+ProgramUniformMatrix2x4fv
+ProgramUniformMatrix4x2fv
+ProgramUniformMatrix3x4fv
+ProgramUniformMatrix4x3fv
+ProgramUniformMatrix2x3dv
+ProgramUniformMatrix3x2dv
+ProgramUniformMatrix2x4dv
+ProgramUniformMatrix4x2dv
+ProgramUniformMatrix3x4dv
+ProgramUniformMatrix4x3dv
+ValidateProgramPipeline
+GetProgramPipelineInfoLog
+VertexAttribL1d
+VertexAttribL2d
+VertexAttribL3d
+VertexAttribL4d
+VertexAttribL1dv
+VertexAttribL2dv
+VertexAttribL3dv
+VertexAttribL4dv
+VertexAttribLPointer
+GetVertexAttribLdv
+ViewportArrayv
+ViewportIndexedf
+ViewportIndexedfv
+ScissorArrayv
+ScissorIndexed
+ScissorIndexedv
+DepthRangeArrayv
+DepthRangeIndexed
+GetFloati_v
+GetDoublei_v
+DrawArraysInstancedBaseInstance
+DrawElementsInstancedBaseInstance
+DrawElementsInstancedBaseVertexBaseInstance
+GetInternalformativ
+GetActiveAtomicCounterBufferiv
+BindImageTexture
+MemoryBarrier
+TexStorage1D
+TexStorage2D
+TexStorage3D
+DrawTransformFeedbackInstanced
+DrawTransformFeedbackStreamInstanced
+ClearBufferData
+ClearBufferSubData
+DispatchCompute
+DispatchComputeIndirect
+CopyImageSubData
+FramebufferParameteri
+GetFramebufferParameteriv
+GetInternalformati64v
+InvalidateTexSubImage
+InvalidateTexImage
+InvalidateBufferSubData
+InvalidateBufferData
+InvalidateFramebuffer
+InvalidateSubFramebuffer
+MultiDrawArraysIndirect
+MultiDrawElementsIndirect
+GetProgramInterfaceiv
+GetProgramResourceIndex
+GetProgramResourceName
+GetProgramResourceiv
+GetProgramResourceLocation
+GetProgramResourceLocationIndex
+ShaderStorageBlockBinding
+TexBufferRange
+TexStorage2DMultisample
+TexStorage3DMultisample
+TextureView
+BindVertexBuffer
+VertexAttribFormat
+VertexAttribIFormat
+VertexAttribLFormat
+VertexAttribBinding
+VertexBindingDivisor
+DebugMessageControl
+DebugMessageInsert
+DebugMessageCallback
+GetDebugMessageLog
+PushDebugGroup
+PopDebugGroup
+ObjectLabel
+GetObjectLabel
+ObjectPtrLabel
+GetObjectPtrLabel
+BufferStorage
+ClearTexImage
+ClearTexSubImage
+BindBuffersBase
+BindBuffersRange
+BindTextures
+BindSamplers
+BindImageTextures
+BindVertexBuffers
+ClipControl
+CreateTransformFeedbacks
+TransformFeedbackBufferBase
+TransformFeedbackBufferRange
+GetTransformFeedbackiv
+GetTransformFeedbacki_v
+GetTransformFeedbacki64_v
+CreateBuffers
+NamedBufferStorage
+NamedBufferData
+NamedBufferSubData
+CopyNamedBufferSubData
+ClearNamedBufferData
+ClearNamedBufferSubData
+MapNamedBuffer
+MapNamedBufferRange
+UnmapNamedBuffer
+FlushMappedNamedBufferRange
+GetNamedBufferParameteriv
+GetNamedBufferParameteri64v
+GetNamedBufferPointerv
+GetNamedBufferSubData
+CreateFramebuffers
+NamedFramebufferRenderbuffer
+NamedFramebufferParameteri
+NamedFramebufferTexture
+NamedFramebufferTextureLayer
+NamedFramebufferDrawBuffer
+NamedFramebufferDrawBuffers
+NamedFramebufferReadBuffer
+InvalidateNamedFramebufferData
+InvalidateNamedFramebufferSubData
+ClearNamedFramebufferiv
+ClearNamedFramebufferuiv
+ClearNamedFramebufferfv
+ClearNamedFramebufferfi
+BlitNamedFramebuffer
+CheckNamedFramebufferStatus
+GetNamedFramebufferParameteriv
+GetNamedFramebufferAttachmentParameteriv
+CreateRenderbuffers
+NamedRenderbufferStorage
+NamedRenderbufferStorageMultisample
+GetNamedRenderbufferParameteriv
+CreateTextures
+TextureBuffer
+TextureBufferRange
+TextureStorage1D
+TextureStorage2D
+TextureStorage3D
+TextureStorage2DMultisample
+TextureStorage3DMultisample
+TextureSubImage1D
+TextureSubImage2D
+TextureSubImage3D
+CompressedTextureSubImage1D
+CompressedTextureSubImage2D
+CompressedTextureSubImage3D
+CopyTextureSubImage1D
+CopyTextureSubImage2D
+CopyTextureSubImage3D
+TextureParameterf
+TextureParameterfv
+TextureParameteri
+TextureParameterIiv
+TextureParameterIuiv
+TextureParameteriv
+GenerateTextureMipmap
+BindTextureUnit
+GetTextureImage
+GetCompressedTextureImage
+GetTextureLevelParameterfv
+GetTextureLevelParameteriv
+GetTextureParameterfv
+GetTextureParameterIiv
+GetTextureParameterIuiv
+GetTextureParameteriv
+CreateVertexArrays
+DisableVertexArrayAttrib
+EnableVertexArrayAttrib
+VertexArrayElementBuffer
+VertexArrayVertexBuffer
+VertexArrayVertexBuffers
+VertexArrayAttribBinding
+VertexArrayAttribFormat
+VertexArrayAttribIFormat
+VertexArrayAttribLFormat
+VertexArrayBindingDivisor
+GetVertexArrayiv
+GetVertexArrayIndexediv
+GetVertexArrayIndexed64iv
+CreateSamplers
+CreateProgramPipelines
+CreateQueries
+GetQueryBufferObjecti64v
+GetQueryBufferObjectiv
+GetQueryBufferObjectui64v
+GetQueryBufferObjectuiv
+MemoryBarrierByRegion
+GetTextureSubImage
+GetCompressedTextureSubImage
+GetGraphicsResetStatus
+GetnCompressedTexImage
+GetnTexImage
+GetnUniformdv
+GetnUniformfv
+GetnUniformiv
+GetnUniformuiv
+ReadnPixels
+GetnMapdv
+GetnMapfv
+GetnMapiv
+GetnPixelMapusv
+GetnPixelMapfv
+GetnPixelMapuiv
+GetnPolygonStipple
+GetnColorTable
+GetnConvolutionFilter
+GetnSeparableFilter
+GetnHistogram
+GetnMinmax
+TextureBarrier
+GetUnsignedBytevEXT
+TexPageCommitmentARB
+SpecializeShader
+MultiDrawArraysIndirectCount
+MultiDrawElementsIndirectCount
+PolygonOffsetClamp
+"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -32,7 +32,7 @@ opengl_version : GL_version;
 
 /////////// Optional helpers stuff ////////////
 
-shapes_buffer : Mesh_buffer; //TODO unused
+//TODO shapes_buffer : Mesh_buffer; //TODO unused
 gui_shader : Shader;
 white_texture : Texture2D; //Use get_white_texture to get it as it will init it if it is not.
 

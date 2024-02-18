@@ -1,0 +1,16 @@
+package vendor_gl;
+
+when ODIN_DEBUG {
+////////functions without return values////////
+	@no_return $function$ :: proc "c" ($args_defs$£loc := #caller_location) { impl_$function$($args_pass_cast$); debug_helper(loc, nil, $args_pass$); };
+
+////////functions with return values////////
+	@return $function$ :: proc "c" ($args_defs$£loc := #caller_location) -> $return_type$ {  ret : $return_type$ = auto_cast impl_$function$($args_pass_cast$); debug_helper(loc, ret, $args_pass$); return ret; };
+}
+else {
+	//functions without return values
+	@no_return $function$ :: proc "c" ($args_defs$) { impl_$function$($args_pass_cast$); };
+
+	//functions with return values
+	@return $function$ :: proc "c" ($args_defs$) -> $return_type$ { $return_cond$ impl_$function$($args_pass_cast$); };
+}
