@@ -9,6 +9,8 @@ import "core:path/filepath"
 
 import "gl"
 
+import glgl "gl/OpenGL"
+
 Shader :: struct {
 	id : Shader_program_id,                 					// Shader program id
 	name : string,
@@ -80,7 +82,86 @@ Preprocessor :: struct {
 }
 
 bind_shader :: proc(shader : ^Shader) {
-	gl.use_program(shader.id);
+	gl.bind_shader_program(shader.id);
+	state.bound_shader = shader;
+}
+
+unbind_shader :: proc(shader : ^Shader) {
+	gl.unbind_shader_program();
+	state.bound_shader = nil;
+}
+
+uniform_odin_type :: union {
+	f32,
+	[2]f32,
+	[3]f32,
+	[4]f32,
+	i32,
+	[2]i32,
+	[3]i32,
+	[4]i32,
+	u32,
+	[2]u32,
+	[3]u32,
+	[4]u32,
+	matrix[2,2]f32,
+	matrix[3,3]f32,
+	matrix[4,4]f32,
+	//matrix[2,3]f32,
+	//matrix[3,2]f32,
+	//matrix[2,4]f32,
+	//matrix[4,2]f32,
+	//matrix[3,4]f32,
+	//matrix[4,3]f32,
+}
+
+set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : uniform_odin_type, loc := #caller_location) {
+	using glgl;
+	
+	//fmt.printf("shader.uniform_locations : %#v\n\n\n", shader.uniform_locations);
+	if !shader.uniform_locations[uniform].active {
+		return;
+	}
+
+	u_loc : i32 = cast(i32) shader.uniform_locations[uniform].location;
+
+	switch &v in value {
+		case f32:
+			Uniform1f(u_loc, v);
+		case [2]f32:
+			Uniform2f(u_loc, v.x, v.y);
+		case [3]f32:
+			Uniform3f(u_loc, v.x, v.y, v.z);
+		case [4]f32:
+			Uniform4f(u_loc, v.x, v.y, v.z, v.w);
+
+		case i32:
+			Uniform1i(u_loc, v);
+		case [2]i32:
+			Uniform2i(u_loc, v.x, v.y);
+		case [3]i32:
+			Uniform3i(u_loc, v.x, v.y, v.z);
+		case [4]i32:
+			Uniform4i(u_loc, v.x, v.y, v.z, v.w);
+
+		case u32:
+			Uniform1ui(u_loc, v);
+		case [2]u32:
+			Uniform2ui(u_loc, v.x, v.y);
+		case [3]u32:
+			Uniform3ui(u_loc, v.x, v.y, v.z);
+		case [4]u32:
+			Uniform4ui(u_loc, v.x, v.y, v.z, v.w);
+
+		case matrix[2,2]f32:
+			UniformMatrix2fv(u_loc, 1, false, &v[0,0]);
+		case matrix[3,3]f32:
+			UniformMatrix3fv(u_loc, 1, false, &v[0,0]);
+		case matrix[4,4]f32:
+			UniformMatrix4fv(u_loc, 1, false, &v[0,0]);
+	}
+
+	//fmt.printf("setting uniform %v, at location : %v, with value : %v", uniform, u_loc, value);
 }
 
 run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : string, src : string, path : string) -> (vertex_src : string, fragment_src : string){
@@ -384,7 +465,6 @@ load_shader_from_src :: proc(name : string, combined_src : string, path : string
 		}
 		
 		value := uniform_names[u_name];
-		fmt.assertf(uniform.location == cast(Uniform_id)value, "The uniform '%v' has an invalid placement, use 'layout(location = %v)' in shader : %v to fix", u_name, cast(int)value, name, loc = loc);
 		shader.uniform_locations[value] = uniform;
 	}
 	

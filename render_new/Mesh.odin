@@ -6,6 +6,9 @@ import "core:runtime"
 import "core:mem"
 import "core:slice"
 
+import glsl "core:math/linalg/glsl"
+import linalg "core:math/linalg"
+
 import "gl"
 import glgl "gl/OpenGL"
 
@@ -83,15 +86,15 @@ get_attribute_info_from_typeid :: proc (t : typeid, loc := #caller_location) -> 
 }
 
 //mesh should be more complex, as it needs to handle:
-	//static meshes
-	//Async upload
-	//Dynamicly changing the mesh (sync or async)
-	//LOD (swapping index buffer)
-	//Frustum culling should be a thing we handle
-	//Somehow there is also a need for instance drawing (closely realated to mesh)
-	//And we should make multidraw a thing too (with occlusion culling)
-	//If this supportes dynamic meshes, then we should have multiple VAO's
-	//How should we utilize a resource??
+	//static meshes																			- Static_mesh maybe?
+	//Async upload 																			- done
+	//Dynamicly changing the mesh (sync or async)											- done
+	//Double/triple and auto buffering														- this can be done now
+	//LOD (swapping index buffer)															
+	//Frustum culling should be a thing we handle											- We can do this when we have made a camera
+	//Somehow there is also a need for instance drawing (closely realated to mesh)			- 
+	//And we should make multidraw a thing too (with occlusion culling)						
+	//If this supportes dynamic meshes, then we should have multiple VAO's					-
 Mesh :: struct {
 	
 	vertex_count : int, 					//The amount of verticies
@@ -99,6 +102,7 @@ Mesh :: struct {
 	vao : Vao_id,							
 	
 	vertex_data : gl.Resource,
+	vertex_data_fence : gl.Fence,
 
 	data_type : typeid,
 
@@ -114,8 +118,15 @@ Index_buffer_type :: enum u32 {
 	unsigned_int = glgl.UNSIGNED_INT,
 }
 
+Buffering_method :: enum {
+	single,
+	double,
+	trible,
+	auto,
+}
+
 //vertex_count may be 0 if the size is unknown at creation.
-make_mesh :: proc (vertex_count : int, data_type : typeid, index_buffer_type : Index_buffer_type, loc := #caller_location) -> Mesh {
+make_mesh :: proc (vertex_count : int, data_type : typeid, index_buffer_type : Index_buffer_type, buffering : Buffering_method = .single, loc := #caller_location) -> Mesh {
 	mesh : Mesh;
 	
 	assert(data_type != nil, "a mesh must have valid data", loc);	
@@ -153,14 +164,25 @@ make_mesh :: proc (vertex_count : int, data_type : typeid, index_buffer_type : I
 }
 
 destroy_mesh :: proc (mesh : ^Mesh) {
-
+	
+	gl.discard_fence(&mesh.vertex_data_fence);
 	gl.destroy_resource(&mesh.vertex_data);
 
 	gl.delete_vertex_array(mesh.vao);
 	mesh.vao = 0;
 }
 
+//You can upload once per frame
 upload_mesh_data :: proc(mesh : ^Mesh, data : []$T, loc := #caller_location) {
+
+	when ODIN_DEBUG {
+		if !gl.is_fence_ready(mesh.vertex_data_fence) {
+			fmt.printf("Preformence warning: upload_mesh_data sync is not ready, increase the amount of buffering\n");
+		}
+	}
+
+	gl.sync_fence(&mesh.vertex_data_fence);
+
 	assert(T == mesh.data_type, "The data type you are trying to upload does not match the meshes data type", loc);
 	assert(mesh.vertex_count == len(data), "data is not the same length as vertex count (should that be legal?)", loc);
 	
@@ -173,12 +195,21 @@ upload_mesh_data :: proc(mesh : ^Mesh, data : []$T, loc := #caller_location) {
 	gl.end_buffer_writes(&mesh.vertex_data);
 }
 
-draw_mesh_single :: proc (mesh : Mesh, loc := #caller_location) {
+draw_mesh_single :: proc (mesh : ^Mesh, model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
+	
+	set_uniform(state.bound_shader, .model_mat, model_matrix);
+	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
+
+	mvp := state.prj_mat * state.view_mat * model_matrix;
+	set_uniform(state.bound_shader, .mvp, mvp);
+	set_uniform(state.bound_shader, .inv_mvp, linalg.matrix4_inverse(mvp));
+
 	gl.draw_arrays(mesh.vao, .triangles, 0, mesh.vertex_count);
+	gl.discard_fence(&mesh.vertex_data_fence);
+	mesh.vertex_data_fence = gl.place_fence();
+
 }
-
-
-
 
 
 /*

@@ -9,6 +9,7 @@ import "core:strings"
 import "core:fmt"
 import "core:math"
 import "core:time"
+import "core:slice"
 
 import gl "OpenGL"
 import utils "../../utils"
@@ -17,8 +18,6 @@ _ :: gl.GLenum;
 
 RENDER_DEBUG	:: #config(DEBUG_RENDER, ODIN_DEBUG)
 RECORD_DEBUG 	:: #config(DEBUG_RECORD, ODIN_DEBUG)
-
-//TODO glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
 
 /////////// Opengl handles ///////////
 Shader_program_id :: distinct u32;
@@ -30,10 +29,23 @@ Uniform_id :: distinct i32;
 
 Vao_id :: distinct i32;
 Fbo_id :: distinct u32;
+Tex1d_id :: distinct u32;
+Tex2d_id :: distinct u32;
+Tex3d_id :: distinct u32;
 Rbo_id :: distinct u32;
 Buffer_id :: distinct i32; //used for generic buffers, like VBO's and EBO's
 
-Fence_id :: distinct u32;
+when RENDER_DEBUG {
+	Fence :: struct {
+		sync : gl.GLsync,
+		access_map : map[Buffer_id][dynamic]^Buffer_access,
+	}
+}
+else {
+	Fence :: struct {
+		sync : gl.GLsync,
+	}
+}
 
 MAX_COLOR_ATTACH :: 8; //If we use opengl 3.0 we can only have 4 color attachements here.
 
@@ -94,8 +106,9 @@ Attribute_primary_type :: enum u32 {
 }
 
 Uniform_info :: struct {
-	location : Uniform_id,
+	location : i32, 				//this is a per shader thing
 	uniform_type : Uniform_type,
+	active : bool,
 	array_size : i32,
 }
 
@@ -299,11 +312,8 @@ Resource_direction :: enum {
 	host_only,		//host_only is for transfers that are from GPU buffer to another GPU buffer, where the data does not go though the GPU.
 		//This should use glBufferData     flags "GL_STREAM_COPY", "GL_STATIC_COPY" or "GL_DYNAMIC_COPY" for opengl 3.3
 		//This should use glBufferStorage  flags "" (no flags) as we only want to data on the host.
-			//TODO this will generate an error if used with glMapBufferRange.
 
 }
-//TODO when to use GL_MAP_UNSYNCHRONIZED_BIT and GL_MAP_FLUSH_EXPLICIT_BIT?
-//glBufferSubData and glMapBufferRange does almost the same. I think we should only use mapping, is there a downside?
 
 Resource_usage :: enum {
 	
@@ -325,118 +335,6 @@ Resource_usage_4_4 :: enum u32 {
 	dynamic_bit = gl.DYNAMIC_STORAGE_BIT,
 	persistent_bit = gl.MAP_PERSISTENT_BIT,
 	coherent_bit = gl.MAP_COHERENT_BIT,
-}
-
-Resource_map_flags :: enum u32 {
-	persistent_bit = gl.MAP_PERSISTENT_BIT,
-	coherent_bit = gl.MAP_COHERENT_BIT,
-}
-
-@(require_results)
-translate_resource_usage_3_3 :: proc(usage : Resource_usage, direction : Resource_direction) -> (buffer_flags : Resource_usage_3_3, map_flags : u32) {
-
-	switch usage {
-		case .stream_usage:
-			switch direction {
-				case read:
-					buffer_flags = .stream_read;
-				case write:
-					buffer_flags = .stream_write;
-				case read_write:
-					buffer_flags = .stream_write;
-				case host_only:
-					buffer_flags = .stream_copy;
-			}
-		case .dynamic_usage:
-			switch direction {
-				case read:
-					buffer_flags = .dynamic_read;
-				case write:
-					buffer_flags = .dynamic_write;
-				case read_write:
-					buffer_flags = .dynamic_write;
-				case host_only:
-					buffer_flags = .dynamic_copy;
-			}
-		case .static_usage:
-			switch direction {
-				case read:
-					buffer_flags = .static_read;
-				case write:
-					buffer_flags = .static_write;
-				case read_write:
-					buffer_flags = .static_write;
-				case host_only:
-					buffer_flags = .static_copy;
-			}
-	}
-	
-	switch direction {
-		case read:
-			map_flags |= gl.MAP_READ_BIT;
-		case write:
-			map_flags |= gl.MAP_WRITE_BIT | gl.MAP_INVALIDATE_RANGE_BIT;
-		case read_write:
-			map_flags |= gl.MAP_WRITE_BIT | gl.MAP_READ_BIT;
-		case host_only:
-			map_flags |= 0; //You should NOT map a host_only buffer
-	}
-
-	return;
-}
-
-@(require_results)
-translate_resource_usage_4_4 :: proc(usage : Resource_usage, direction : Resource_direction) -> (buffer_flags : u32, map_flags : u32) {
-
-	switch usage {
-		case .stream_usage:
-			#partial switch direction {
-				case host_only: 
-					map_flags 		|= gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
-					buffer_flags 	|= gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
-				case: 
-					map_flags 		|= 0;
-					buffer_flags 	|= 0;
-			}
-		case .dynamic_usage:
-			
-			#partial switch direction {
-				case write:
-					map_flags 		|= gl.MAP_INVALIDATE_RANGE_BIT;
-				case:
-					map_flags 		|= 0;
-			}
-
-			buffer_flags 	|= gl.DYNAMIC_STORAGE_BIT
-			
-		case .static_usage:
-			#partial switch direction {
-
-				map_flags 		|= gl.MAP_INVALIDATE_RANGE_BIT;
-				buffer_flags 	|= gl.DYNAMIC_STORAGE_BIT
-			}
-	}
-	
-	switch direction {
-		case read:
-			map_flags 		|= gl.MAP_READ_BIT;
-			buffer_flags 	|= gl.MAP_READ_BIT;
-		
-		case write:
-			map_flags 		|= gl.MAP_WRITE_BIT;
-			buffer_flags 	|= gl.MAP_WRITE_BIT;
-		
-		case read_write:
-			map_flags 		|= gl.MAP_WRITE_BIT | gl.MAP_READ_BIT;
-			buffer_flags 	|= gl.MAP_WRITE_BIT | gl.MAP_READ_BIT;
-
-		case host_only:
-			buffer_flags 	|= 0; //TODO
-			map_flags 		|= 0; //You should NOT map a host_only buffer
-	}
-
-	return;
-
 }
 */
 
@@ -530,7 +428,7 @@ translate_resource_usage_4_4 :: proc(usage : Resource_usage) -> (buffer_flags : 
 		case .stream_read_write:
 			buffer_flags 	= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
 			map_flags 		= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
-		
+
 		case .stream_host_only:
 			buffer_flags 	= 0; //THERE is no good hint, here default to write
 			map_flags 		= 0; //THIS IS NOT VALID, you should not map a host only buffer
@@ -624,6 +522,185 @@ Resource :: struct {
 	using desc 		: Resource_desc,
 }
 
+
+
+/////// Textures ///////
+
+// Pixel formats
+Pixel_format_internal :: enum i32 {
+	invalid = 0,
+
+	//the ussual float formats
+	uncompressed_RGB4 = gl.RGB4,
+	uncompressed_RGBA4 = gl.RGBA4,
+
+	uncompressed_R8 = gl.R8,
+	uncompressed_RG8 = gl.RG8,
+	uncompressed_RGB8 = gl.RGB8,
+	uncompressed_RGBA8 = gl.RGBA8,
+
+	uncompressed_R16 = gl.R16,
+	uncompressed_RG16 = gl.RG16,
+	uncompressed_RGB16 = gl.RGB16,
+	uncompressed_RGBA16 = gl.RGBA16,
+
+	compressed_R8 = gl.COMPRESSED_RED,
+	compressed_RG8 = gl.COMPRESSED_RG,
+	compressed_RGB8 = gl.COMPRESSED_RGB,
+	compressed_RGBA8 = gl.COMPRESSED_RGBA,
+
+	//Some weirder formats
+	uncompressed_S_RGB8 = gl.SRGB8,
+	uncompressed_S_RGBA8 = gl.SRGB8_ALPHA8,
+
+	uncompressed_RGB5_A1 = gl.RGB5_A1, //float format, use when you need an on off alpha.
+
+	//Some int formats
+	uncompressed_int_R8 = gl.R8I,
+	uncompressed_int_RG8 = gl.RG8I,
+	uncompressed_int_RGB8 = gl.RGB8I,
+	uncompressed_int_RGBA8 = gl.RGBA8I,
+
+	uncompressed_int_R16 = gl.R16I,
+	uncompressed_int_RG16 = gl.RG16I,
+	uncompressed_int_RGB16 = gl.RGB16I,
+	uncompressed_int_RGBA16 = gl.RGBA16I,
+
+	uncompressed_int_R32 = gl.R32I,
+	uncompressed_int_RG32 = gl.RG32I,
+	uncompressed_int_RGB32 = gl.RGB32I,
+	uncompressed_int_RGBA32 = gl.RGBA32I,
+
+	//Some unsigned int formats
+	uncompressed_uint_R8 = gl.R8UI,
+	uncompressed_uint_RG8 = gl.RG8UI,
+	uncompressed_uint_RGB8 = gl.RGB8UI,
+	uncompressed_uint_RGBA8 = gl.RGBA8UI,
+
+	uncompressed_uint_R16 = gl.R16UI,
+	uncompressed_uint_RG16 = gl.RG16UI,
+	uncompressed_uint_RGB16 = gl.RGB16UI,
+	uncompressed_uint_RGBA16 = gl.RGBA16UI,
+
+	uncompressed_uint_R32 = gl.R32UI,
+	uncompressed_uint_RG32 = gl.RG32UI,
+	uncompressed_uint_RGB32 = gl.RGB32UI,
+	uncompressed_uint_RGBA32 = gl.RGBA32UI,
+}
+
+Pixel_format_upload :: enum i32 {
+	no_upload,
+
+	uncompressed_R8,
+	uncompressed_RG8,
+	uncompressed_RGB8,
+	uncompressed_RGBA8,
+
+	uncompressed_R16,
+	uncompressed_RG16,
+	uncompressed_RGB16,
+	uncompressed_RGBA16,
+	
+	uncompressed_R32,
+	uncompressed_RG32,
+	uncompressed_RGB32,
+	uncompressed_RGBA32,
+}
+
+@(require_results)
+Upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) {
+
+	switch f {
+		case .uncompressed_R8, .uncompressed_R16, .uncompressed_R32:
+			return 1;
+		case .uncompressed_RG8, .uncompressed_RG16, .uncompressed_RG32:
+			return 2;
+		case .uncompressed_RGB8, .uncompressed_RGB16, .uncompressed_RGB32:
+			return 3;
+		case .uncompressed_RGBA8, .uncompressed_RGBA16, .uncompressed_RGBA32:
+			return 4;
+		case .no_upload:
+			return 0;
+		case:
+			panic("TODO");
+	}
+
+	unreachable();
+}
+
+@(require_results)
+Upload_format_to_gl_format :: proc (f : Pixel_format_upload) -> (components : gl.GLenum) {
+
+	switch f {
+		case .uncompressed_R8, .uncompressed_R16, .uncompressed_R32:
+			return .RED;
+		case .uncompressed_RG8, .uncompressed_RG16, .uncompressed_RG32:
+			return .RG;
+		case .uncompressed_RGB8, .uncompressed_RGB16, .uncompressed_RGB32:
+			return .RGB;
+		case .uncompressed_RGBA8, .uncompressed_RGBA16, .uncompressed_RGBA32:
+			return .RGBA;
+		case .no_upload:
+			return nil;
+		case:
+			panic("TODO");
+	}
+
+	unreachable();
+}
+
+@(require_results)
+Upload_format_to_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
+
+	switch f {
+		case .uncompressed_R8, .uncompressed_RG8, .uncompressed_RGB8, .uncompressed_RGBA8:
+			return .UNSIGNED_BYTE;
+		case .uncompressed_R16, .uncompressed_RG16, .uncompressed_RGB16, .uncompressed_RGBA16:
+			return .UNSIGNED_SHORT;
+		case .uncompressed_R32, .uncompressed_RG32, .uncompressed_RGB32, .uncompressed_RGBA32:
+			return .UNSIGNED_INT;
+		case .no_upload:
+			return nil;
+		case:
+			panic("TODO");
+	}
+
+	unreachable();
+}
+
+//Size in bytes
+@(require_results)
+Upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes_per_component : int) {
+
+	switch f {
+		case .uncompressed_R8, .uncompressed_RG8, .uncompressed_RGB8, .uncompressed_RGBA8:
+			return 1;
+		case .uncompressed_R16, .uncompressed_RG16, .uncompressed_RGB16, .uncompressed_RGBA16:
+			return 2;
+		case .uncompressed_R32, .uncompressed_RG32, .uncompressed_RGB32, .uncompressed_RGBA32:
+			return 4;
+		case .no_upload:
+			return 0;
+		case:
+			panic("TODO");
+	}
+
+	unreachable();
+}
+
+Wrapmode :: enum i32 {
+	repeat = gl.REPEAT,
+	clamp_to_edge = gl.CLAMP_TO_EDGE,
+	clamp_to_border = gl.CLAMP_TO_BORDER,
+	mirrored_repeat = gl.MIRRORED_REPEAT,
+	//mirrored_clamp_to_edge = gl.MIRROR_CLAMP_TO_EDGE, //opengl 4.4 only
+}
+
+Filtermode :: enum {
+	nearest,
+	linear,
+}
+
 /////////// Helper funcs ///////////
 
 GL_version :: enum {
@@ -688,17 +765,25 @@ Source_Code_Location :: runtime.Source_Code_Location;
 
 when RENDER_DEBUG {
 
+	Buffer_access :: struct {
+		location : runtime.Source_Code_Location,
+		offset_length : [2]int
+	}
+
 	GL_debug_state :: struct {
 		programs 	: map[Shader_program_id]Source_Code_Location,
 		buffers 	: map[Buffer_id]Source_Code_Location,
 		vaos 		: map[Vao_id]Source_Code_Location,
 		fbos 		: map[Fbo_id]Source_Code_Location,
+		tex1ds 		: map[Tex1d_id]Source_Code_Location,
+		tex2ds 		: map[Tex2d_id]Source_Code_Location,
+		tex3ds 		: map[Tex3d_id]Source_Code_Location,
 		rbos 		: map[Rbo_id]Source_Code_Location,
-	
-		write_accessed_buffers : map[Buffer_id][2]int, 	//what range of the buffer is accessed
-		read_accessed_buffers : map[Buffer_id][2]int,	//what range of the buffer is accessed
+		syncs 		: map[gl.sync_t]Source_Code_Location,	
 	}
 
+	accessed_buffers : map[Buffer_id][dynamic]^Buffer_access; 	//what range of the buffer is accessed
+	
 	debug_state : GL_debug_state;
 
 	/*
@@ -718,7 +803,11 @@ GL_state :: struct {
 	bound_shader : Shader_program_id,
 	bound_target : Fbo_id,
 	bound_vao : Vao_id,
-	
+	bound_rbo : Rbo_id,
+	bound_tex1D : Tex1d_id,
+	bound_tex2D : Tex2d_id,
+	bound_tex3D : Tex3d_id,
+
 	bound_buffer : #sparse [Buffer_type]Buffer_id,
 }
 
@@ -795,15 +884,41 @@ destroy :: proc(loc := #caller_location) {
 		leaks := 0;
 		
 		for field in reflect.struct_fields_zipped(GL_debug_state) {
-			s := cast(^map[u32]Source_Code_Location)(cast(uintptr)&debug_state + field.offset);
 			
-			for id, loc in s {
-				fmt.printf("Leak detected! %v with id %i has not been deleted, but allocated at location : %v\n", field.name, id, loc);
-				leaks += 1;
+			key_size : int;
+
+			if map_type_info, ok := field.type.variant.(runtime.Type_Info_Map); ok {
+				key_size = map_type_info.key.size;
+				
+				if value_info, ok := map_type_info.value.variant.(runtime.Type_Info_Named); ok {
+					fmt.assertf(value_info.name == "Source_Code_Location", "Map must hold Source_Code_Location, found : %s\n", value_info.name)
+				}
+				//assert(map_type_info.value.varient.(Type_Info_Named));
+			}
+			else {
+				panic("This must be a map");
+			}
+
+			if key_size == 4 {
+				s := cast(^map[u32]Source_Code_Location)(cast(uintptr)&debug_state + field.offset);
+				for id, loc in s {
+					fmt.printf("Leak detected! %v with id %i has not been deleted, but allocated at location : %v\n", field.name, id, loc);
+					leaks += 1;
+				}
+			}
+			else if key_size == 8 {
+				s := cast(^map[u64]Source_Code_Location)(cast(uintptr)&debug_state + field.offset);
+				for id, loc in s {
+					fmt.printf("Leak detected! %v with id %i has not been deleted, but allocated at location : %v\n", field.name, id, loc);
+					leaks += 1;
+				}
+			}
+			else {
+				panic("handle this case");
 			}
 		}
 		
-		fmt.assertf(leaks == 0, "%v OpenGL objects has not been destroyed\n", leaks, loc = loc);
+		fmt.assertf(leaks == 0, "%v OpenGL object(s) has not been destroyed\n", leaks, loc = loc);
 	}
 }
 
@@ -1166,6 +1281,31 @@ set_clear_color :: proc(clear_color : [4]f32) {
 	cpu_state.clear_color = clear_color;
 }
 
+clear :: proc(clear_color : [4]f32, flags : Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
+	flag : u32;
+	
+	if .color_bit in flags {
+		set_clear_color(clear_color);
+		flag = flag | gl.COLOR_BUFFER_BIT;
+	}
+	if .depth_bit in flags {
+		flag = flag | gl.DEPTH_BUFFER_BIT;
+	}
+	if .stencil_bit in flags {
+		flag = flag | gl.STENCIL_BUFFER_BIT;
+	}
+	if .accum_bit in flags {
+		flag = flag | gl.ACCUM_BUFFER_BIT;
+	}
+
+	when RENDER_DEBUG {
+		gl.Clear(auto_cast flag, loc);
+	}
+	else {
+		gl.Clear(auto_cast flag);
+	}
+}
+
 /////////// shaders ///////////
 
 //return true if error
@@ -1252,7 +1392,14 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 }
 
 unload_shader_program :: proc(shader : Shader_program_id) {
-	
+
+	if cpu_state.bound_shader == 0 {
+		if gpu_state.bound_shader == shader {
+			gl.UseProgram(0);
+			gpu_state.bound_shader = 0;
+		}
+	}
+
 	gl.DeleteProgram(auto_cast shader);
 	
 	when RENDER_DEBUG {
@@ -1260,8 +1407,7 @@ unload_shader_program :: proc(shader : Shader_program_id) {
 	}
 }
 
-@(deprecated="should it be cpu_state or gpu_state?")
-use_program :: proc(id : Shader_program_id) {
+bind_shader_program :: proc(id : Shader_program_id) {
 	
 	if gpu_state.bound_shader == id {
 		return;
@@ -1273,26 +1419,9 @@ use_program :: proc(id : Shader_program_id) {
 	gpu_state.bound_shader = id;
 }
 
-clear :: proc(clear_color : [4]f32, flags : Clear_flags = {.color_bit, .depth_bit}) {
-	flag : u32;
-	
-	if .color_bit in flags {
-		set_clear_color(clear_color);
-		flag = flag | gl.COLOR_BUFFER_BIT;
-	}
-	if .depth_bit in flags {
-		flag = flag | gl.DEPTH_BUFFER_BIT;
-	}
-	if .stencil_bit in flags {
-		flag = flag | gl.STENCIL_BUFFER_BIT;
-	}
-	if .accum_bit in flags {
-		flag = flag | gl.ACCUM_BUFFER_BIT;
-	}
-
-	gl.Clear(auto_cast flag);
+unbind_shader_program :: proc() {
+	cpu_state.bound_shader = 0;
 }
-
 
 /////////// Vertex array stuff ///////////
 
@@ -1352,7 +1481,7 @@ delete_vertex_arrays :: proc (vaos : []Vao_id) {
 	if cpu_state.bound_vao == 0 {
 		for vao in vaos {
 			if gpu_state.bound_vao == vao {
-				gl.BindVertexArray(auto_cast vao);
+				gl.BindVertexArray(0);
 				gpu_state.bound_vao = 0;
 			}
 		}
@@ -1372,7 +1501,7 @@ delete_vertex_array :: proc (vao : Vao_id) {
 
 	if cpu_state.bound_vao == 0 {
 		if gpu_state.bound_vao == vao {
-			gl.BindVertexArray(auto_cast vao);
+			gl.BindVertexArray(0);
 			gpu_state.bound_vao = 0;
 		}
 	}
@@ -1516,7 +1645,7 @@ buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data :
 	}
 }
 
-/* 
+/*
 buffer_sub_data :: proc (buffer : Buffer_id, target : Buffer_type, #any_int offset_bytes : int, data : []u8) {
 	if cpu_state.gl_version >= .opengl_4_5 {
 		gl.NamedBufferSubData(auto_cast buffer, offset_bytes, len(data), raw_data(data));
@@ -1529,7 +1658,177 @@ buffer_sub_data :: proc (buffer : Buffer_id, target : Buffer_type, #any_int offs
 }
 */
 
-map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type, offset, length : int, usage : Resource_usage) -> (p : rawptr) {
+place_fence :: proc (loc := #caller_location) -> Fence {
+	fence_id := gl.FenceSync(auto_cast gl.SYNC_GPU_COMMANDS_COMPLETE, auto_cast 0);
+
+	when RENDER_DEBUG {
+		debug_state.syncs[fence_id] = loc;
+	}
+
+	if fence_id == nil {
+		panic("failed to create sync object");
+	}
+
+	when RENDER_DEBUG {	
+		//add all current access to the sync object, when the sync object gets synced we can remove them from the global list.
+		access_map := make(map[Buffer_id][dynamic]^Buffer_access);
+		
+		for buffer, accessed_list in accessed_buffers {
+
+			new_access_list := make([dynamic]^Buffer_access);
+
+			for access in accessed_list {
+				append(&new_access_list, access);
+			}
+
+			access_map[buffer] = new_access_list;
+		}
+		
+		return Fence{fence_id, access_map};
+	}
+	else {
+		return Fence{fence_id};
+	}
+}
+
+//non-blocking, return if the fence is ready to be synced. Returns true if sync_fence will be non-blocking.
+is_fence_ready :: proc (fence : Fence) -> bool {
+	
+	if fence.sync == nil {
+		return true;
+	}
+	
+	waitResult := gl.ClientWaitSync(fence.sync, auto_cast gl.SYNC_FLUSH_COMMANDS_BIT, 1); // 1 nano second timeout
+	return waitResult == auto_cast gl.ALREADY_SIGNALED || waitResult == auto_cast gl.CONDITION_SATISFIED;
+}
+
+sync_fence :: proc (fence : ^Fence) {
+
+	when RENDER_DEBUG {	
+		
+		for buffer, list in fence.access_map {
+			
+			for access in list {
+				index, found := slice.linear_search(accessed_buffers[buffer][:], access)
+				assert(found);
+				unordered_remove(&accessed_buffers[buffer], index);
+				free(access);
+			}
+
+			delete(list);
+			if len(accessed_buffers[buffer]) == 0 {
+				delete(accessed_buffers[buffer]);
+				delete_key(&accessed_buffers, buffer);
+			}
+		}
+		
+		delete(fence.access_map);
+	}
+	
+	if fence.sync == nil {
+		return;
+	}
+
+	waitResult : gl.GLenum;
+	
+	for true {
+		
+		waitResult = gl.ClientWaitSync(fence.sync, auto_cast gl.SYNC_FLUSH_COMMANDS_BIT, 1000000000); // 1 second timeout
+		
+        if waitResult == auto_cast gl.ALREADY_SIGNALED || waitResult == auto_cast gl.CONDITION_SATISFIED {
+            break;
+        } 
+		else if waitResult == auto_cast gl.TIMEOUT_EXPIRED {
+            fmt.printf("Timeout waiting for fence sync object, trying again\n");
+        } 
+		else if waitResult == auto_cast gl.WAIT_FAILED {
+            panic("Wait for fence sync object failed\n");
+        }
+		else {
+			panic("What now?");
+		}
+	}
+
+	discard_fence(fence);
+}
+
+discard_fence :: proc(fence : ^Fence){
+
+	when RENDER_DEBUG {
+		delete_key(&debug_state.syncs, fence.sync);
+	}
+
+	gl.DeleteSync(fence.sync);
+
+	fence^ = {};
+}
+
+access_buffer :: proc (buffer : Buffer_id, offset, length : int, usage : Resource_usage, loc := #caller_location) {
+
+	when RENDER_DEBUG {	
+
+		collides_with_offset_length :: proc (a, b : [2]int) -> bool {
+			
+			if a.x == b.x {
+				return true;
+			}
+			else if a.x < b.x {
+				if a.x + a.y > b.x {
+					return true;
+				}
+			}
+			else {	//a.x > b.x
+				if b.x + b.y > a.x {
+					return true;
+				}
+			}
+
+			return false;
+		}
+		
+		is_accessing : bool = false;
+		
+		switch usage {
+			case .stream_read, .dynamic_read, .static_read:
+				is_accessing = true;
+
+			case .stream_write, .dynamic_write, .static_write:
+				is_accessing = true;
+
+			case .stream_read_write, .dynamic_read_write, .static_read_write:
+				is_accessing = true;
+
+			case .stream_host_only, .dynamic_host_only, .static_host_only:
+				panic("Cannot map a host only buffer", loc);
+		}
+		
+		//if we are accessing now, check if something is currently using from the buffer.
+		if is_accessing && buffer in accessed_buffers {
+			for access in accessed_buffers[buffer] {
+				if collides_with_offset_length({offset, length}, access.offset_length) {
+					//this buffer has been accessed
+					fmt.panicf("You are already accessing this buffer from %v\ncreate a sync point before accessing again\n", access.location, loc = loc);
+				}
+			}
+		}
+
+		assert(is_accessing == true);
+
+		//Place a note that this is currently accessed.
+		if is_accessing {
+			buf_ac := new(Buffer_access);
+			buf_ac^ = Buffer_access{loc, {offset, length}};
+			if accessed_buffers[buffer] == nil {
+				accessed_buffers[buffer] = make([dynamic]^Buffer_access);				
+			}
+			append(&accessed_buffers[buffer], buf_ac);
+		}
+	}
+}
+
+map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type, offset, length : int, usage : Resource_usage, loc := #caller_location) -> (p : rawptr) {
+
+	access_buffer(buffer, offset, length, usage, loc);
 
 	if cpu_state.gl_version >= .opengl_4_5 {
 		_, map_flags := translate_resource_usage_4_4(usage);
@@ -1600,7 +1899,6 @@ make_resource_desc :: proc(desc : Resource_desc, data : []u8, loc := #caller_loc
 
 make_resource :: proc {make_resource_parameterized, make_resource_desc};
 
-@(deprecated="TODO place fences and stuff")
 destroy_resource :: proc(resource : ^Resource) {
 
 	needs_unmapping : bool;
@@ -1656,17 +1954,18 @@ begin_buffer_write :: proc(resource : ^Resource, range : Maybe([2]int) = nil, lo
 		case .stream_write, .stream_read_write:
 			if cpu_state.gl_version >= .opengl_4_4 {
 				//Nothing happens, sync happen by the user (in the render lib)
+				access_buffer(resource.buffer, begin, length, resource.usage, loc);
 			}
 			else {
-				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage);
+				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage, loc);
 			}
 		
 		case .dynamic_write, .dynamic_read_write:
 			if cpu_state.gl_version >= .opengl_4_4 {
-				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage);
+				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage, loc);
 			}
 			else {
-				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage);
+				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage, loc);
 			}
 		
 		case .static_write, .static_read_write:
@@ -1689,7 +1988,6 @@ begin_buffer_write :: proc(resource : ^Resource, range : Maybe([2]int) = nil, lo
 }
 
 //after calling this you may not change the buffer data (or even keep a refernce to it)
-@(deprecated="this should not unmap buffer that are persistent, so what do we do here? just a sync point?")
 end_buffer_writes :: proc(using resource : ^Resource, loc := #caller_location) {
 
 	switch resource.usage {
@@ -1875,6 +2173,26 @@ unbind_frame_buffer  :: proc() {
 	//gl.BindFramebuffer(.FRAMEBUFFER, 0);
 }
 
+bind_render_buffer :: proc(rbo : Rbo_id, loc := #caller_location) {
+	
+	if gpu_state.bound_rbo == rbo {
+		return;
+	}
+
+	gl.BindRenderbuffer(.RENDERBUFFER, auto_cast rbo);
+	
+	cpu_state.bound_rbo = rbo;
+	gpu_state.bound_rbo = rbo;
+}
+
+unbind_render_buffer  :: proc() {
+	
+	cpu_state.bound_rbo = 0;
+
+	//This will not unbind the renderbuffer, it will just note that should do it if required by another call.
+	//gl.Bindrenderbuffer(.renderBUFFER, 0);
+}
+
 Color_format :: enum u32 {
 	rgba8 = gl.RGBA8,
 	rgba16f = gl.RGBA16F,
@@ -1910,12 +2228,12 @@ associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_bu
 	else {
 		
 		//TODO move the generation out of this function so we can reuse more code. Have the function be like "attach_frame_buffer_render_attachmetns".
-		gl.BindFramebuffer(.FRAMEBUFFER, auto_cast fbo);
+		bind_frame_buffer(fbo);
 		
 		// Create a multisampled renderbuffer object for color attachment
 		for i in 0 ..< len(render_buffers) {
 
-			gl.BindRenderbuffer(.RENDERBUFFER, auto_cast render_buffers[i]);
+			bind_render_buffer(render_buffers[i]);
 
 			if samples == 1 {
 				gl.RenderbufferStorage(.RENDERBUFFER, auto_cast color_format, width, height);
@@ -1926,9 +2244,9 @@ associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_bu
 			
 			gl.FramebufferRenderbuffer(.FRAMEBUFFER, auto_cast (cast(u32)gl.GLenum.COLOR_ATTACHMENT0 + auto_cast (i + start_index)), .RENDERBUFFER, auto_cast render_buffers[i]);
 		}
-
-		gl.BindRenderbuffer(.RENDERBUFFER, 0);
-		gl.BindFramebuffer(.FRAMEBUFFER, 0);	
+		
+		bind_render_buffer(0);
+		bind_frame_buffer(0);
 	}
 
 	return;
@@ -1960,8 +2278,8 @@ associate_depth_render_buffer_with_frame_buffer :: proc(fbo : Fbo_id, render_buf
 		
 	}
 	else {
-		gl.BindFramebuffer(.FRAMEBUFFER, auto_cast fbo);
-		gl.BindRenderbuffer(.RENDERBUFFER, auto_cast render_buffer);
+		bind_frame_buffer(fbo);
+		bind_render_buffer(render_buffer);
 		
 		if samples == 1 {
 			gl.RenderbufferStorage(.RENDERBUFFER, auto_cast depth_format, width, height);
@@ -1971,18 +2289,28 @@ associate_depth_render_buffer_with_frame_buffer :: proc(fbo : Fbo_id, render_buf
 		}
 		gl.FramebufferRenderbuffer(.FRAMEBUFFER, .DEPTH_ATTACHMENT, .RENDERBUFFER, auto_cast render_buffer);
 		
-		gl.BindFramebuffer(.FRAMEBUFFER, 0);
-		gl.BindRenderbuffer(.RENDERBUFFER, 0);
+		bind_render_buffer(0);
+		bind_frame_buffer(0);
 	}
 
 	return;
 }
 
 //TODO make this return an error instead of crashing
+@(require_results)
 validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid : bool) {
 	// Check if framebuffer is complete
 	
-	status := gl.CheckFramebufferStatus(.FRAMEBUFFER);
+	status : gl.GLenum;
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		status = gl.CheckNamedFramebufferStatus(auto_cast fbo, .FRAMEBUFFER);
+	} 
+	else {
+		bind_frame_buffer(fbo);
+		status = gl.CheckFramebufferStatus(.FRAMEBUFFER);
+		unbind_frame_buffer();
+	}
 
 	if (status != .FRAMEBUFFER_COMPLETE) {
 		
@@ -2035,7 +2363,585 @@ blit_fbo_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, ds
 	}
 }
 
-//////////////////////////////////////////// Private functions ////////////////////////////////////////////
+//////////////////////////////////////////// Textures ////////////////////////////////////////////
+
+//// 1D textures ////
+gen_texture_1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.CreateTextures(.TEXTURE_1D, cast(i32)len(textures), cast([^]u32)raw_data(textures));
+	}
+	else {
+		gl.GenTextures(cast(i32)len(textures), cast([^]u32)raw_data(textures));
+	}
+
+	when RENDER_DEBUG {
+		for t in textures {
+			debug_state.tex1ds[t] = loc;
+		}
+	}
+}
+
+@(require_results)
+gen_texture_1D :: proc (loc := #caller_location) -> (tex : Tex1d_id) {
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.CreateTextures(.TEXTURE_1D, 1, auto_cast &tex);
+	}
+	else {
+		gl.GenTextures(1, auto_cast &tex);
+	}
+
+	when RENDER_DEBUG {
+		debug_state.tex1ds[tex] = loc;
+	}
+
+	return tex;
+}
+
+delete_texture_1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
+
+	if cpu_state.bound_tex1D == 0 {
+		for t in textures {
+			if gpu_state.bound_tex1D == t {
+				gl.BindTexture(.TEXTURE_1D, 0);
+				gpu_state.bound_tex1D = 0;
+			}
+		}
+	}
+
+	gl.DeleteTextures(auto_cast len(textures), cast([^]u32) raw_data(textures));
+
+	when RENDER_DEBUG {
+		for t in textures {
+			delete_key(&debug_state.tex1ds, t);
+		}
+	}
+}
+
+delete_texture_1D :: proc (texture : Tex1d_id, loc := #caller_location) {
+	texture := texture;
+
+	if cpu_state.bound_tex1D == 0 {
+		if gpu_state.bound_tex1D == texture {
+			gl.BindTexture(.TEXTURE_1D, 0);
+			gpu_state.bound_tex1D = 0;
+		}
+	}
+
+	gl.DeleteTextures(1, cast([^]u32)&texture);
+
+	when RENDER_DEBUG {
+		delete_key(&debug_state.tex1ds, texture);
+	}
+}
+
+bind_texture_1D :: proc(tex : Tex1d_id, loc := #caller_location) {
+	
+	if gpu_state.bound_tex1D == tex {
+		return;
+	}
+
+	gl.BindTexture(.TEXTURE_1D, auto_cast tex);
+	
+	cpu_state.bound_tex1D = tex;
+	gpu_state.bound_tex1D = tex;
+}
+
+unbind_texture_1D  :: proc() {
+	cpu_state.bound_tex1D = 0;
+}
+
+write_texure_data_1D :: proc (tex : Tex1d_id, level, offset : i32, width : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
+	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
+
+	data_ptr : rawptr;
+	
+	if d, ok := data.([]u8); ok {
+		assert(d != nil, "Data is nil", loc);
+		data_ptr = raw_data(d);
+	}
+	else if d, ok := data.(Resource); ok {
+		panic("TODO pixel_unpack_buffer");
+	}
+	else {
+		panic("???");
+	}
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureSubImage1D(cast(u32)tex, level, offset, width, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+	}
+	else {
+		bind_texture_1D(tex);
+		gl.TexSubImage1D(.TEXTURE_1D, level, offset, width, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		unbind_texture_1D();
+	}
+}
+
+//This will for opengl 4.2 or below not generate mip maps, and they must be generated by generate_mip_maps_XD or the mipmap level must be set directly
+setup_texure_1D :: proc (tex : Tex1d_id, mipmaps : bool, width : gl.GLsizei, format : Pixel_format_internal, loc := #caller_location) {
+	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
+
+	levels : i32 = 1;
+
+	if mipmaps {
+		levels = 1 + cast(i32)math.floor(math.log2(cast(f32)math.max(width)));
+	}
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureStorage1D(cast(u32)tex, levels, auto_cast format, width);
+	}
+	else if cpu_state.gl_version >= .opengl_4_3 { 
+		bind_texture_1D(tex);
+		gl.TexStorage1D(.TEXTURE_1D, levels, auto_cast format, width);
+		unbind_texture_1D();
+	}
+	else {
+		bind_texture_1D(tex);
+		gl.TexImage1D(.TEXTURE_1D, levels, auto_cast format, width, 0, .RGBA, .UNSIGNED_BYTE, nil);
+		unbind_texture_1D();
+	}
+}
+
+generate_mip_maps_1D :: proc (tex_id : Tex1d_id) {
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.GenerateTextureMipmap(auto_cast tex_id);
+	}
+	else {
+		bind_texture_1D(tex_id);
+		gl.GenerateMipmap(.TEXTURE_1D);
+		unbind_texture_1D();
+	}
+}
+
+wrapmode_texture_1D :: proc(tex_id : Tex1d_id, mode : Wrapmode) {
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_S, cast(i32)mode);
+	}
+	else {
+		bind_texture_1D(tex_id);
+		gl.TexParameteri(.TEXTURE_1D, .TEXTURE_WRAP_S, cast(i32)mode);
+		unbind_texture_1D();
+	}
+}
+
+filtermode_texture_1D :: proc(tex_id : Tex1d_id, mode : Filtermode) {
+
+	min_mode : gl.GLenum;
+	mag_mode : gl.GLenum;
+
+	switch mode {
+		case .nearest:
+			min_mode = .NEAREST_MIPMAP_NEAREST;
+			mag_mode = .NEAREST;
+		case .linear:
+			min_mode = .LINEAR_MIPMAP_LINEAR;
+			mag_mode = .LINEAR;
+	}
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
+	}
+	else {
+		bind_texture_1D(tex_id);
+		gl.TexParameteri(.TEXTURE_1D, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
+		gl.TexParameteri(.TEXTURE_1D, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
+		unbind_texture_1D();
+	}
+}
+
+//// 2D textures ////
+gen_texture_2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.CreateTextures(.TEXTURE_2D, cast(i32)len(textures), cast([^]u32)raw_data(textures));
+	}
+	else {
+		gl.GenTextures(cast(i32)len(textures), cast([^]u32)raw_data(textures));
+	}
+
+	when RENDER_DEBUG {
+		for t in textures {
+			debug_state.tex2ds[t] = loc;
+		}
+	}
+}
+
+@(require_results)
+gen_texture_2D :: proc (loc := #caller_location) -> (tex : Tex2d_id) {
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.CreateTextures(.TEXTURE_2D, 1, auto_cast &tex);
+	}
+	else {
+		gl.GenTextures(1, auto_cast &tex);
+	}
+
+	when RENDER_DEBUG {
+		debug_state.tex2ds[tex] = loc;
+	}
+
+	return tex;
+}
+
+delete_texture_2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
+
+	if cpu_state.bound_tex2D == 0 {
+		for t in textures {
+			if gpu_state.bound_tex2D == t {
+				gl.BindTexture(.TEXTURE_2D, 0);
+				gpu_state.bound_tex2D = 0;
+			}
+		}
+	}
+
+	gl.DeleteTextures(auto_cast len(textures), cast([^]u32) raw_data(textures));
+
+	when RENDER_DEBUG {
+		for t in textures {
+			delete_key(&debug_state.tex2ds, t);
+		}
+	}
+}
+
+delete_texture_2D :: proc (texture : Tex2d_id, loc := #caller_location) {
+	texture := texture;
+
+	if cpu_state.bound_tex2D == 0 {
+		if gpu_state.bound_tex2D == texture {
+			gl.BindTexture(.TEXTURE_2D, 0);
+			gpu_state.bound_tex2D = 0;
+		}
+	}
+
+	gl.DeleteTextures(1, cast([^]u32)&texture);
+
+	when RENDER_DEBUG {
+		delete_key(&debug_state.tex2ds, texture);
+	}
+}
+
+bind_texture_2D :: proc(tex : Tex2d_id, loc := #caller_location) {
+	
+	if gpu_state.bound_tex2D == tex {
+		return;
+	}
+
+	gl.BindTexture(.TEXTURE_2D, auto_cast tex);
+	
+	cpu_state.bound_tex2D = tex;
+	gpu_state.bound_tex2D = tex;
+}
+
+unbind_texture_2D  :: proc() {
+	cpu_state.bound_tex2D = 0;
+}
+
+write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, width, height : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
+	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
+
+	data_ptr : rawptr;
+	
+	if d, ok := data.([]u8); ok {
+		assert(d != nil, "Data is nil", loc);
+		data_ptr = raw_data(d);
+	}
+	else if d, ok := data.(Resource); ok {
+		panic("TODO pixel_unpack_buffer");
+	}
+	else {
+		panic("???");
+	}
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureSubImage2D(cast(u32)tex, level, xoffset, yoffset, width, height, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+	}
+	else {
+		bind_texture_2D(tex);
+		gl.TexSubImage2D(.TEXTURE_2D, level, xoffset, yoffset, width, height, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		unbind_texture_2D();
+	}
+}
+
+//This will for opengl 4.2 or below not generate mip maps, and they must be generated by generate_mip_maps_XD or the mipmap level must be set directly
+setup_texure_2D :: proc (tex : Tex2d_id, mipmaps : bool, width, height : gl.GLsizei, format : Pixel_format_internal, loc := #caller_location) {
+	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
+
+	levels : i32 = 1;
+
+	if mipmaps {
+		levels = 1 + cast(i32)math.floor(math.log2(cast(f32)math.max(width, height)));
+	}
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureStorage2D(cast(u32)tex, levels, auto_cast format, width, height);
+	}
+	else if cpu_state.gl_version >= .opengl_4_3 { 
+		bind_texture_2D(tex);
+		gl.TexStorage2D(.TEXTURE_2D, levels, auto_cast format, width, height);
+		unbind_texture_2D();
+	}
+	else {
+		bind_texture_2D(tex);
+		gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, .RGBA, .UNSIGNED_BYTE, nil);
+		unbind_texture_2D();
+	}
+}
+
+generate_mip_maps_2D :: proc (tex_id : Tex2d_id) {
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.GenerateTextureMipmap(auto_cast tex_id);
+	}
+	else {
+		bind_texture_2D(tex_id);
+		gl.GenerateMipmap(.TEXTURE_2D);
+		unbind_texture_2D();
+	}
+}
+
+wrapmode_texture_2D :: proc(tex_id : Tex2d_id, mode : Wrapmode) {
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_S, cast(i32)mode);
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_T, cast(i32)mode);
+	}
+	else {
+		bind_texture_2D(tex_id);
+		gl.TexParameteri(.TEXTURE_2D, .TEXTURE_WRAP_S, cast(i32)mode);
+		gl.TexParameteri(.TEXTURE_2D, .TEXTURE_WRAP_T, cast(i32)mode);
+		unbind_texture_2D();
+	}
+}
+
+filtermode_texture_2D :: proc(tex_id : Tex2d_id, mode : Filtermode) {
+	
+	min_mode : gl.GLenum;
+	mag_mode : gl.GLenum;
+
+	switch mode {
+		case .nearest:
+			min_mode = .NEAREST_MIPMAP_NEAREST;
+			mag_mode = .NEAREST;
+		case .linear:
+			min_mode = .LINEAR_MIPMAP_LINEAR;
+			mag_mode = .LINEAR;
+	}
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
+	}
+	else {
+		bind_texture_2D(tex_id);
+		gl.TexParameteri(.TEXTURE_2D, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
+		gl.TexParameteri(.TEXTURE_2D, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
+		unbind_texture_2D();
+	}
+}
+
+//// 3D textures ////
+gen_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.CreateTextures(.TEXTURE_3D, cast(i32)len(textures), cast([^]u32)raw_data(textures));
+	}
+	else {
+		gl.GenTextures(cast(i32)len(textures), cast([^]u32)raw_data(textures));
+	}
+
+	when RENDER_DEBUG {
+		for t in textures {
+			debug_state.tex3ds[t] = loc;
+		}
+	}
+}
+
+@(require_results)
+gen_texture_3D :: proc (loc := #caller_location) -> (tex : Tex3d_id) {
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.CreateTextures(.TEXTURE_3D, 1, auto_cast &tex);
+	}
+	else {
+		gl.GenTextures(1, auto_cast &tex);
+	}
+
+	when RENDER_DEBUG {
+		debug_state.tex3ds[tex] = loc;
+	}
+
+	return tex;
+}
+
+delete_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
+
+	if cpu_state.bound_tex3D == 0 {
+		for t in textures {
+			if gpu_state.bound_tex3D == t {
+				gl.BindTexture(.TEXTURE_3D, 0);
+				gpu_state.bound_tex3D = 0;
+			}
+		}
+	}
+	
+	gl.DeleteTextures(auto_cast len(textures), cast([^]u32) raw_data(textures));
+
+	when RENDER_DEBUG {
+		for t in textures {
+			delete_key(&debug_state.tex3ds, t);
+		}
+	}
+}
+
+bind_texture_3D :: proc(tex : Tex3d_id, loc := #caller_location) {
+	
+	if gpu_state.bound_tex3D == tex {
+		return;
+	}
+
+	gl.BindTexture(.TEXTURE_3D, auto_cast tex);
+	
+	cpu_state.bound_tex3D = tex;
+	gpu_state.bound_tex3D = tex;
+}
+
+unbind_texture_3D  :: proc() {
+	cpu_state.bound_tex3D = 0;
+}
+
+write_texure_data_3D :: proc (tex : Tex3d_id, level, xoffset, yoffset, zoffset : i32, width, height, depth : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
+	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
+
+	data_ptr : rawptr;
+	
+	if d, ok := data.([]u8); ok {
+		assert(d != nil, "Data is nil", loc);
+		data_ptr = raw_data(d);
+	}
+	else if d, ok := data.(Resource); ok {
+		panic("TODO pixel_unpack_buffer");
+	}
+	else {
+		panic("???");
+	}
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureSubImage3D(cast(u32)tex, level, xoffset, yoffset, zoffset, width, height, depth, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+	}
+	else {
+		bind_texture_3D(tex);
+		gl.TexSubImage3D(.TEXTURE_3D, level, xoffset, yoffset, zoffset, width, height, depth, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		unbind_texture_3D();
+	}
+}
+
+//This will for opengl 4.2 or below not generate mip maps, and they must be generated by generate_mip_maps_XD or the mipmap level must be set directly
+setup_texure_3D :: proc (tex : Tex3d_id, mipmaps : bool, width, height, depth : gl.GLsizei, format : Pixel_format_internal, loc := #caller_location) {
+	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
+
+	levels : i32 = 1;
+
+	if mipmaps {
+		levels = 1 + cast(i32)math.floor(math.log2(cast(f32)math.max(width, height, depth)));
+	}
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureStorage3D(cast(u32)tex, levels, auto_cast format, width, height, depth);
+	}
+	else if cpu_state.gl_version >= .opengl_4_3 { 
+		bind_texture_3D(tex);
+		gl.TexStorage3D(.TEXTURE_3D, levels, auto_cast format, width, height, depth);
+		unbind_texture_3D();
+	}
+	else {
+		bind_texture_3D(tex);
+		gl.TexImage3D(.TEXTURE_3D, 0, auto_cast format, width, height, depth, 0, .RGBA, .UNSIGNED_BYTE, nil);
+		unbind_texture_3D();
+	}
+}
+
+generate_mip_maps_3D :: proc (tex_id : Tex3d_id) {
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.GenerateTextureMipmap(auto_cast tex_id);
+	}
+	else {
+		bind_texture_3D(tex_id);
+		gl.GenerateMipmap(.TEXTURE_3D);
+		unbind_texture_3D();
+	}
+}
+
+wrapmode_texture_3D :: proc(tex_id : Tex3d_id, mode : Wrapmode) {
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_S, cast(i32)mode);
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_T, cast(i32)mode);
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_R, cast(i32)mode);
+	}
+	else {
+		bind_texture_3D(tex_id);
+		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_WRAP_S, cast(i32)mode);
+		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_WRAP_T, cast(i32)mode);
+		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_WRAP_R, cast(i32)mode);
+		unbind_texture_3D();
+	}
+}
+
+filtermode_texture_3D :: proc(tex_id : Tex3d_id, mode : Filtermode) {
+	
+	min_mode : gl.GLenum;
+	mag_mode : gl.GLenum;
+	
+	switch mode {
+		case .nearest:
+			min_mode = .NEAREST_MIPMAP_NEAREST;
+			mag_mode = .NEAREST;
+		case .linear:
+			min_mode = .LINEAR_MIPMAP_LINEAR;
+			mag_mode = .LINEAR;
+	}
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
+	}
+	else {
+		bind_texture_3D(tex_id);
+		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
+		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
+		unbind_texture_3D();
+	}
+}
+
+delete_texture_3D :: proc (texture : Tex3d_id, loc := #caller_location) {
+	texture := texture;
+
+	if cpu_state.bound_tex3D == 0 {
+		if gpu_state.bound_tex3D == texture {
+			gl.BindTexture(.TEXTURE_3D, 0);
+			gpu_state.bound_tex3D = 0;
+		}
+	}
+
+	gl.DeleteTextures(1, cast([^]u32)&texture);
+
+	when RENDER_DEBUG {
+		delete_key(&debug_state.tex3ds, texture);
+	}
+}
+
+//////////////////////////////////////////// Shader functions ////////////////////////////////////////////
 
 @(require_results)
 get_shader_attributes :: proc(program_id : Shader_program_id, alloc := context.allocator, loc := #caller_location) -> (res : map[string]Attribute_info) {
@@ -2107,7 +3013,7 @@ get_shader_uniforms :: proc(program_id : Shader_program_id, alloc := context.all
 		}
 
 		fmt.assertf(utils.is_enum_valid(shader_type), "uniform %s is not a supported type. OpenGL type : %v", name, cast(gl.GLenum)shader_type, loc = loc);
-		res[name] = Uniform_info{location = get_uniform_location(program_id, name), uniform_type = auto_cast shader_type, array_size = size};
+		res[name] = Uniform_info{location = get_uniform_location(program_id, name), uniform_type = auto_cast shader_type, active = true, array_size = size};
 	}
 
 	return;
@@ -2119,6 +3025,6 @@ get_attribute_location :: proc(shader_id : Shader_program_id, attrib_name : stri
 }
 
 @(require_results)
-get_uniform_location :: proc(shader_id : Shader_program_id, uniform_name : string) -> Uniform_id {
-	return auto_cast gl.GetUniformLocation(auto_cast shader_id, fmt.ctprintf(uniform_name));
+get_uniform_location :: proc(shader_id : Shader_program_id, uniform_name : string) -> i32 {
+	return gl.GetUniformLocation(auto_cast shader_id, fmt.ctprintf(uniform_name));
 }

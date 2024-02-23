@@ -1,11 +1,14 @@
 package render;
 
-import "vendor:glfw"
-import fs "vendor:fontstash"
+
 import "core:runtime"
 import "core:fmt"
 import "core:mem"
 import "core:strings"
+import "core:reflect"
+
+import "vendor:glfw"
+import fs "vendor:fontstash"
 
 import ex_defs "../../user_defs"
 import "gl"
@@ -46,7 +49,7 @@ Blend_mode :: gl.Blend_mode;
 
 GL_version :: gl.GL_version;
 
-Fence_id :: gl.Fence_id;
+Fence :: gl.Fence;
 
 MAX_COLOR_ATTACH :: gl.MAX_COLOR_ATTACH;
 
@@ -99,9 +102,10 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, auto_cast get_minor(required_verion));
 		}
 	}
-
+	
 	when ODIN_OS == .Windows {
-
+		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
+    	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 6);
 	}
 	else when ODIN_OS == .Darwin { //Mac_os, idk something that is needed (I think)
 		glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
@@ -110,7 +114,8 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
     	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 1);
 	}
 	else when ODIN_OS == .Linux {
-		//??
+		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
+    	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 6);
 	}
 	else {
 		panic("TODO");
@@ -177,11 +182,27 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 
 destroy :: proc (loc := #caller_location) {
 
+	//Check we inited before destroy 
 	assert(state.is_init == true, "Cannot destroy renderer as the state is not initialized. Call init first.", loc);
 	state.is_init = false;
 	state.opengl_version = nil;
 
-	//Destroy shaders
+	//Reset button and key state
+	state.button_down 		= {};
+	state.button_released 	= {};
+	state.button_pressed 	= {};
+
+	state.keys_down 		= {};
+	state.keys_released 	= {};
+	state.keys_pressed 		= {};
+	state.keys_triggered 	= {};
+
+	state.mouse_pos 		= {};
+	state.mouse_delta 		= {};
+	state.scroll_delta 		= {};
+
+
+	//Destroy shaders defines
 	for e, v in state.shader_defines {
 		delete_key(&state.shader_defines, e);
 		delete(e);
@@ -190,11 +211,12 @@ destroy :: proc (loc := #caller_location) {
 
 	delete(state.shader_defines); state.shader_defines = {};
 
+	destroy_shaders();
+
+	//Check that all sub windows have been destroyed.
 	if len(state.active_windows) != 0 {
 		panic("You must close all window before calling destroy");
 	}
-
-	destroy_shaders();
 	
 	//Destoy active windows
 	delete(state.active_windows);
@@ -217,15 +239,34 @@ destroy :: proc (loc := #caller_location) {
 		free(state.main_window);
 		state.main_window = nil;
 	}
+	
 	glfw.Terminate();
 
-	fmt.assertf(mem.check_zero_ptr(&state, size_of(state)), "The state is not in its original state : %#v", state, loc = loc);
+	//TODO make this so it prints the field that are not mem zero.
+	if mem.check_zero_ptr(&state, size_of(State)) {
+		for field in reflect.struct_fields_zipped(State) {
+			
+			ptr : uintptr = cast(uintptr)&state + field.offset;
+			val := any{data = auto_cast ptr, id = field.type.id};
+			fmt.assertf(mem.check_zero_ptr(val.data, reflect.size_of_typeid(val.id)), "State must be reset before closing (internal error). The field %s is : %#v", field.name, val);
+		}
+	}
 }
 
 begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}) {
 	
-	handle_window :: proc (w : ^Window, clear_color : [4]f32, falgs : gl.Clear_flags) {
+	begin_inputs();
 
+	handle_fullscreen :: proc (w : ^Window) {
+		if w.is_fullscreen != w.fullscreen_target_state {
+			r := w.target_windowed_rect;
+			glfw.SetWindowMonitor(w.glfw_window, w.target_monitor, r.x, r.y, r.z, r.w, w.target_refresh); //TODO should we allow setting a refresh rate?
+			w.is_fullscreen = !w.is_fullscreen;
+		}
+	}
+
+	handle_window_backbuffer :: proc (w : ^Window) {
+		
 		if w.resize_behavior == .resize_backbuffer {
 			sw, sh := get_screen_size(w);
 
@@ -236,7 +277,8 @@ begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {
 				//resize both the framebuffer and the context_framebuffer.
 				destroy_frame_buffer(w.framebuffer);
 				w.framebuffer = make_frame_buffer(1, sw, sh, w.framebuffer.samples, true, w.framebuffer.color_format, w.framebuffer.depth_format);
-				
+				w.width, w.height = sw, sh;
+
 				_make_context_current(w.glfw_window);
 				gl.delete_frame_buffer(w.context_framebuffer.id);
 				w.context_framebuffer = {}; //set it to zero, before recreation, not required attom.
@@ -244,22 +286,26 @@ begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {
 				_make_context_current(state.owner_context);
 			}
 		}
+	}
 
+	handle_clear_color :: proc (w : ^Window, clear_color : [4]f32, falgs : gl.Clear_flags) {
 		gl.bind_frame_buffer(w.framebuffer.id);
 		gl.clear(clear_color, falgs);
 	}
 
 	for w in state.active_windows {
-		handle_window(w, clear_color, falgs);
+		handle_fullscreen(w);
+		handle_window_backbuffer(w);
+		handle_clear_color(w, clear_color, falgs);
 	}
 	
 	//back to main window//
 	_make_context_current(state.owner_context);
-	gl.unbind_frame_buffer();
+	gl.bind_frame_buffer(0);
 	if state.main_window != nil {
+		handle_fullscreen(state.main_window);
 		state.main_window.width, state.main_window.height = get_screen_size(state.main_window);
-		gl.bind_frame_buffer(0);
-		gl.clear(clear_color, falgs);
+		handle_clear_color(state.main_window, clear_color, falgs);
 	}
 }
 
@@ -284,6 +330,8 @@ end_frame :: proc(loc := #caller_location) {
 	_make_context_current(state.owner_context);	
 	_swap_buffers(loc, state.owner_context);
 	glfw.PollEvents();
+
+	end_inputs();
 }
 
 set_shader_define :: proc (entry : string, value : string) {
