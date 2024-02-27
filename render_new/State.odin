@@ -5,6 +5,8 @@ import "core:container/queue"
 import "vendor:glfw"
 import fs "vendor:fontstash"
 
+import "gl"
+
 //This contains high-level state, go to wrappers to see the opengl client side state.
 
 state : State;
@@ -41,11 +43,12 @@ State :: struct {
 	
 	//Window stuff
 	owner_context : glfw.WindowHandle,
+	owner_gl_states : gl.GL_states_comb,
 	opengl_version : GL_version,
 	active_windows : [dynamic]^Window,
 	vsync : bool,
 	
-	current_context : glfw.WindowHandle,
+	bound_window : Maybe(^Window),
 	window_in_focus : ^Window,
 
 	main_window : ^Window,

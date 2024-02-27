@@ -115,6 +115,8 @@ Window_desc :: struct {
 	antialiasing : Antialiasing,
 }
 
+
+
 Window :: struct {
 	glfw_window : glfw.WindowHandle, //dont touch
 	framebuffer : Frame_buffer,			//This and context_framebuffer makes up the "fake" backbuffer.
@@ -123,6 +125,9 @@ Window :: struct {
 	resize_behavior : Resize_behavior,
 	width, height : i32,
 	
+	//To handle the gl stategl_states
+	gl_states : gl.GL_states_comb,
+
 	//Just to handle fullscreen
 	is_fullscreen : bool,
 	fullscreen_target_state : bool,
@@ -154,19 +159,19 @@ make_window_desc :: proc(desc : Window_desc, loc := #caller_location) -> (window
 	}*/
 
 	window = new(Window);
-	
+	window.gl_states = gl.init_state();
 	setup_window_no_backbuffer(desc, window);
 	
 	//Make a framebuffer in each context shareing the underlaying buffers.
 	window.framebuffer = make_frame_buffer(1, desc.width, desc.height, auto_cast desc.antialiasing, true, .rgba8, .depth_component24);
 	assert(window.framebuffer.id != 0, "something went wrong");
 	
-	_make_context_current(window.glfw_window);
+	_make_context_current(window);
 	
 	recreate_frame_buffer(&window.context_framebuffer, window.framebuffer);
 	assert(window.context_framebuffer.id != 0, "something went wrong");		
 	
-	_make_context_current(state.owner_context);
+	_make_context_current(nil);
 
 	append(&state.active_windows, window);
 
@@ -209,9 +214,10 @@ destroy_window :: proc (window : ^Window, loc := #caller_location) {
 		panic("You should not delete the window if it is created with init. It is destroyed when calling destroy.", loc);
 	}
 
-	_make_context_current(window.glfw_window);
+	_make_context_current(window);
 	gl.delete_frame_buffer(window.context_framebuffer.id);
-	_make_context_current(state.owner_context);
+
+	_make_context_current(nil);
 	destroy_frame_buffer(window.framebuffer);
 
 	index, found := slice.linear_search(state.active_windows[:], window);
@@ -225,24 +231,50 @@ destroy_window :: proc (window : ^Window, loc := #caller_location) {
 	free(window);
 }
 
-_make_context_current ::proc(window : glfw.WindowHandle, loc := #caller_location) {
-
-	if state.current_context == window {
-		return;
-	}
-
+//pass nil to bind the owner context, if there is no main window.
+_make_context_current ::proc(window : ^Window, loc := #caller_location) {
+	
 	helper :: proc(window : glfw.WindowHandle, from_loc : runtime.Source_Code_Location, loc := #caller_location) {
 		gl.record_call(from_loc, nil, {window}, loc);
 	}
-	
-	helper(window, loc);
-	glfw.MakeContextCurrent(window);
 
-	state.current_context = window;
+	prev_window : ^Window = nil;
+
+	if w, ok := state.bound_window.?; ok {
+		if w == window {
+			return;
+		}
+		prev_window = w;
+	}
+
+	old_states : ^gl.GL_states_comb;
+	
+	if prev_window == nil {
+		old_states = &state.owner_gl_states;
+	}
+	else {
+		old_states = &prev_window.gl_states;
+	}
+
+	if window == nil {
+		//We must bind the owner context.
+		helper(state.owner_context, loc);
+		glfw.MakeContextCurrent(state.owner_context);
+		if prev_window != nil {
+			gl.swap_states(&state.owner_gl_states, old_states);
+		}
+	}
+	else {
+		helper(window.glfw_window, loc);
+		glfw.MakeContextCurrent(window.glfw_window);
+		gl.swap_states(&window.gl_states, old_states);
+	}
+	
+	state.bound_window = window;
 }
 
 enable_vsync :: proc(enable : bool, loc := #caller_location) {
-	assert(state.owner_context == state.current_context, "enable_vsync must only be called when the owner_context is active", loc);
+	//assert(state.bound_window == nil || state.bound_window.glfw_window == state.owner_context, "enable_vsync must only be called when the owner_context is active", loc);
 	state.vsync = enable;
 	glfw.SwapInterval(auto_cast enable);
 }

@@ -32,6 +32,7 @@ Fbo_id :: distinct u32;
 Tex1d_id :: distinct u32;
 Tex2d_id :: distinct u32;
 Tex3d_id :: distinct u32;
+Texg_id :: distinct u32; //generic for all textures 
 Rbo_id :: distinct u32;
 Buffer_id :: distinct i32; //used for generic buffers, like VBO's and EBO's
 
@@ -123,6 +124,48 @@ Attribute_info_ex :: struct {
 	normalized : bool,
 	using _ : Attribute_info,
 }
+
+odin_type_to_uniform_type :: proc (odin_type : typeid) -> Uniform_type {
+	switch odin_type {
+		case f32:
+			return .float;
+		case [2]f32:
+			return .vec2;
+		case [3]f32:
+			return .vec3;
+		case [4]f32:
+			return .vec4;
+		case i32:
+			return .int; 
+		case [2]i32:
+			return .ivec2; 
+		case [3]i32:
+			return .ivec3; 
+		case [4]i32:
+			return .ivec4;
+		case u32:
+			return .uint;
+		case [2]u32:
+			return .uint;
+		case [3]u32:
+			return .uint;
+		case [4]u32:
+			return .uint;
+		case bool:
+			return .bool;
+		case matrix[2,2]f32:
+			return .mat2;
+		case matrix[3,3]f32:	
+			return .mat3;
+		case matrix[4,4]f32:	
+			return .mat4;
+		case:
+			return .invalid;
+	}
+
+	return .invalid;
+}
+
 
 odin_type_to_attribute_type :: proc (odin_type : typeid) -> Attribute_type {
 	switch odin_type {
@@ -792,6 +835,34 @@ when RENDER_DEBUG {
 	live_buffers : map[Buffer_id]struct{},
 	live_vaos : map[Vao_id]struct{},
 	*/
+
+	@(private)
+	init_debug_state :: proc() -> (s : GL_debug_state) {
+		s.programs		= make(map[Shader_program_id]Source_Code_Location);
+		s.buffers		= make(map[Buffer_id]Source_Code_Location);
+		s.vaos			= make(map[Vao_id]Source_Code_Location);
+		s.fbos			= make(map[Fbo_id]Source_Code_Location);
+		s.tex1ds		= make(map[Tex1d_id]Source_Code_Location);
+		s.tex2ds		= make(map[Tex2d_id]Source_Code_Location);
+		s.tex3ds		= make(map[Tex3d_id]Source_Code_Location);
+		s.rbos			= make(map[Rbo_id]Source_Code_Location);
+		s.syncs			= make(map[gl.sync_t]Source_Code_Location);
+		return;
+	}
+
+	@(private)
+	destroy_debug_state :: proc(s : ^GL_debug_state) {
+		delete(s.programs);
+		delete(s.buffers);
+		delete(s.vaos);
+		delete(s.fbos);
+		delete(s.tex1ds);
+		delete(s.tex2ds);
+		delete(s.tex3ds);
+		delete(s.rbos);
+		delete(s.syncs);
+		s^ = {};
+	}
 }
 
 gpu_state : GL_state;
@@ -800,15 +871,16 @@ info : GL_info;			//fecthed in the begining and can be read from to get system i
 
 GL_state :: struct {
 
-	bound_shader : Shader_program_id,
-	bound_target : Fbo_id,
-	bound_vao : Vao_id,
-	bound_rbo : Rbo_id,
-	bound_tex1D : Tex1d_id,
-	bound_tex2D : Tex2d_id,
-	bound_tex3D : Tex3d_id,
+	bound_shader 	: Shader_program_id,
+	bound_target 	: Maybe(Fbo_id),
+	bound_draw_fbo 	: Maybe(Fbo_id),
+	bound_read_fbo 	: Maybe(Fbo_id),
+	bound_vao 		: Vao_id,
+	bound_rbo 		: Rbo_id,
+	bound_texture 	: [16]Texg_id,
+	texture_slot 	: i32, //0-15 (specifies what bound_texture is currently changing).
 
-	bound_buffer : #sparse [Buffer_type]Buffer_id,
+	bound_buffer : map[Buffer_type]Buffer_id,
 }
 
 GL_state_ex :: struct {
@@ -845,13 +917,66 @@ GL_info :: struct {
 	MAX_ARRAY_TEXTURE_LAYERS : i32,
 }
 
+init_state :: proc () -> GL_states_comb {
+
+	state : GL_states_comb;
+
+	state.cpu_state.bound_buffer = make(map[Buffer_type]Buffer_id);
+	state.gpu_state.bound_buffer = make(map[Buffer_type]Buffer_id);
+
+	when RENDER_DEBUG {
+		state.debug_state = init_debug_state();
+	}
+
+	return state;
+}
+
+destroy_state :: proc (state : ^GL_states_comb) {
+
+	delete(state.cpu_state.bound_buffer);
+	delete(state.gpu_state.bound_buffer);
+	state.cpu_state = {};
+	state.gpu_state = {};
+
+	when RENDER_DEBUG {
+		destroy_debug_state(&state.debug_state);
+	}
+}
+
 debug_callback : gl.debug_proc_t : proc "c" (source: gl.GLenum, type: gl.GLenum, id: gl.GLuint, severity: gl.GLenum, length: gl.GLsizei, message: cstring, user_param : rawptr) {
 	context = runtime.default_context();
     // Print or handle the debug message here
     fmt.printf("OpenGL Debug Message: %.*s\n", length, message);
 }
 
+swap_states :: proc (new_states : ^GL_states_comb, old_states : ^GL_states_comb, loc := #caller_location) {
+	assert(new_states != old_states, "states are the same!", loc);
+	new_states^, old_states^ = old_states^, new_states^;
+}
+
+when RENDER_DEBUG {
+	GL_states_comb :: struct {
+		cpu_state 	: GL_state_ex,
+		gpu_state 	: GL_state,
+		debug_state : GL_debug_state,
+	}
+}
+else {
+	GL_states_comb :: struct {
+		cpu_state 	: GL_state_ex,
+		gpu_state 	: GL_state,
+	}
+}
+
 init :: proc() {
+	
+	/* TODO delete, this is handled by window creation
+	cpu_state, gpu_state = init_state();
+	when RENDER_DEBUG {
+		debug_state = init_debug_state();
+	}
+	*/
+
 	when RECORD_DEBUG {
 		setup_call_recorder();
 		gl.capture_gl_callback = record_call;
@@ -920,6 +1045,13 @@ destroy :: proc(loc := #caller_location) {
 		
 		fmt.assertf(leaks == 0, "%v OpenGL object(s) has not been destroyed\n", leaks, loc = loc);
 	}
+
+	/* TODO delete, this is handled by window creation/destruction
+	destroy_state(&cpu_state, &gpu_state);
+	when RENDER_DEBUG {
+		destroy_debug_state(&debug_state);
+	}
+	*/
 }
 
 /////////// recording ///////////
@@ -1057,6 +1189,9 @@ record_err :: proc(from_loc: runtime.Source_Code_Location, err_val: any, err : E
 			gl.GetIntegerv(.DEBUG_LOGGED_MESSAGES, &mes_cnt)
 		}
 	}
+
+	fmt.printf("Current cpu state : %#v\n\n\n", cpu_state);
+	fmt.printf("Current gpu state : %#v\n\n\n", gpu_state);
 
 	panic("Caught opengl error!", from_loc);
 }
@@ -2100,6 +2235,13 @@ gen_render_buffer :: proc (loc := #caller_location) -> Rbo_id {
 
 delete_render_buffers :: proc(rbos : []Rbo_id) {
 
+	for rbo in rbos {
+		if gpu_state.bound_rbo == rbo {
+			gl.BindRenderbuffer(.RENDERBUFFER, 0);
+			gpu_state.bound_rbo = 0;
+		}
+	}
+
 	gl.DeleteRenderbuffers(auto_cast len(rbos), auto_cast raw_data(rbos));
 	
 	when RENDER_DEBUG {
@@ -2111,6 +2253,11 @@ delete_render_buffers :: proc(rbos : []Rbo_id) {
 
 delete_render_buffer :: proc(rbo : Rbo_id) {
 	
+	if gpu_state.bound_rbo == rbo {
+		gl.BindRenderbuffer(.RENDERBUFFER, 0);
+		gpu_state.bound_rbo = 0;
+	}
+
 	rbo := rbo;
 	gl.DeleteRenderbuffers(1, auto_cast &rbo);
 
@@ -2140,10 +2287,10 @@ gen_frame_buffer :: proc (loc := #caller_location) -> Fbo_id {
 
 delete_frame_buffer :: proc(fbo : Fbo_id, loc := #caller_location) {
 	
-	if cpu_state.bound_target == 0 && gpu_state.bound_target == fbo {
-		gl.BindFramebuffer(.FRAMEBUFFER, 0);
-		gpu_state.bound_target = 0;
-	}
+	//To ensure it is not still bound somehow.
+	gpu_state.bound_target = nil;
+	gpu_state.bound_draw_fbo = nil;
+	gpu_state.bound_read_fbo = nil;
 
 	fbo := fbo;
 	gl.DeleteFramebuffers(1, auto_cast &fbo);
@@ -2168,9 +2315,38 @@ bind_frame_buffer :: proc(fbo : Fbo_id, loc := #caller_location) {
 unbind_frame_buffer  :: proc() {
 	
 	cpu_state.bound_target = 0;
+}
 
-	//This will not unbind the framebuffer, it will just note that should do it if required by another call.
-	//gl.BindFramebuffer(.FRAMEBUFFER, 0);
+bind_frame_buffer_read :: proc(fbo : Fbo_id, loc := #caller_location) {
+	
+	if gpu_state.bound_read_fbo == fbo {
+		return;
+	}
+	
+	gl.BindFramebuffer(.READ_FRAMEBUFFER, auto_cast fbo);
+	
+	cpu_state.bound_read_fbo = fbo;
+	gpu_state.bound_read_fbo = fbo;
+}
+
+unbind_frame_buffer_read  :: proc() {
+	cpu_state.bound_read_fbo = 0;
+}
+
+bind_frame_buffer_draw :: proc(fbo : Fbo_id, loc := #caller_location) {
+	
+	if gpu_state.bound_draw_fbo == fbo {
+		return;
+	}
+
+	gl.BindFramebuffer(.DRAW_FRAMEBUFFER, auto_cast fbo);
+	
+	cpu_state.bound_draw_fbo = fbo;
+	gpu_state.bound_draw_fbo = fbo;
+}
+
+unbind_frame_buffer_draw  :: proc() {
+	cpu_state.bound_draw_fbo = 0;
 }
 
 bind_render_buffer :: proc(rbo : Rbo_id, loc := #caller_location) {
@@ -2185,12 +2361,8 @@ bind_render_buffer :: proc(rbo : Rbo_id, loc := #caller_location) {
 	gpu_state.bound_rbo = rbo;
 }
 
-unbind_render_buffer  :: proc() {
-	
+unbind_render_buffer :: proc() {	
 	cpu_state.bound_rbo = 0;
-
-	//This will not unbind the renderbuffer, it will just note that should do it if required by another call.
-	//gl.Bindrenderbuffer(.renderBUFFER, 0);
 }
 
 Color_format :: enum u32 {
@@ -2230,7 +2402,7 @@ associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_bu
 		//TODO move the generation out of this function so we can reuse more code. Have the function be like "attach_frame_buffer_render_attachmetns".
 		bind_frame_buffer(fbo);
 		
-		// Create a multisampled renderbuffer object for color attachment
+		// Create a (non-)multisampled renderbuffer object for color attachment
 		for i in 0 ..< len(render_buffers) {
 
 			bind_render_buffer(render_buffers[i]);
@@ -2356,10 +2528,11 @@ blit_fbo_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, ds
 		gl.BlitNamedFramebuffer(auto_cast fbo, 0, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation);
 	}
 	else {
-		gl.BindFramebuffer(.READ_FRAMEBUFFER, auto_cast fbo);
-		gl.BindFramebuffer(.DRAW_FRAMEBUFFER, 0);
+		bind_frame_buffer_read(fbo);
+		bind_frame_buffer_draw(0);
 		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); //TODO options for .COLOR_BUFFER_BIT, .NEAREST
-		gl.BindFramebuffer(.READ_FRAMEBUFFER, 0);
+		unbind_frame_buffer_draw();
+		unbind_frame_buffer_read();
 	}
 }
 
@@ -2403,16 +2576,16 @@ gen_texture_1D :: proc (loc := #caller_location) -> (tex : Tex1d_id) {
 
 delete_texture_1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
 
-	if cpu_state.bound_tex1D == 0 {
+	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
 		for t in textures {
-			if gpu_state.bound_tex1D == t {
+			if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id) t {
 				gl.BindTexture(.TEXTURE_1D, 0);
-				gpu_state.bound_tex1D = 0;
+				cpu_state.bound_texture[cpu_state.texture_slot] = 0;
 			}
 		}
 	}
 
-	gl.DeleteTextures(auto_cast len(textures), cast([^]u32) raw_data(textures));
+	gl.DeleteTextures(cast(i32)len(textures), cast([^]u32) raw_data(textures));
 
 	when RENDER_DEBUG {
 		for t in textures {
@@ -2424,11 +2597,11 @@ delete_texture_1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
 delete_texture_1D :: proc (texture : Tex1d_id, loc := #caller_location) {
 	texture := texture;
 
-	if cpu_state.bound_tex1D == 0 {
-		if gpu_state.bound_tex1D == texture {
-			gl.BindTexture(.TEXTURE_1D, 0);
-			gpu_state.bound_tex1D = 0;
-		}
+	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
+		if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)texture {
+				gl.BindTexture(.TEXTURE_1D, 0);
+				cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+			}
 	}
 
 	gl.DeleteTextures(1, cast([^]u32)&texture);
@@ -2440,18 +2613,18 @@ delete_texture_1D :: proc (texture : Tex1d_id, loc := #caller_location) {
 
 bind_texture_1D :: proc(tex : Tex1d_id, loc := #caller_location) {
 	
-	if gpu_state.bound_tex1D == tex {
+	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
 		return;
 	}
 
 	gl.BindTexture(.TEXTURE_1D, auto_cast tex);
 	
-	cpu_state.bound_tex1D = tex;
-	gpu_state.bound_tex1D = tex;
+	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
+	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 }
 
 unbind_texture_1D  :: proc() {
-	cpu_state.bound_tex1D = 0;
+	cpu_state.bound_texture[cpu_state.texture_slot] = 0;
 }
 
 write_texure_data_1D :: proc (tex : Tex1d_id, level, offset : i32, width : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
@@ -2500,7 +2673,7 @@ setup_texure_1D :: proc (tex : Tex1d_id, mipmaps : bool, width : gl.GLsizei, for
 	}
 	else {
 		bind_texture_1D(tex);
-		gl.TexImage1D(.TEXTURE_1D, levels, auto_cast format, width, 0, .RGBA, .UNSIGNED_BYTE, nil);
+		gl.TexImage1D(.TEXTURE_1D, 0, auto_cast format, width, 0, .RGBA, .UNSIGNED_BYTE, nil);
 		unbind_texture_1D();
 	}
 }
@@ -2536,10 +2709,10 @@ filtermode_texture_1D :: proc(tex_id : Tex1d_id, mode : Filtermode) {
 
 	switch mode {
 		case .nearest:
-			min_mode = .NEAREST_MIPMAP_NEAREST;
+			min_mode = .NEAREST //.NEAREST_MIPMAP_NEAREST;
 			mag_mode = .NEAREST;
 		case .linear:
-			min_mode = .LINEAR_MIPMAP_LINEAR;
+			min_mode = .NEAREST //.LINEAR_MIPMAP_LINEAR;
 			mag_mode = .LINEAR;
 	}
 	
@@ -2593,11 +2766,11 @@ gen_texture_2D :: proc (loc := #caller_location) -> (tex : Tex2d_id) {
 
 delete_texture_2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
 
-	if cpu_state.bound_tex2D == 0 {
+	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
 		for t in textures {
-			if gpu_state.bound_tex2D == t {
+			if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)t {
 				gl.BindTexture(.TEXTURE_2D, 0);
-				gpu_state.bound_tex2D = 0;
+				gpu_state.bound_texture[cpu_state.texture_slot] = 0;
 			}
 		}
 	}
@@ -2614,10 +2787,10 @@ delete_texture_2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
 delete_texture_2D :: proc (texture : Tex2d_id, loc := #caller_location) {
 	texture := texture;
 
-	if cpu_state.bound_tex2D == 0 {
-		if gpu_state.bound_tex2D == texture {
+	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
+		if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)texture {
 			gl.BindTexture(.TEXTURE_2D, 0);
-			gpu_state.bound_tex2D = 0;
+			gpu_state.bound_texture[cpu_state.texture_slot] = 0;
 		}
 	}
 
@@ -2630,18 +2803,18 @@ delete_texture_2D :: proc (texture : Tex2d_id, loc := #caller_location) {
 
 bind_texture_2D :: proc(tex : Tex2d_id, loc := #caller_location) {
 	
-	if gpu_state.bound_tex2D == tex {
+	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
 		return;
 	}
 
 	gl.BindTexture(.TEXTURE_2D, auto_cast tex);
 	
-	cpu_state.bound_tex2D = tex;
-	gpu_state.bound_tex2D = tex;
+	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
+	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 }
 
 unbind_texture_2D  :: proc() {
-	cpu_state.bound_tex2D = 0;
+	cpu_state.bound_texture[cpu_state.texture_slot] = 0;
 }
 
 write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, width, height : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
@@ -2721,17 +2894,31 @@ wrapmode_texture_2D :: proc(tex_id : Tex2d_id, mode : Wrapmode) {
 	}
 }
 
-filtermode_texture_2D :: proc(tex_id : Tex2d_id, mode : Filtermode) {
+filtermode_texture_2D :: proc(tex_id : Tex2d_id, mode : Filtermode, using_mipmaps : bool) {
 	
 	min_mode : gl.GLenum;
 	mag_mode : gl.GLenum;
 
 	switch mode {
 		case .nearest:
-			min_mode = .NEAREST_MIPMAP_NEAREST;
+			
+			if using_mipmaps {
+				min_mode = .NEAREST_MIPMAP_NEAREST;
+			}
+			else {
+				min_mode = .NEAREST;
+			}
+
 			mag_mode = .NEAREST;
 		case .linear:
-			min_mode = .LINEAR_MIPMAP_LINEAR;
+			
+			if using_mipmaps {
+				min_mode = .LINEAR_MIPMAP_LINEAR;;
+			}
+			else {
+				min_mode = .LINEAR;
+			}
+
 			mag_mode = .LINEAR;
 	}
 	
@@ -2746,6 +2933,34 @@ filtermode_texture_2D :: proc(tex_id : Tex2d_id, mode : Filtermode) {
 		unbind_texture_2D();
 	}
 }
+
+active_texture :: proc(slot : i32) {
+	
+	if gpu_state.texture_slot == slot {
+		return;
+	}
+
+	gl.ActiveTexture(auto_cast (gl.TEXTURE0 + slot));
+
+	cpu_state.texture_slot = slot;
+	gpu_state.texture_slot = slot;
+}
+
+active_bind_texture_2D :: proc (tex : Tex2d_id, slot : i32) {
+	
+	if gpu_state.bound_texture[slot] == cast(Texg_id)tex {
+		return;
+	}
+
+	active_texture(slot);
+	bind_texture_2D(tex);
+}
+
+/*
+active_bind_texture_2Ds :: proc (tex : []struct{Tex2d_id, slot : u32}) {
+	panic("TODO");
+}
+*/
 
 //// 3D textures ////
 gen_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
@@ -2785,11 +3000,11 @@ gen_texture_3D :: proc (loc := #caller_location) -> (tex : Tex3d_id) {
 
 delete_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 
-	if cpu_state.bound_tex3D == 0 {
+	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
 		for t in textures {
-			if gpu_state.bound_tex3D == t {
+			if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)t {
 				gl.BindTexture(.TEXTURE_3D, 0);
-				gpu_state.bound_tex3D = 0;
+				gpu_state.bound_texture[cpu_state.texture_slot] = 0;
 			}
 		}
 	}
@@ -2805,18 +3020,18 @@ delete_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 
 bind_texture_3D :: proc(tex : Tex3d_id, loc := #caller_location) {
 	
-	if gpu_state.bound_tex3D == tex {
+	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
 		return;
 	}
 
 	gl.BindTexture(.TEXTURE_3D, auto_cast tex);
 	
-	cpu_state.bound_tex3D = tex;
-	gpu_state.bound_tex3D = tex;
+	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
+	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 }
 
 unbind_texture_3D  :: proc() {
-	cpu_state.bound_tex3D = 0;
+	cpu_state.bound_texture[cpu_state.texture_slot] = 0;
 }
 
 write_texure_data_3D :: proc (tex : Tex3d_id, level, xoffset, yoffset, zoffset : i32, width, height, depth : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
@@ -2927,10 +3142,10 @@ filtermode_texture_3D :: proc(tex_id : Tex3d_id, mode : Filtermode) {
 delete_texture_3D :: proc (texture : Tex3d_id, loc := #caller_location) {
 	texture := texture;
 
-	if cpu_state.bound_tex3D == 0 {
-		if gpu_state.bound_tex3D == texture {
+	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
+		if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)texture {
 			gl.BindTexture(.TEXTURE_3D, 0);
-			gpu_state.bound_tex3D = 0;
+			gpu_state.bound_texture[cpu_state.texture_slot]= 0;
 		}
 	}
 

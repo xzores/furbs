@@ -11,11 +11,14 @@ import "gl"
 
 import glgl "gl/OpenGL"
 
+import ex_defs "../../user_defs"
+
 Shader :: struct {
 	id : Shader_program_id,                 					// Shader program id
 	name : string,
 	attribute_locations : [Attribute_location]Attribute_info, 	// Shader locations array (MAX_SHADER_LOCATIONS)
 	uniform_locations : [Uniform_location]Uniform_info,
+	texture_locations : [Texture_location]Uniform_info,
 }
 
 init_shaders :: proc() {
@@ -115,12 +118,27 @@ uniform_odin_type :: union {
 	//matrix[4,3]f32,
 }
 
+texture_odin_type :: union {
+	//Texture1D,
+	Texture2D,
+	//Texture3D,
+}
+
 set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : uniform_odin_type, loc := #caller_location) {
 	using glgl;
+
+	value := value;
 	
 	//fmt.printf("shader.uniform_locations : %#v\n\n\n", shader.uniform_locations);
 	if !shader.uniform_locations[uniform].active {
 		return;
+	}
+	
+	when ODIN_DEBUG {
+		odin_type :=  reflect.union_variant_type_info(value).id;
+		bind_type := gl.odin_type_to_uniform_type(odin_type);
+		target_type := shader.uniform_locations[uniform].uniform_type;
+		fmt.assertf(target_type == bind_type, "Cannot bind a uniform of type %v to a %v.", target_type, bind_type,loc = loc);
 	}
 
 	u_loc : i32 = cast(i32) shader.uniform_locations[uniform].location;
@@ -159,9 +177,20 @@ set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : unifor
 			UniformMatrix3fv(u_loc, 1, false, &v[0,0]);
 		case matrix[4,4]f32:
 			UniformMatrix4fv(u_loc, 1, false, &v[0,0]);
+
 	}
 
 	//fmt.printf("setting uniform %v, at location : %v, with value : %v", uniform, u_loc, value);
+}
+
+set_texture :: proc(location : Texture_location, value : texture_odin_type, loc := #caller_location) {
+	
+	switch v in value {
+		case Texture2D:
+			gl.active_bind_texture_2D(v.id, cast(i32)location);
+		case:
+			panic("TODO");
+	}
 }
 
 run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : string, src : string, path : string) -> (vertex_src : string, fragment_src : string){
@@ -421,7 +450,9 @@ load_shader_from_src :: proc(name : string, combined_src : string, path : string
 
 	attrib_names : map[string]Attribute_location;
 	uniform_names : map[string]Uniform_location;
+	texture_names : map[string]Texture_location;
 
+	//Load attributes into attrib_names
 	attrib_enums := reflect.enum_fields_zipped(Attribute_location);
 	for enum_field, i in attrib_enums { 
 		name := enum_field.name;
@@ -435,6 +466,14 @@ load_shader_from_src :: proc(name : string, combined_src : string, path : string
 		name := enum_field.name;
 		value : Uniform_location = auto_cast enum_field.value;
 		uniform_names[name] = value;
+	}
+	
+	//Load uniforms into uniform_names
+	texture_enums := reflect.enum_fields_zipped(Texture_location);
+	for enum_field, i in texture_enums {
+		name := enum_field.name;
+		value : Texture_location = auto_cast enum_field.value;
+		texture_names[name] = value;
 	}
 
 	/////////
@@ -460,12 +499,21 @@ load_shader_from_src :: proc(name : string, combined_src : string, path : string
 	
 	for u_name, uniform in get_shader_uniforms(shader_id, context.temp_allocator, loc) {
 
-		if !(u_name in uniform_names) {
-			fmt.panicf("Shader %s contains illigal uniform \"%s\"\n", name, u_name, loc = loc);
+		if (u_name in uniform_names) {
+			value := uniform_names[u_name];
+			shader.uniform_locations[value] = uniform;
 		}
-		
-		value := uniform_names[u_name];
-		shader.uniform_locations[value] = uniform;
+		else if (u_name in texture_names) {
+			value : Texture_location = texture_names[u_name];
+			shader.texture_locations[value] = uniform;
+			gl.bind_shader_program(shader_id);
+			glgl.Uniform1i(uniform.location, cast(i32)value); //The uniform will always be bound to this texture slot. Static assignment.
+			gl.unbind_shader_program();
+		}
+		else {
+			fmt.panicf("Shader %s contains illigal uniform/texture \"%s\"\n", name, u_name, loc = loc);
+		}
+
 	}
 	
 	append(&state.loaded_shaders, shader)

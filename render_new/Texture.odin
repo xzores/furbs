@@ -14,7 +14,6 @@ import "gl"
 import "../utils"
 
 Texture_desc :: struct {
-
 	wrapmode : gl.Wrapmode,
 	filtermode : gl.Filtermode,
 	mipmaps : bool,						// Is mipmaps enabled?
@@ -22,28 +21,95 @@ Texture_desc :: struct {
 }
 
 Texture2D :: struct {
-	id		: gl.Tex2d_id,            	// OpenGL texture id
-	width	: i32,               		// Texture base width
-	height	: i32,               		// Texture base height
+	id			: gl.Tex2d_id,            	// OpenGL texture id
+	width		: i32,               		// Texture base width
+	height		: i32,               		// Texture base height
 
 	using desc : Texture_desc,
 }
 
-make_texture_2D :: proc(width, height : i32, mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.Filtermode, internal_format : gl.Pixel_format_internal, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
+@(require_results)
+load_texture_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .uncompressed_RGBA8}, loc := #caller_location) -> Texture2D {
+	
+	data, ok := os.read_entire_file_from_filename(filename);
+	defer delete(data);
+
+	fmt.assertf(ok, "loading texture data for %v failed", filename, loc = loc);
+
+    return load_texture_from_png_bytes(desc, data, filename, loc = loc);
+}
+
+//Data is compressed bytes (ex png format)
+@(require_results)
+load_texture_from_png_bytes :: proc(desc : Texture_desc, data : []byte, texture_path := "", flipped := true, loc := #caller_location) -> Texture2D {
+	using image;
+
+	options := Options{
+		.alpha_add_if_missing,
+	};
+
+    img, err := png.load_from_bytes(data, options);
+	
+	if err != nil {
+		fmt.panicf("Failed to load texture %s, err : %v", texture_path, err, loc = loc);
+	}
+
+	defer destroy(img);
+
+	//fmt.printf("Image: %vx%vx%v, %v-bit.\n", img.width, img.height, img.channels, img.depth)
+
+	//TODO do we need any header data?
+	/* 
+	if v, ok := img.metadata.(^image.PNG_Info); ok {
+		
+	}
+	else {
+		panic("Image is not png info");
+	}
+	*/
+
+	assert(img.depth == 8);
+	assert(img.channels == 4);
+
+	raw_data := bytes.buffer_to_bytes(&img.pixels);
+	
+	if flipped {
+		flip_texture(raw_data, img.width, img.height, img.channels);
+	}
+
+	return make_texture_2D_desc(desc, auto_cast img.width, auto_cast img.height, .uncompressed_RGBA8, raw_data, loc);
+}
+
+@(require_results)
+make_texture_2D :: proc(mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.Filtermode, internal_format : gl.Pixel_format_internal,
+							 width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
+
+	desc : Texture_desc = {
+		mipmaps 		= mipmaps,
+		wrapmode 		= wrapmode,
+		filtermode 		= filtermode,
+		format 			= internal_format,
+	};
+
+	return make_texture_2D_desc(desc, width, height, upload_format, data, loc);
+}
+
+@(require_results)
+make_texture_2D_desc :: proc(using desc : Texture_desc, width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
 
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
 	id : gl.Tex2d_id = gl.gen_texture_2D(loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 
-    gl.wrapmode_texture_2D(id, .repeat);
-	gl.filtermode_texture_2D(id, .linear);
+    gl.wrapmode_texture_2D(id, desc.wrapmode);
+	gl.filtermode_texture_2D(id, desc.filtermode, mipmaps);
 
 	size_per_component, channels : int;
 	size_per_component = gl.Upload_format_component_size(upload_format);
 	channels = gl.Upload_format_channel_cnt(upload_format);
 
-	gl.setup_texure_2D(id, mipmaps, width, height, internal_format);
+	gl.setup_texure_2D(id, mipmaps, width, height, format);
 
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
@@ -63,12 +129,7 @@ make_texture_2D :: proc(width, height : i32, mipmaps : bool, wrapmode : gl.Wrapm
 		id, 
 		width,
 		height,
-		{
-			wrapmode,
-			filtermode,
-			mipmaps,
-			internal_format,
-		},
+		desc,
 	}
 
     return tex;
@@ -78,27 +139,6 @@ destroy_texture_2D :: proc(tex : ^Texture2D) {
 	fmt.printf("TODO? in destroy_texture_2D\n");
 	gl.delete_texture_2D(tex.id);
 	tex^ = {};
-}
-
-/*
-
-Depth_attachment :: union {Texture_id, Render_buffer_id}
-
-Depth_texture2D :: struct {
-	id					: Depth_attachment,          // OpenGL texture/renderbuffer id
-	width				: c.int,               // Texture base width
-	height				: c.int,               // Texture base height
-	format				: Depth_format,        // Data format (PixelFormat type)
-}
-
-load_texture_from_file :: proc(filename : string, loc := #caller_location) -> Texture2D {
-	
-	data, ok := os.read_entire_file_from_filename(filename);
-	defer delete(data);
-
-	fmt.assertf(ok, "loading texture data for %v failed", filename, loc = loc);
-
-    return load_texture_from_png_bytes(data, filename, loc = loc);
 }
 
 flip_texture :: proc(data : []byte, width, height, channels : int) {
@@ -117,57 +157,14 @@ flip_texture :: proc(data : []byte, width, height, channels : int) {
 	}
 }
 
-//Data is compressed bytes (ex png format)
-load_texture_from_png_bytes :: proc(data : []byte, texture_path := "", flipped := true, loc := #caller_location) -> Texture2D {
-	using image;
+/*
+Depth_attachment :: union {Texture_id, Render_buffer_id}
 
-	options := Options{
-		.alpha_add_if_missing,
-	};
-
-    img, err := png.load_from_bytes(data, options);
-
-	if err != nil {
-		fmt.panicf("Failed to load texture %s, err : %v", texture_path, err, loc = loc);
-	}
-
-	defer destroy(img)
-
-	//fmt.printf("Image: %vx%vx%v, %v-bit.\n", img.width, img.height, img.channels, img.depth)
-
-	//TODO do we need any header data?
-	/* 
-	if v, ok := img.metadata.(^image.PNG_Info); ok {
-		
-	}
-	else {
-		panic("Image is not png info");
-	}
-	*/
-
-	assert(img.depth == 8);
-	assert(img.channels == 4);
-
-	raw_data := bytes.buffer_to_bytes(&img.pixels);
-
-	if flipped {
-		flip_texture(raw_data, img.width, img.height, img.channels);
-	}
-
-    return load_texture_from_raw_bytes(raw_data, auto_cast img.width, auto_cast img.height, .uncompressed_RGBA8, loc = loc);
-}
-
-load_texture_from_raw_bytes :: proc(data : []byte, width, height : i32, format : Pixel_format, loc := #caller_location) -> Texture2D {
-
-    texture : Texture2D = {
-		id			= load_texture_id(data, width, height, format, loc = loc),              // OpenGL texture id
-		width   	= width,        	// Texture base width
-		height  	= height,       	// Texture base height
-		mipmaps 	= 1,            				// TODO Mipmap levels, 1 by default
-		format  	= format,         				// Data format (PixelFormat type)
-	};
-
-	return texture;
+Depth_texture2D :: struct {
+	id					: Depth_attachment,          // OpenGL texture/renderbuffer id
+	width				: c.int,               // Texture base width
+	height				: c.int,               // Texture base height
+	format				: Depth_format,        // Data format (PixelFormat type)
 }
 
 // Load texture for rendering (framebuffer)

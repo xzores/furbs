@@ -17,6 +17,7 @@ import "gl"
 
 Uniform_location :: ex_defs.Uniform_location;
 Attribute_location :: ex_defs.Attribute_location;
+Texture_location :: ex_defs.Texture_location;
 
 Shader_program_id :: gl.Shader_program_id;
 //Shader_vertex_id :: gl.Shader_vertex_id;
@@ -125,7 +126,7 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 	when ODIN_DEBUG {
 		glfw.WindowHint(glfw.OPENGL_DEBUG_CONTEXT, glfw.TRUE);
 	}
-
+	
 	if desc, ok := window_desc.?; ok {
 		assert(desc.resize_behavior == .resize_backbuffer || desc.resize_behavior == .dont_allow, "when calling init with a window descriptor, the resize_behavior must be .resize_backbuffer or .dont_allow", loc);
 
@@ -134,14 +135,18 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 		}
 
 		window = new(Window);
+		window.gl_states = gl.init_state();
 		setup_window_no_backbuffer(desc, window);
+		
 		state.owner_context = window.glfw_window;
+		state.owner_gl_states = window.gl_states
 		state.main_window = window;
 	}
 	else {
 		// Create a dummy window for context sharing
 		glfw.WindowHint(glfw.VISIBLE, glfw.FALSE);  // Make the window invisible
 		state.owner_context = glfw.CreateWindow(1, 1, "you should not see this window", nil, nil);
+		state.owner_gl_states = gl.init_state();
 		glfw.WindowHint(glfw.VISIBLE, glfw.TRUE);
 	}
 
@@ -150,7 +155,7 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
         glfw.Terminate();
     }
 
-	_make_context_current(state.owner_context);
+	_make_context_current(nil);
 
 	load_up_to(.opengl_3_0, glfw.gl_set_proc_address);
 	version := get_version();
@@ -234,7 +239,8 @@ destroy :: proc (loc := #caller_location) {
 	fmt.printf("Destorying main window\n");
 	glfw.DestroyWindow(state.owner_context);
 	state.owner_context = nil;
-	state.current_context = nil;
+	state.bound_window = nil;
+
 	if state.main_window != nil {
 		free(state.main_window);
 		state.main_window = nil;
@@ -257,15 +263,18 @@ begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {
 	
 	begin_inputs();
 
-	handle_fullscreen :: proc (w : ^Window) {
+	handle_clear_color :: proc (w : ^Window, clear_color : [4]f32, falgs : gl.Clear_flags) {
+		gl.bind_frame_buffer(w.framebuffer.id);
+		gl.clear(clear_color, falgs);
+	}
+
+	for w in state.active_windows {
+		
 		if w.is_fullscreen != w.fullscreen_target_state {
 			r := w.target_windowed_rect;
 			glfw.SetWindowMonitor(w.glfw_window, w.target_monitor, r.x, r.y, r.z, r.w, w.target_refresh); //TODO should we allow setting a refresh rate?
 			w.is_fullscreen = !w.is_fullscreen;
 		}
-	}
-
-	handle_window_backbuffer :: proc (w : ^Window) {
 		
 		if w.resize_behavior == .resize_backbuffer {
 			sw, sh := get_screen_size(w);
@@ -279,31 +288,28 @@ begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {
 				w.framebuffer = make_frame_buffer(1, sw, sh, w.framebuffer.samples, true, w.framebuffer.color_format, w.framebuffer.depth_format);
 				w.width, w.height = sw, sh;
 
-				_make_context_current(w.glfw_window);
+				_make_context_current(w);
 				gl.delete_frame_buffer(w.context_framebuffer.id);
 				w.context_framebuffer = {}; //set it to zero, before recreation, not required attom.
 				recreate_frame_buffer(&w.context_framebuffer, w.framebuffer);
-				_make_context_current(state.owner_context);
+				_make_context_current(nil);
 			}
 		}
-	}
 
-	handle_clear_color :: proc (w : ^Window, clear_color : [4]f32, falgs : gl.Clear_flags) {
-		gl.bind_frame_buffer(w.framebuffer.id);
-		gl.clear(clear_color, falgs);
-	}
-
-	for w in state.active_windows {
-		handle_fullscreen(w);
-		handle_window_backbuffer(w);
 		handle_clear_color(w, clear_color, falgs);
 	}
 	
 	//back to main window//
-	_make_context_current(state.owner_context);
+	_make_context_current(nil);
 	gl.bind_frame_buffer(0);
 	if state.main_window != nil {
-		handle_fullscreen(state.main_window);
+		w := state.main_window;
+		
+		if w.is_fullscreen != w.fullscreen_target_state {
+			r := w.target_windowed_rect;
+			glfw.SetWindowMonitor(w.glfw_window, w.target_monitor, r.x, r.y, r.z, r.w, w.target_refresh); //TODO should we allow setting a refresh rate?
+			w.is_fullscreen = !w.is_fullscreen;
+		}
 		state.main_window.width, state.main_window.height = get_screen_size(state.main_window);
 		handle_clear_color(state.main_window, clear_color, falgs);
 	}
@@ -317,7 +323,7 @@ end_frame :: proc(loc := #caller_location) {
 	}
 
 	for w in state.active_windows {
-		_make_context_current(w.glfw_window);
+		_make_context_current(w);
 		
 		dst_width, dst_height : i32;
 
@@ -327,7 +333,7 @@ end_frame :: proc(loc := #caller_location) {
 		_swap_buffers(loc, w.glfw_window);
 	}
 	
-	_make_context_current(state.owner_context);	
+	_make_context_current(nil);	
 	_swap_buffers(loc, state.owner_context);
 	glfw.PollEvents();
 

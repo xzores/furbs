@@ -2,8 +2,7 @@ package vendor_gl;
 
 when ODIN_DEBUG {
 ////////functions without return values////////
-// VERSION_1_0
-	 CullFace :: proc "c" (mode : GLenum, loc := #caller_location) { impl_CullFace(cast(u32)mode); debug_helper(loc, nil, mode); };
+// VERSION_1_0	 CullFace :: proc "c" (mode : GLenum, loc := #caller_location) { impl_CullFace(cast(u32)mode); debug_helper(loc, nil, mode); };
 	 FrontFace :: proc "c" (mode : GLenum, loc := #caller_location) { impl_FrontFace(cast(u32)mode); debug_helper(loc, nil, mode); };
 	 Hint :: proc "c" (target : GLenum, mode : GLenum, loc := #caller_location) { impl_Hint(cast(u32)target, cast(u32)mode); debug_helper(loc, nil, target, mode); };
 	 LineWidth :: proc "c" (width : GLfloat, loc := #caller_location) { impl_LineWidth(width); debug_helper(loc, nil, width); };
@@ -14,8 +13,8 @@ when ODIN_DEBUG {
 	 TexParameterfv :: proc "c" (target : GLenum, pname : GLenum, params : ^GLfloat, loc := #caller_location) { impl_TexParameterfv(cast(u32)target, cast(u32)pname, params); debug_helper(loc, nil, target, pname, params); };
 	 TexParameteri :: proc "c" (target : GLenum, pname : GLenum, param : GLint, loc := #caller_location) { impl_TexParameteri(cast(u32)target, cast(u32)pname, param); debug_helper(loc, nil, target, pname, param); };
 	 TexParameteriv :: proc "c" (target : GLenum, pname : GLenum, params : ^GLint, loc := #caller_location) { impl_TexParameteriv(cast(u32)target, cast(u32)pname, params); debug_helper(loc, nil, target, pname, params); };
-	 TexImage1D :: proc "c" (target : GLenum, level : GLint, internalformat : GLint, width : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr, loc := #caller_location) { impl_TexImage1D(cast(u32)target, level, internalformat, width, border, cast(u32)format, cast(u32)type, pixels); debug_helper(loc, nil, target, level, internalformat, width, border, format, type, pixels); };
-	 TexImage2D :: proc "c" (target : GLenum, level : GLint, internalformat : GLint, width : GLsizei, height : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr, loc := #caller_location) { impl_TexImage2D(cast(u32)target, level, internalformat, width, height, border, cast(u32)format, cast(u32)type, pixels); debug_helper(loc, nil, target, level, internalformat, width, height, border, format, type, pixels); };
+	 TexImage1D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr, loc := #caller_location) { impl_TexImage1D(cast(u32)target, level, cast(u32)internalformat, width, border, cast(u32)format, cast(u32)type, pixels); debug_helper(loc, nil, target, level, internalformat, width, border, format, type, pixels); };
+	 TexImage2D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, height : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr, loc := #caller_location) { impl_TexImage2D(cast(u32)target, level, cast(u32)internalformat, width, height, border, cast(u32)format, cast(u32)type, pixels); debug_helper(loc, nil, target, level, internalformat, width, height, border, format, type, pixels); };
 	 DrawBuffer :: proc "c" (mode : GLenum, loc := #caller_location) { impl_DrawBuffer(cast(u32)mode); debug_helper(loc, nil, mode); };
 	 Clear :: proc "c" (mask : GLbitfield, loc := #caller_location) { impl_Clear(cast(u32)mask); debug_helper(loc, nil, mask); };
 	 ClearColor :: proc "c" (red : GLfloat, green : GLfloat, blue : GLfloat, alpha : GLfloat, loc := #caller_location) { impl_ClearColor(red, green, blue, alpha); debug_helper(loc, nil, red, green, blue, alpha); };
@@ -48,8 +47,7 @@ when ODIN_DEBUG {
 	 GetTexLevelParameteriv :: proc "c" (target : GLenum, level : GLint, pname : GLenum, params : ^GLint, loc := #caller_location) { impl_GetTexLevelParameteriv(cast(u32)target, level, cast(u32)pname, params); debug_helper(loc, nil, target, level, pname, params); };
 	 DepthRange :: proc "c" (nearVal : GLdouble, farVal : GLdouble, loc := #caller_location) { impl_DepthRange(nearVal, farVal); debug_helper(loc, nil, nearVal, farVal); };
 	 Viewport :: proc "c" (x : GLint, y : GLint, width : GLsizei, height : GLsizei, loc := #caller_location) { impl_Viewport(x, y, width, height); debug_helper(loc, nil, x, y, width, height); };
-// VERSION_1_1
-	 DrawArrays :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, loc := #caller_location) { impl_DrawArrays(cast(u32)mode, first, count); debug_helper(loc, nil, mode, first, count); };
+// VERSION_1_1	 DrawArrays :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, loc := #caller_location) { impl_DrawArrays(cast(u32)mode, first, count); debug_helper(loc, nil, mode, first, count); };
 	 DrawElements :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, loc := #caller_location) { impl_DrawElements(cast(u32)mode, count, cast(u32)type, indices); debug_helper(loc, nil, mode, count, type, indices); };
 	 PolygonOffset :: proc "c" (factor : GLfloat, units : GLfloat, loc := #caller_location) { impl_PolygonOffset(factor, units); debug_helper(loc, nil, factor, units); };
 	 CopyTexImage1D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, x : GLint, y : GLint, width : GLsizei, border : GLint, loc := #caller_location) { impl_CopyTexImage1D(cast(u32)target, level, cast(u32)internalformat, x, y, width, border); debug_helper(loc, nil, target, level, internalformat, x, y, width, border); };
@@ -61,13 +59,11 @@ when ODIN_DEBUG {
 	 BindTexture :: proc "c" (target : GLenum, texture : GLuint, loc := #caller_location) { impl_BindTexture(cast(u32)target, texture); debug_helper(loc, nil, target, texture); };
 	 DeleteTextures :: proc "c" (n : GLsizei, textures : ^GLuint, loc := #caller_location) { impl_DeleteTextures(n, textures); debug_helper(loc, nil, n, textures); };
 	 GenTextures :: proc "c" (n : GLsizei, textures : ^GLuint, loc := #caller_location) { impl_GenTextures(n, textures); debug_helper(loc, nil, n, textures); };
-// VERSION_1_2
-	 DrawRangeElements :: proc "c" (mode : GLenum, start : GLuint, end : GLuint, count : GLsizei, type : GLenum, indices : rawptr, loc := #caller_location) { impl_DrawRangeElements(cast(u32)mode, start, end, count, cast(u32)type, indices); debug_helper(loc, nil, mode, start, end, count, type, indices); };
-	 TexImage3D :: proc "c" (target : GLenum, level : GLint, internalformat : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr, loc := #caller_location) { impl_TexImage3D(cast(u32)target, level, internalformat, width, height, depth, border, cast(u32)format, cast(u32)type, pixels); debug_helper(loc, nil, target, level, internalformat, width, height, depth, border, format, type, pixels); };
+// VERSION_1_2	 DrawRangeElements :: proc "c" (mode : GLenum, start : GLuint, end : GLuint, count : GLsizei, type : GLenum, indices : rawptr, loc := #caller_location) { impl_DrawRangeElements(cast(u32)mode, start, end, count, cast(u32)type, indices); debug_helper(loc, nil, mode, start, end, count, type, indices); };
+	 TexImage3D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, height : GLsizei, depth : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr, loc := #caller_location) { impl_TexImage3D(cast(u32)target, level, cast(u32)internalformat, width, height, depth, border, cast(u32)format, cast(u32)type, pixels); debug_helper(loc, nil, target, level, internalformat, width, height, depth, border, format, type, pixels); };
 	 TexSubImage3D :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, format : GLenum, type : GLenum, pixels : rawptr, loc := #caller_location) { impl_TexSubImage3D(cast(u32)target, level, xoffset, yoffset, zoffset, width, height, depth, cast(u32)format, cast(u32)type, pixels); debug_helper(loc, nil, target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels); };
 	 CopyTexSubImage3D :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, x : GLint, y : GLint, width : GLsizei, height : GLsizei, loc := #caller_location) { impl_CopyTexSubImage3D(cast(u32)target, level, xoffset, yoffset, zoffset, x, y, width, height); debug_helper(loc, nil, target, level, xoffset, yoffset, zoffset, x, y, width, height); };
-// VERSION_1_3
-	 ActiveTexture :: proc "c" (texture : GLenum, loc := #caller_location) { impl_ActiveTexture(cast(u32)texture); debug_helper(loc, nil, texture); };
+// VERSION_1_3	 ActiveTexture :: proc "c" (texture : GLenum, loc := #caller_location) { impl_ActiveTexture(cast(u32)texture); debug_helper(loc, nil, texture); };
 	 SampleCoverage :: proc "c" (value : GLfloat, invert : GLboolean, loc := #caller_location) { impl_SampleCoverage(value, invert); debug_helper(loc, nil, value, invert); };
 	 CompressedTexImage3D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, height : GLsizei, depth : GLsizei, border : GLint, imageSize : GLsizei, data : rawptr, loc := #caller_location) { impl_CompressedTexImage3D(cast(u32)target, level, cast(u32)internalformat, width, height, depth, border, imageSize, data); debug_helper(loc, nil, target, level, internalformat, width, height, depth, border, imageSize, data); };
 	 CompressedTexImage2D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, height : GLsizei, border : GLint, imageSize : GLsizei, data : rawptr, loc := #caller_location) { impl_CompressedTexImage2D(cast(u32)target, level, cast(u32)internalformat, width, height, border, imageSize, data); debug_helper(loc, nil, target, level, internalformat, width, height, border, imageSize, data); };
@@ -76,8 +72,7 @@ when ODIN_DEBUG {
 	 CompressedTexSubImage2D :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, width : GLsizei, height : GLsizei, format : GLenum, imageSize : GLsizei, data : rawptr, loc := #caller_location) { impl_CompressedTexSubImage2D(cast(u32)target, level, xoffset, yoffset, width, height, cast(u32)format, imageSize, data); debug_helper(loc, nil, target, level, xoffset, yoffset, width, height, format, imageSize, data); };
 	 CompressedTexSubImage1D :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, width : GLsizei, format : GLenum, imageSize : GLsizei, data : rawptr, loc := #caller_location) { impl_CompressedTexSubImage1D(cast(u32)target, level, xoffset, width, cast(u32)format, imageSize, data); debug_helper(loc, nil, target, level, xoffset, width, format, imageSize, data); };
 	 GetCompressedTexImage :: proc "c" (target : GLenum, level : GLint, img : rawptr, loc := #caller_location) { impl_GetCompressedTexImage(cast(u32)target, level, img); debug_helper(loc, nil, target, level, img); };
-// VERSION_1_4
-	 BlendFuncSeparate :: proc "c" (sfactorRGB : GLenum, dfactorRGB : GLenum, sfactorAlpha : GLenum, dfactorAlpha : GLenum, loc := #caller_location) { impl_BlendFuncSeparate(cast(u32)sfactorRGB, cast(u32)dfactorRGB, cast(u32)sfactorAlpha, cast(u32)dfactorAlpha); debug_helper(loc, nil, sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha); };
+// VERSION_1_4	 BlendFuncSeparate :: proc "c" (sfactorRGB : GLenum, dfactorRGB : GLenum, sfactorAlpha : GLenum, dfactorAlpha : GLenum, loc := #caller_location) { impl_BlendFuncSeparate(cast(u32)sfactorRGB, cast(u32)dfactorRGB, cast(u32)sfactorAlpha, cast(u32)dfactorAlpha); debug_helper(loc, nil, sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha); };
 	 MultiDrawArrays :: proc "c" (mode : GLenum, first : ^GLint, count : ^GLsizei, drawcount : GLsizei, loc := #caller_location) { impl_MultiDrawArrays(cast(u32)mode, first, count, drawcount); debug_helper(loc, nil, mode, first, count, drawcount); };
 	 MultiDrawElements :: proc "c" (mode : GLenum, count : ^GLsizei, type : GLenum, indices : ^rawptr, drawcount : GLsizei, loc := #caller_location) { impl_MultiDrawElements(cast(u32)mode, count, cast(u32)type, indices, drawcount); debug_helper(loc, nil, mode, count, type, indices, drawcount); };
 	 PointParameterf :: proc "c" (pname : GLenum, param : GLfloat, loc := #caller_location) { impl_PointParameterf(cast(u32)pname, param); debug_helper(loc, nil, pname, param); };
@@ -86,8 +81,7 @@ when ODIN_DEBUG {
 	 PointParameteriv :: proc "c" (pname : GLenum, params : ^GLint, loc := #caller_location) { impl_PointParameteriv(cast(u32)pname, params); debug_helper(loc, nil, pname, params); };
 	 BlendColor :: proc "c" (red : GLfloat, green : GLfloat, blue : GLfloat, alpha : GLfloat, loc := #caller_location) { impl_BlendColor(red, green, blue, alpha); debug_helper(loc, nil, red, green, blue, alpha); };
 	 BlendEquation :: proc "c" (mode : GLenum, loc := #caller_location) { impl_BlendEquation(cast(u32)mode); debug_helper(loc, nil, mode); };
-// VERSION_1_5
-	 GenQueries :: proc "c" (n : GLsizei, ids : ^GLuint, loc := #caller_location) { impl_GenQueries(n, ids); debug_helper(loc, nil, n, ids); };
+// VERSION_1_5	 GenQueries :: proc "c" (n : GLsizei, ids : ^GLuint, loc := #caller_location) { impl_GenQueries(n, ids); debug_helper(loc, nil, n, ids); };
 	 DeleteQueries :: proc "c" (n : GLsizei, ids : ^GLuint, loc := #caller_location) { impl_DeleteQueries(n, ids); debug_helper(loc, nil, n, ids); };
 	 BeginQuery :: proc "c" (target : GLenum, id : GLuint, loc := #caller_location) { impl_BeginQuery(cast(u32)target, id); debug_helper(loc, nil, target, id); };
 	 EndQuery :: proc "c" (target : GLenum, loc := #caller_location) { impl_EndQuery(cast(u32)target); debug_helper(loc, nil, target); };
@@ -102,8 +96,7 @@ when ODIN_DEBUG {
 	 GetBufferSubData :: proc "c" (target : GLenum, offset : GLintptr, size : GLsizeiptr, data : rawptr, loc := #caller_location) { impl_GetBufferSubData(cast(u32)target, offset, size, data); debug_helper(loc, nil, target, offset, size, data); };
 	 GetBufferParameteriv :: proc "c" (target : GLenum, pname : GLenum, params : ^GLint, loc := #caller_location) { impl_GetBufferParameteriv(cast(u32)target, cast(u32)pname, params); debug_helper(loc, nil, target, pname, params); };
 	 GetBufferPointerv :: proc "c" (target : GLenum, pname : GLenum, params : ^rawptr, loc := #caller_location) { impl_GetBufferPointerv(cast(u32)target, cast(u32)pname, params); debug_helper(loc, nil, target, pname, params); };
-// VERSION_2_0
-	 BlendEquationSeparate :: proc "c" (modeRGB : GLenum, modeAlpha : GLenum, loc := #caller_location) { impl_BlendEquationSeparate(cast(u32)modeRGB, cast(u32)modeAlpha); debug_helper(loc, nil, modeRGB, modeAlpha); };
+// VERSION_2_0	 BlendEquationSeparate :: proc "c" (modeRGB : GLenum, modeAlpha : GLenum, loc := #caller_location) { impl_BlendEquationSeparate(cast(u32)modeRGB, cast(u32)modeAlpha); debug_helper(loc, nil, modeRGB, modeAlpha); };
 	 DrawBuffers :: proc "c" (n : GLsizei, bufs : ^GLenum, loc := #caller_location) { impl_DrawBuffers(n, cast(^u32)bufs); debug_helper(loc, nil, n, bufs); };
 	 StencilOpSeparate :: proc "c" (face : GLenum, sfail : GLenum, dpfail : GLenum, dppass : GLenum, loc := #caller_location) { impl_StencilOpSeparate(cast(u32)face, cast(u32)sfail, cast(u32)dpfail, cast(u32)dppass); debug_helper(loc, nil, face, sfail, dpfail, dppass); };
 	 StencilFuncSeparate :: proc "c" (face : GLenum, func : GLenum, ref : GLint, mask : GLuint, loc := #caller_location) { impl_StencilFuncSeparate(cast(u32)face, cast(u32)func, ref, mask); debug_helper(loc, nil, face, func, ref, mask); };
@@ -190,15 +183,13 @@ when ODIN_DEBUG {
 	 VertexAttrib4uiv :: proc "c" (index : GLuint, v : ^GLuint, loc := #caller_location) { impl_VertexAttrib4uiv(index, v); debug_helper(loc, nil, index, v); };
 	 VertexAttrib4usv :: proc "c" (index : GLuint, v : ^GLushort, loc := #caller_location) { impl_VertexAttrib4usv(index, v); debug_helper(loc, nil, index, v); };
 	 VertexAttribPointer :: proc "c" (index : GLuint, size : GLint, type : GLenum, normalized : GLboolean, stride : GLsizei, pointer : uintptr, loc := #caller_location) { impl_VertexAttribPointer(index, size, cast(u32)type, normalized, stride, pointer); debug_helper(loc, nil, index, size, type, normalized, stride, pointer); };
-// VERSION_2_1
-	 UniformMatrix2x3fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat, loc := #caller_location) { impl_UniformMatrix2x3fv(location, count, transpose, value); debug_helper(loc, nil, location, count, transpose, value); };
+// VERSION_2_1	 UniformMatrix2x3fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat, loc := #caller_location) { impl_UniformMatrix2x3fv(location, count, transpose, value); debug_helper(loc, nil, location, count, transpose, value); };
 	 UniformMatrix3x2fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat, loc := #caller_location) { impl_UniformMatrix3x2fv(location, count, transpose, value); debug_helper(loc, nil, location, count, transpose, value); };
 	 UniformMatrix2x4fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat, loc := #caller_location) { impl_UniformMatrix2x4fv(location, count, transpose, value); debug_helper(loc, nil, location, count, transpose, value); };
 	 UniformMatrix4x2fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat, loc := #caller_location) { impl_UniformMatrix4x2fv(location, count, transpose, value); debug_helper(loc, nil, location, count, transpose, value); };
 	 UniformMatrix3x4fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat, loc := #caller_location) { impl_UniformMatrix3x4fv(location, count, transpose, value); debug_helper(loc, nil, location, count, transpose, value); };
 	 UniformMatrix4x3fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat, loc := #caller_location) { impl_UniformMatrix4x3fv(location, count, transpose, value); debug_helper(loc, nil, location, count, transpose, value); };
-//VERSION_3_0
-	 ColorMaski :: proc "c" (index : GLuint, r : GLboolean, g : GLboolean, b : GLboolean, a : GLboolean, loc := #caller_location) { impl_ColorMaski(index, r, g, b, a); debug_helper(loc, nil, index, r, g, b, a); };
+//VERSION_3_0	 ColorMaski :: proc "c" (index : GLuint, r : GLboolean, g : GLboolean, b : GLboolean, a : GLboolean, loc := #caller_location) { impl_ColorMaski(index, r, g, b, a); debug_helper(loc, nil, index, r, g, b, a); };
 	 GetBooleani_v :: proc "c" (target : GLenum, index : GLuint, data : ^GLboolean, loc := #caller_location) { impl_GetBooleani_v(cast(u32)target, index, data); debug_helper(loc, nil, target, index, data); };
 	 GetIntegeri_v :: proc "c" (target : GLenum, index : GLuint, data : ^GLint, loc := #caller_location) { impl_GetIntegeri_v(cast(u32)target, index, data); debug_helper(loc, nil, target, index, data); };
 	 Enablei :: proc "c" (target : GLenum, index : GLuint, loc := #caller_location) { impl_Enablei(cast(u32)target, index); debug_helper(loc, nil, target, index); };
@@ -274,8 +265,7 @@ when ODIN_DEBUG {
 	 BindVertexArray :: proc "c" (array : GLuint, loc := #caller_location) { impl_BindVertexArray(array); debug_helper(loc, nil, array); };
 	 DeleteVertexArrays :: proc "c" (n : GLsizei, arrays : ^GLuint, loc := #caller_location) { impl_DeleteVertexArrays(n, arrays); debug_helper(loc, nil, n, arrays); };
 	 GenVertexArrays :: proc "c" (n : GLsizei, arrays : ^GLuint, loc := #caller_location) { impl_GenVertexArrays(n, arrays); debug_helper(loc, nil, n, arrays); };
-// VERSION_3_1
-	 DrawArraysInstanced :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei, loc := #caller_location) { impl_DrawArraysInstanced(cast(u32)mode, first, count, instancecount); debug_helper(loc, nil, mode, first, count, instancecount); };
+// VERSION_3_1	 DrawArraysInstanced :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei, loc := #caller_location) { impl_DrawArraysInstanced(cast(u32)mode, first, count, instancecount); debug_helper(loc, nil, mode, first, count, instancecount); };
 	 DrawElementsInstanced :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, instancecount : GLsizei, loc := #caller_location) { impl_DrawElementsInstanced(cast(u32)mode, count, cast(u32)type, indices, instancecount); debug_helper(loc, nil, mode, count, type, indices, instancecount); };
 	 TexBuffer :: proc "c" (target : GLenum, internalformat : GLenum, buffer : GLuint, loc := #caller_location) { impl_TexBuffer(cast(u32)target, cast(u32)internalformat, buffer); debug_helper(loc, nil, target, internalformat, buffer); };
 	 PrimitiveRestartIndex :: proc "c" (index : GLuint, loc := #caller_location) { impl_PrimitiveRestartIndex(index); debug_helper(loc, nil, index); };
@@ -286,8 +276,7 @@ when ODIN_DEBUG {
 	 GetActiveUniformBlockiv :: proc "c" (program : GLuint, uniformBlockIndex : GLuint, pname : GLenum, params : ^GLint, loc := #caller_location) { impl_GetActiveUniformBlockiv(program, uniformBlockIndex, cast(u32)pname, params); debug_helper(loc, nil, program, uniformBlockIndex, pname, params); };
 	 GetActiveUniformBlockName :: proc "c" (program : GLuint, uniformBlockIndex : GLuint, bufSize : GLsizei, length : ^GLsizei, uniformBlockName : ^GLchar, loc := #caller_location) { impl_GetActiveUniformBlockName(program, uniformBlockIndex, bufSize, length, uniformBlockName); debug_helper(loc, nil, program, uniformBlockIndex, bufSize, length, uniformBlockName); };
 	 UniformBlockBinding :: proc "c" (program : GLuint, uniformBlockIndex : GLuint, uniformBlockBinding : GLuint, loc := #caller_location) { impl_UniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding); debug_helper(loc, nil, program, uniformBlockIndex, uniformBlockBinding); };
-// VERSION_3_2
-	 DrawElementsBaseVertex :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, basevertex : GLint, loc := #caller_location) { impl_DrawElementsBaseVertex(cast(u32)mode, count, cast(u32)type, indices, basevertex); debug_helper(loc, nil, mode, count, type, indices, basevertex); };
+// VERSION_3_2	 DrawElementsBaseVertex :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, basevertex : GLint, loc := #caller_location) { impl_DrawElementsBaseVertex(cast(u32)mode, count, cast(u32)type, indices, basevertex); debug_helper(loc, nil, mode, count, type, indices, basevertex); };
 	 DrawRangeElementsBaseVertex :: proc "c" (mode : GLenum, start : GLuint, end : GLuint, count : GLsizei, type : GLenum, indices : rawptr, basevertex : GLint, loc := #caller_location) { impl_DrawRangeElementsBaseVertex(cast(u32)mode, start, end, count, cast(u32)type, indices, basevertex); debug_helper(loc, nil, mode, start, end, count, type, indices, basevertex); };
 	 DrawElementsInstancedBaseVertex :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, instancecount : GLsizei, basevertex : GLint, loc := #caller_location) { impl_DrawElementsInstancedBaseVertex(cast(u32)mode, count, cast(u32)type, indices, instancecount, basevertex); debug_helper(loc, nil, mode, count, type, indices, instancecount, basevertex); };
 	 MultiDrawElementsBaseVertex :: proc "c" (mode : GLenum, count : ^GLsizei, type : GLenum, indices : ^rawptr, drawcount : GLsizei, basevertex : ^GLint, loc := #caller_location) { impl_MultiDrawElementsBaseVertex(cast(u32)mode, count, cast(u32)type, indices, drawcount, basevertex); debug_helper(loc, nil, mode, count, type, indices, drawcount, basevertex); };
@@ -303,8 +292,7 @@ when ODIN_DEBUG {
 	 TexImage3DMultisample :: proc "c" (target : GLenum, samples : GLsizei, internalformat : GLenum, width : GLsizei, height : GLsizei, depth : GLsizei, fixedsamplelocations : GLboolean, loc := #caller_location) { impl_TexImage3DMultisample(cast(u32)target, samples, cast(u32)internalformat, width, height, depth, fixedsamplelocations); debug_helper(loc, nil, target, samples, internalformat, width, height, depth, fixedsamplelocations); };
 	 GetMultisamplefv :: proc "c" (pname : GLenum, index : GLuint, val : ^GLfloat, loc := #caller_location) { impl_GetMultisamplefv(cast(u32)pname, index, val); debug_helper(loc, nil, pname, index, val); };
 	 SampleMaski :: proc "c" (maskNumber : GLuint, mask : GLbitfield, loc := #caller_location) { impl_SampleMaski(maskNumber, cast(u32)mask); debug_helper(loc, nil, maskNumber, mask); };
-// VERSION_3_3
-	 BindFragDataLocationIndexed :: proc "c" (program : GLuint, colorNumber : GLuint, index : GLuint, name : GLstring, loc := #caller_location) { impl_BindFragDataLocationIndexed(program, colorNumber, index, name); debug_helper(loc, nil, program, colorNumber, index, name); };
+// VERSION_3_3	 BindFragDataLocationIndexed :: proc "c" (program : GLuint, colorNumber : GLuint, index : GLuint, name : GLstring, loc := #caller_location) { impl_BindFragDataLocationIndexed(program, colorNumber, index, name); debug_helper(loc, nil, program, colorNumber, index, name); };
 	 GenSamplers :: proc "c" (count : GLsizei, samplers : ^GLuint, loc := #caller_location) { impl_GenSamplers(count, samplers); debug_helper(loc, nil, count, samplers); };
 	 DeleteSamplers :: proc "c" (count : GLsizei, samplers : ^GLuint, loc := #caller_location) { impl_DeleteSamplers(count, samplers); debug_helper(loc, nil, count, samplers); };
 	 BindSampler :: proc "c" (unit : GLuint, sampler : GLuint, loc := #caller_location) { impl_BindSampler(unit, sampler); debug_helper(loc, nil, unit, sampler); };
@@ -360,8 +348,7 @@ when ODIN_DEBUG {
 	 ColorP4uiv :: proc "c" (type : GLenum, color : ^GLuint, loc := #caller_location) { impl_ColorP4uiv(cast(u32)type, color); debug_helper(loc, nil, type, color); };
 	 SecondaryColorP3ui :: proc "c" (type : GLenum, color : GLuint, loc := #caller_location) { impl_SecondaryColorP3ui(cast(u32)type, color); debug_helper(loc, nil, type, color); };
 	 SecondaryColorP3uiv :: proc "c" (type : GLenum, color : ^GLuint, loc := #caller_location) { impl_SecondaryColorP3uiv(cast(u32)type, color); debug_helper(loc, nil, type, color); };
-// VERSION_4_0
-	 MinSampleShading :: proc "c" (value : GLfloat, loc := #caller_location) { impl_MinSampleShading(value); debug_helper(loc, nil, value); };
+// VERSION_4_0	 MinSampleShading :: proc "c" (value : GLfloat, loc := #caller_location) { impl_MinSampleShading(value); debug_helper(loc, nil, value); };
 	 BlendEquationi :: proc "c" (buf : GLuint, mode : GLenum, loc := #caller_location) { impl_BlendEquationi(buf, cast(u32)mode); debug_helper(loc, nil, buf, mode); };
 	 BlendEquationSeparatei :: proc "c" (buf : GLuint, modeRGB : GLenum, modeAlpha : GLenum, loc := #caller_location) { impl_BlendEquationSeparatei(buf, cast(u32)modeRGB, cast(u32)modeAlpha); debug_helper(loc, nil, buf, modeRGB, modeAlpha); };
 	 BlendFunci :: proc "c" (buf : GLuint, src : GLenum, dst : GLenum, loc := #caller_location) { impl_BlendFunci(buf, cast(u32)src, cast(u32)dst); debug_helper(loc, nil, buf, src, dst); };
@@ -408,8 +395,7 @@ when ODIN_DEBUG {
 	 MakeImageHandleResidentARB :: proc "c" (handle : GLuint64, access : GLenum, loc := #caller_location) { impl_MakeImageHandleResidentARB(handle, cast(u32)access); debug_helper(loc, nil, handle, access); };
 	 MakeTextureHandleNonResidentARB :: proc "c" (handle : GLuint64, loc := #caller_location) { impl_MakeTextureHandleNonResidentARB(handle); debug_helper(loc, nil, handle); };
 	 MakeImageHandleNonResidentARB :: proc "c" (handle : GLuint64, loc := #caller_location) { impl_MakeImageHandleNonResidentARB(handle); debug_helper(loc, nil, handle); };
-// VERSION_4_1
-	 ReleaseShaderCompiler :: proc "c" (loc := #caller_location) { impl_ReleaseShaderCompiler(); debug_helper(loc, nil, ); };
+// VERSION_4_1	 ReleaseShaderCompiler :: proc "c" (loc := #caller_location) { impl_ReleaseShaderCompiler(); debug_helper(loc, nil, ); };
 	 ShaderBinary :: proc "c" (count : GLsizei, shaders : ^GLuint, binaryFormat : GLenum, binary : rawptr, length : GLsizei, loc := #caller_location) { impl_ShaderBinary(count, shaders, cast(u32)binaryFormat, binary, length); debug_helper(loc, nil, count, shaders, binaryFormat, binary, length); };
 	 GetShaderPrecisionFormat :: proc "c" (shadertype : GLenum, precisiontype : GLenum, range : ^GLint, precision : ^GLint, loc := #caller_location) { impl_GetShaderPrecisionFormat(cast(u32)shadertype, cast(u32)precisiontype, range, precision); debug_helper(loc, nil, shadertype, precisiontype, range, precision); };
 	 DepthRangef :: proc "c" (n : GLfloat, f : GLfloat, loc := #caller_location) { impl_DepthRangef(n, f); debug_helper(loc, nil, n, f); };
@@ -495,8 +481,7 @@ when ODIN_DEBUG {
 	 DepthRangeIndexed :: proc "c" (index : GLuint, n : GLdouble, f : GLdouble, loc := #caller_location) { impl_DepthRangeIndexed(index, n, f); debug_helper(loc, nil, index, n, f); };
 	 GetFloati_v :: proc "c" (target : GLenum, index : GLuint, data : ^GLfloat, loc := #caller_location) { impl_GetFloati_v(cast(u32)target, index, data); debug_helper(loc, nil, target, index, data); };
 	 GetDoublei_v :: proc "c" (target : GLenum, index : GLuint, data : ^GLdouble, loc := #caller_location) { impl_GetDoublei_v(cast(u32)target, index, data); debug_helper(loc, nil, target, index, data); };
-// VERSION_4_2
-	 DrawArraysInstancedBaseInstance :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei, baseinstance : GLuint, loc := #caller_location) { impl_DrawArraysInstancedBaseInstance(cast(u32)mode, first, count, instancecount, baseinstance); debug_helper(loc, nil, mode, first, count, instancecount, baseinstance); };
+// VERSION_4_2	 DrawArraysInstancedBaseInstance :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei, baseinstance : GLuint, loc := #caller_location) { impl_DrawArraysInstancedBaseInstance(cast(u32)mode, first, count, instancecount, baseinstance); debug_helper(loc, nil, mode, first, count, instancecount, baseinstance); };
 	 DrawElementsInstancedBaseInstance :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, instancecount : GLsizei, baseinstance : GLuint, loc := #caller_location) { impl_DrawElementsInstancedBaseInstance(cast(u32)mode, count, cast(u32)type, indices, instancecount, baseinstance); debug_helper(loc, nil, mode, count, type, indices, instancecount, baseinstance); };
 	 DrawElementsInstancedBaseVertexBaseInstance :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, instancecount : GLsizei, basevertex : GLint, baseinstance : GLuint, loc := #caller_location) { impl_DrawElementsInstancedBaseVertexBaseInstance(cast(u32)mode, count, cast(u32)type, indices, instancecount, basevertex, baseinstance); debug_helper(loc, nil, mode, count, type, indices, instancecount, basevertex, baseinstance); };
 	 GetInternalformativ :: proc "c" (target : GLenum, internalformat : GLenum, pname : GLenum, bufSize : GLsizei, params : ^GLint, loc := #caller_location) { impl_GetInternalformativ(cast(u32)target, cast(u32)internalformat, cast(u32)pname, bufSize, params); debug_helper(loc, nil, target, internalformat, pname, bufSize, params); };
@@ -508,8 +493,7 @@ when ODIN_DEBUG {
 	 TexStorage3D :: proc "c" (target : GLenum, levels : GLsizei, internalformat : GLenum, width : GLsizei, height : GLsizei, depth : GLsizei, loc := #caller_location) { impl_TexStorage3D(cast(u32)target, levels, cast(u32)internalformat, width, height, depth); debug_helper(loc, nil, target, levels, internalformat, width, height, depth); };
 	 DrawTransformFeedbackInstanced :: proc "c" (mode : GLenum, id : GLuint, instancecount : GLsizei, loc := #caller_location) { impl_DrawTransformFeedbackInstanced(cast(u32)mode, id, instancecount); debug_helper(loc, nil, mode, id, instancecount); };
 	 DrawTransformFeedbackStreamInstanced :: proc "c" (mode : GLenum, id : GLuint, stream : GLuint, instancecount : GLsizei, loc := #caller_location) { impl_DrawTransformFeedbackStreamInstanced(cast(u32)mode, id, stream, instancecount); debug_helper(loc, nil, mode, id, stream, instancecount); };
-// VERSION_4_3
-	 ClearBufferData :: proc "c" (target : GLenum, internalformat : GLenum, format : GLenum, type : GLenum, data : rawptr, loc := #caller_location) { impl_ClearBufferData(cast(u32)target, cast(u32)internalformat, cast(u32)format, cast(u32)type, data); debug_helper(loc, nil, target, internalformat, format, type, data); };
+// VERSION_4_3	 ClearBufferData :: proc "c" (target : GLenum, internalformat : GLenum, format : GLenum, type : GLenum, data : rawptr, loc := #caller_location) { impl_ClearBufferData(cast(u32)target, cast(u32)internalformat, cast(u32)format, cast(u32)type, data); debug_helper(loc, nil, target, internalformat, format, type, data); };
 	 ClearBufferSubData :: proc "c" (target : GLenum, internalformat : GLenum, offset : GLintptr, size : GLsizeiptr, format : GLenum, type : GLenum, data : rawptr, loc := #caller_location) { impl_ClearBufferSubData(cast(u32)target, cast(u32)internalformat, offset, size, cast(u32)format, cast(u32)type, data); debug_helper(loc, nil, target, internalformat, offset, size, format, type, data); };
 	 DispatchCompute :: proc "c" (num_groups_x : GLuint, num_groups_y : GLuint, num_groups_z : GLuint, loc := #caller_location) { impl_DispatchCompute(num_groups_x, num_groups_y, num_groups_z); debug_helper(loc, nil, num_groups_x, num_groups_y, num_groups_z); };
 	 DispatchComputeIndirect :: proc "c" (indirect : ^DispatchIndirectCommand, loc := #caller_location) { impl_DispatchComputeIndirect(indirect); debug_helper(loc, nil, indirect); };
@@ -548,8 +532,7 @@ when ODIN_DEBUG {
 	 GetObjectLabel :: proc "c" (identifier : GLenum, name : GLuint, bufSize : GLsizei, length : ^GLsizei, label : GLoutstring, loc := #caller_location) { impl_GetObjectLabel(cast(u32)identifier, name, bufSize, length, label); debug_helper(loc, nil, identifier, name, bufSize, length, label); };
 	 ObjectPtrLabel :: proc "c" (ptr : rawptr, length : GLsizei, label : GLstring, loc := #caller_location) { impl_ObjectPtrLabel(ptr, length, label); debug_helper(loc, nil, ptr, length, label); };
 	 GetObjectPtrLabel :: proc "c" (ptr : rawptr, bufSize : GLsizei, length : ^GLsizei, label : GLoutstring, loc := #caller_location) { impl_GetObjectPtrLabel(ptr, bufSize, length, label); debug_helper(loc, nil, ptr, bufSize, length, label); };
-// VERSION_4_4
-	 BufferStorage :: proc "c" (target : GLenum, size : GLsizeiptr, data : rawptr, flags : GLbitfield, loc := #caller_location) { impl_BufferStorage(cast(u32)target, size, data, cast(u32)flags); debug_helper(loc, nil, target, size, data, flags); };
+// VERSION_4_4	 BufferStorage :: proc "c" (target : GLenum, size : GLsizeiptr, data : rawptr, flags : GLbitfield, loc := #caller_location) { impl_BufferStorage(cast(u32)target, size, data, cast(u32)flags); debug_helper(loc, nil, target, size, data, flags); };
 	 ClearTexImage :: proc "c" (texture : GLuint, level : GLint, format : GLenum, type : GLenum, data : rawptr, loc := #caller_location) { impl_ClearTexImage(texture, level, cast(u32)format, cast(u32)type, data); debug_helper(loc, nil, texture, level, format, type, data); };
 	 ClearTexSubImage :: proc "c" (texture : GLuint, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, format : GLenum, type : GLenum, data : rawptr, loc := #caller_location) { impl_ClearTexSubImage(texture, level, xoffset, yoffset, zoffset, width, height, depth, cast(u32)format, cast(u32)type, data); debug_helper(loc, nil, texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, data); };
 	 BindBuffersBase :: proc "c" (target : GLenum, first : GLuint, count : GLsizei, buffers : ^GLuint, loc := #caller_location) { impl_BindBuffersBase(cast(u32)target, first, count, buffers); debug_helper(loc, nil, target, first, count, buffers); };
@@ -558,8 +541,7 @@ when ODIN_DEBUG {
 	 BindSamplers :: proc "c" (first : GLuint, count : GLsizei, samplers : ^GLuint, loc := #caller_location) { impl_BindSamplers(first, count, samplers); debug_helper(loc, nil, first, count, samplers); };
 	 BindImageTextures :: proc "c" (first : GLuint, count : GLsizei, textures : ^GLuint, loc := #caller_location) { impl_BindImageTextures(first, count, textures); debug_helper(loc, nil, first, count, textures); };
 	 BindVertexBuffers :: proc "c" (first : GLuint, count : GLsizei, buffers : ^GLuint, offsets : ^GLintptr, strides : ^GLsizei, loc := #caller_location) { impl_BindVertexBuffers(first, count, buffers, offsets, strides); debug_helper(loc, nil, first, count, buffers, offsets, strides); };
-// VERSION_4_5
-	 ClipControl :: proc "c" (origin : GLenum, depth : GLenum, loc := #caller_location) { impl_ClipControl(cast(u32)origin, cast(u32)depth); debug_helper(loc, nil, origin, depth); };
+// VERSION_4_5	 ClipControl :: proc "c" (origin : GLenum, depth : GLenum, loc := #caller_location) { impl_ClipControl(cast(u32)origin, cast(u32)depth); debug_helper(loc, nil, origin, depth); };
 	 CreateTransformFeedbacks :: proc "c" (n : GLsizei, ids : ^GLuint, loc := #caller_location) { impl_CreateTransformFeedbacks(n, ids); debug_helper(loc, nil, n, ids); };
 	 TransformFeedbackBufferBase :: proc "c" (xfb : GLuint, index : GLuint, buffer : GLuint, loc := #caller_location) { impl_TransformFeedbackBufferBase(xfb, index, buffer); debug_helper(loc, nil, xfb, index, buffer); };
 	 TransformFeedbackBufferRange :: proc "c" (xfb : GLuint, index : GLuint, buffer : GLuint, offset : GLintptr, size : GLsizeiptr, loc := #caller_location) { impl_TransformFeedbackBufferRange(xfb, index, buffer, offset, size); debug_helper(loc, nil, xfb, index, buffer, offset, size); };
@@ -677,8 +659,7 @@ when ODIN_DEBUG {
 	 GetnMinmax :: proc "c" (target : GLenum, reset : GLboolean, format : GLenum, type : GLenum, bufSize : GLsizei, values : rawptr, loc := #caller_location) { impl_GetnMinmax(cast(u32)target, reset, cast(u32)format, cast(u32)type, bufSize, values); debug_helper(loc, nil, target, reset, format, type, bufSize, values); };
 	 TextureBarrier :: proc "c" (loc := #caller_location) { impl_TextureBarrier(); debug_helper(loc, nil, ); };
 	 GetUnsignedBytevEXT :: proc "c" (pname : GLenum, data : ^GLubyte, loc := #caller_location) { impl_GetUnsignedBytevEXT(cast(u32)pname, data); debug_helper(loc, nil, pname, data); };
-// VERSION_4_6
-	 TexPageCommitmentARB :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, commit : GLboolean, loc := #caller_location) { impl_TexPageCommitmentARB(cast(u32)target, level, xoffset, yoffset, zoffset, width, height, depth, commit); debug_helper(loc, nil, target, level, xoffset, yoffset, zoffset, width, height, depth, commit); };
+// VERSION_4_6	 TexPageCommitmentARB :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, commit : GLboolean, loc := #caller_location) { impl_TexPageCommitmentARB(cast(u32)target, level, xoffset, yoffset, zoffset, width, height, depth, commit); debug_helper(loc, nil, target, level, xoffset, yoffset, zoffset, width, height, depth, commit); };
 	 SpecializeShader :: proc "c" (shader : GLuint, pEntryPoint : GLstring, numSpecializationConstants : GLuint, pConstantIndex : ^GLuint, pConstantValue : ^GLuint, loc := #caller_location) { impl_SpecializeShader(shader, pEntryPoint, numSpecializationConstants, pConstantIndex, pConstantValue); debug_helper(loc, nil, shader, pEntryPoint, numSpecializationConstants, pConstantIndex, pConstantValue); };
 	 MultiDrawArraysIndirectCount :: proc "c" (mode : GLenum, indirect : ^DrawArraysIndirectCommand, drawcount : GLsizei, maxdrawcount : GLsizei, stride : GLsizei, loc := #caller_location) { impl_MultiDrawArraysIndirectCount(cast(u32)mode, indirect, drawcount, maxdrawcount, stride); debug_helper(loc, nil, mode, indirect, drawcount, maxdrawcount, stride); };
 	 MultiDrawElementsIndirectCount :: proc "c" (mode : GLenum, type : GLenum, indirect : ^DrawElementsIndirectCommand, drawcount : GLsizei, maxdrawcount : GLsizei, stride : GLsizei, loc := #caller_location) { impl_MultiDrawElementsIndirectCount(cast(u32)mode, cast(u32)type, indirect, drawcount, maxdrawcount, stride); debug_helper(loc, nil, mode, type, indirect, drawcount, maxdrawcount, stride); };
@@ -686,30 +667,21 @@ when ODIN_DEBUG {
 
 
 ////////functions with return values////////
-// VERSION_1_0
-	 GetError :: proc "c" (loc := #caller_location) -> GLenum {  ret : GLenum = auto_cast impl_GetError(); debug_helper(loc, ret, ); return ret; };
+// VERSION_1_0	 GetError :: proc "c" (loc := #caller_location) -> GLenum {  ret : GLenum = auto_cast impl_GetError(); debug_helper(loc, ret, ); return ret; };
 	 GetString :: proc "c" (name : GLenum, loc := #caller_location) -> GLstring {  ret : GLstring = auto_cast impl_GetString(cast(u32)name); debug_helper(loc, ret, name); return ret; };
 	 IsEnabled :: proc "c" (cap : GLenum, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsEnabled(cast(u32)cap); debug_helper(loc, ret, cap); return ret; };
-// VERSION_1_1
-	 IsTexture :: proc "c" (texture : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsTexture(texture); debug_helper(loc, ret, texture); return ret; };
-// VERSION_1_2
-// VERSION_1_3
-// VERSION_1_4
-// VERSION_1_5
-	 IsQuery :: proc "c" (id : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsQuery(id); debug_helper(loc, ret, id); return ret; };
+// VERSION_1_1	 IsTexture :: proc "c" (texture : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsTexture(texture); debug_helper(loc, ret, texture); return ret; };
+// VERSION_1_2// VERSION_1_3// VERSION_1_4// VERSION_1_5	 IsQuery :: proc "c" (id : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsQuery(id); debug_helper(loc, ret, id); return ret; };
 	 IsBuffer :: proc "c" (buffer : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsBuffer(buffer); debug_helper(loc, ret, buffer); return ret; };
 	 MapBuffer :: proc "c" (target : GLenum, access : GLenum, loc := #caller_location) -> rawptr {  ret : rawptr = auto_cast impl_MapBuffer(cast(u32)target, cast(u32)access); debug_helper(loc, ret, target, access); return ret; };
 	 UnmapBuffer :: proc "c" (target : GLenum, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_UnmapBuffer(cast(u32)target); debug_helper(loc, ret, target); return ret; };
-// VERSION_2_0
-	 CreateProgram :: proc "c" (loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_CreateProgram(); debug_helper(loc, ret, ); return ret; };
+// VERSION_2_0	 CreateProgram :: proc "c" (loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_CreateProgram(); debug_helper(loc, ret, ); return ret; };
 	 CreateShader :: proc "c" (type : GLenum, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_CreateShader(cast(u32)type); debug_helper(loc, ret, type); return ret; };
 	 GetAttribLocation :: proc "c" (program : GLuint, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetAttribLocation(program, name); debug_helper(loc, ret, program, name); return ret; };
 	 GetUniformLocation :: proc "c" (program : GLuint, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetUniformLocation(program, name); debug_helper(loc, ret, program, name); return ret; };
 	 IsProgram :: proc "c" (program : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsProgram(program); debug_helper(loc, ret, program); return ret; };
 	 IsShader :: proc "c" (shader : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsShader(shader); debug_helper(loc, ret, shader); return ret; };
-// VERSION_2_1
-//VERSION_3_0
-	 IsEnabledi :: proc "c" (target : GLenum, index : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsEnabledi(cast(u32)target, index); debug_helper(loc, ret, target, index); return ret; };
+// VERSION_2_1//VERSION_3_0	 IsEnabledi :: proc "c" (target : GLenum, index : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsEnabledi(cast(u32)target, index); debug_helper(loc, ret, target, index); return ret; };
 	 GetFragDataLocation :: proc "c" (program : GLuint, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetFragDataLocation(program, name); debug_helper(loc, ret, program, name); return ret; };
 	 GetStringi :: proc "c" (name : GLenum, index : GLuint, loc := #caller_location) -> GLstring {  ret : GLstring = auto_cast impl_GetStringi(cast(u32)name, index); debug_helper(loc, ret, name, index); return ret; };
 	 IsRenderbuffer :: proc "c" (renderbuffer : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsRenderbuffer(renderbuffer); debug_helper(loc, ret, renderbuffer); return ret; };
@@ -717,34 +689,25 @@ when ODIN_DEBUG {
 	 CheckFramebufferStatus :: proc "c" (target : GLenum, loc := #caller_location) -> GLenum {  ret : GLenum = auto_cast impl_CheckFramebufferStatus(cast(u32)target); debug_helper(loc, ret, target); return ret; };
 	 MapBufferRange :: proc "c" (target : GLenum, offset : GLintptr, length : GLsizeiptr, access : GLbitfield, loc := #caller_location) -> rawptr {  ret : rawptr = auto_cast impl_MapBufferRange(cast(u32)target, offset, length, cast(u32)access); debug_helper(loc, ret, target, offset, length, access); return ret; };
 	 IsVertexArray :: proc "c" (array : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsVertexArray(array); debug_helper(loc, ret, array); return ret; };
-// VERSION_3_1
-	 GetUniformBlockIndex :: proc "c" (program : GLuint, uniformBlockName : GLstring, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_GetUniformBlockIndex(program, uniformBlockName); debug_helper(loc, ret, program, uniformBlockName); return ret; };
-// VERSION_3_2
-	 FenceSync :: proc "c" (condition : GLenum, flags : GLbitfield, loc := #caller_location) -> GLsync {  ret : GLsync = auto_cast impl_FenceSync(cast(u32)condition, cast(u32)flags); debug_helper(loc, ret, condition, flags); return ret; };
+// VERSION_3_1	 GetUniformBlockIndex :: proc "c" (program : GLuint, uniformBlockName : GLstring, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_GetUniformBlockIndex(program, uniformBlockName); debug_helper(loc, ret, program, uniformBlockName); return ret; };
+// VERSION_3_2	 FenceSync :: proc "c" (condition : GLenum, flags : GLbitfield, loc := #caller_location) -> GLsync {  ret : GLsync = auto_cast impl_FenceSync(cast(u32)condition, cast(u32)flags); debug_helper(loc, ret, condition, flags); return ret; };
 	 IsSync :: proc "c" (sync : GLsync, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsSync(sync); debug_helper(loc, ret, sync); return ret; };
 	 ClientWaitSync :: proc "c" (sync : GLsync, flags : GLbitfield, timeout : GLuint64, loc := #caller_location) -> GLenum {  ret : GLenum = auto_cast impl_ClientWaitSync(sync, cast(u32)flags, timeout); debug_helper(loc, ret, sync, flags, timeout); return ret; };
-// VERSION_3_3
-	 GetFragDataIndex :: proc "c" (program : GLuint, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetFragDataIndex(program, name); debug_helper(loc, ret, program, name); return ret; };
+// VERSION_3_3	 GetFragDataIndex :: proc "c" (program : GLuint, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetFragDataIndex(program, name); debug_helper(loc, ret, program, name); return ret; };
 	 IsSampler :: proc "c" (sampler : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsSampler(sampler); debug_helper(loc, ret, sampler); return ret; };
-// VERSION_4_0
-	 GetSubroutineUniformLocation :: proc "c" (program : GLuint, shadertype : GLenum, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetSubroutineUniformLocation(program, cast(u32)shadertype, name); debug_helper(loc, ret, program, shadertype, name); return ret; };
+// VERSION_4_0	 GetSubroutineUniformLocation :: proc "c" (program : GLuint, shadertype : GLenum, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetSubroutineUniformLocation(program, cast(u32)shadertype, name); debug_helper(loc, ret, program, shadertype, name); return ret; };
 	 GetSubroutineIndex :: proc "c" (program : GLuint, shadertype : GLenum, name : GLstring, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_GetSubroutineIndex(program, cast(u32)shadertype, name); debug_helper(loc, ret, program, shadertype, name); return ret; };
 	 IsTransformFeedback :: proc "c" (id : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsTransformFeedback(id); debug_helper(loc, ret, id); return ret; };
 	 GetTextureHandleARB :: proc "c" (target : GLenum, loc := #caller_location) -> GLuint64 {  ret : GLuint64 = auto_cast impl_GetTextureHandleARB(cast(u32)target); debug_helper(loc, ret, target); return ret; };
 	 GetTextureSamplerHandleARB :: proc "c" (target : GLenum, sampler : GLuint, loc := #caller_location) -> GLuint64 {  ret : GLuint64 = auto_cast impl_GetTextureSamplerHandleARB(cast(u32)target, sampler); debug_helper(loc, ret, target, sampler); return ret; };
 	 GetImageHandleARB :: proc "c" (texture : GLuint, level : GLint, layered : GLboolean, layer : GLint, format : GLenum, loc := #caller_location) -> GLuint64 {  ret : GLuint64 = auto_cast impl_GetImageHandleARB(texture, level, layered, layer, cast(u32)format); debug_helper(loc, ret, texture, level, layered, layer, format); return ret; };
-// VERSION_4_1
-	 CreateShaderProgramv :: proc "c" (type : GLenum, count : GLsizei, conststrings : ^GLstring, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_CreateShaderProgramv(cast(u32)type, count, conststrings); debug_helper(loc, ret, type, count, conststrings); return ret; };
+// VERSION_4_1	 CreateShaderProgramv :: proc "c" (type : GLenum, count : GLsizei, conststrings : ^GLstring, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_CreateShaderProgramv(cast(u32)type, count, conststrings); debug_helper(loc, ret, type, count, conststrings); return ret; };
 	 IsProgramPipeline :: proc "c" (pipeline : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_IsProgramPipeline(pipeline); debug_helper(loc, ret, pipeline); return ret; };
-// VERSION_4_2
-// VERSION_4_3
-	 GetProgramResourceIndex :: proc "c" (program : GLuint, programInterface : GLenum, name : GLstring, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_GetProgramResourceIndex(program, cast(u32)programInterface, name); debug_helper(loc, ret, program, programInterface, name); return ret; };
+// VERSION_4_2// VERSION_4_3	 GetProgramResourceIndex :: proc "c" (program : GLuint, programInterface : GLenum, name : GLstring, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_GetProgramResourceIndex(program, cast(u32)programInterface, name); debug_helper(loc, ret, program, programInterface, name); return ret; };
 	 GetProgramResourceLocation :: proc "c" (program : GLuint, programInterface : GLenum, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetProgramResourceLocation(program, cast(u32)programInterface, name); debug_helper(loc, ret, program, programInterface, name); return ret; };
 	 GetProgramResourceLocationIndex :: proc "c" (program : GLuint, programInterface : GLenum, name : GLstring, loc := #caller_location) -> GLint {  ret : GLint = auto_cast impl_GetProgramResourceLocationIndex(program, cast(u32)programInterface, name); debug_helper(loc, ret, program, programInterface, name); return ret; };
 	 GetDebugMessageLog :: proc "c" (count : GLuint, bufSize : GLsizei, sources : ^GLenum, types : ^GLenum, ids : ^GLuint, severities : ^GLenum, lengths : ^GLsizei, messageLog : GLoutstring, loc := #caller_location) -> GLuint {  ret : GLuint = auto_cast impl_GetDebugMessageLog(count, bufSize, cast(^u32)sources, cast(^u32)types, ids, cast(^u32)severities, lengths, messageLog); debug_helper(loc, ret, count, bufSize, sources, types, ids, severities, lengths, messageLog); return ret; };
-// VERSION_4_4
-// VERSION_4_5
-	 MapNamedBuffer :: proc "c" (buffer : GLuint, access : GLenum, loc := #caller_location) -> rawptr {  ret : rawptr = auto_cast impl_MapNamedBuffer(buffer, cast(u32)access); debug_helper(loc, ret, buffer, access); return ret; };
+// VERSION_4_4// VERSION_4_5	 MapNamedBuffer :: proc "c" (buffer : GLuint, access : GLenum, loc := #caller_location) -> rawptr {  ret : rawptr = auto_cast impl_MapNamedBuffer(buffer, cast(u32)access); debug_helper(loc, ret, buffer, access); return ret; };
 	 MapNamedBufferRange :: proc "c" (buffer : GLuint, offset : GLintptr, length : GLsizeiptr, access : GLbitfield, loc := #caller_location) -> rawptr {  ret : rawptr = auto_cast impl_MapNamedBufferRange(buffer, offset, length, cast(u32)access); debug_helper(loc, ret, buffer, offset, length, access); return ret; };
 	 UnmapNamedBuffer :: proc "c" (buffer : GLuint, loc := #caller_location) -> GLboolean {  ret : GLboolean = auto_cast impl_UnmapNamedBuffer(buffer); debug_helper(loc, ret, buffer); return ret; };
 	 CheckNamedFramebufferStatus :: proc "c" (framebuffer : GLuint, target : GLenum, loc := #caller_location) -> GLenum {  ret : GLenum = auto_cast impl_CheckNamedFramebufferStatus(framebuffer, cast(u32)target); debug_helper(loc, ret, framebuffer, target); return ret; };
@@ -753,8 +716,7 @@ when ODIN_DEBUG {
 }
 else {
 	//functions without return values
-// VERSION_1_0
-	 CullFace :: proc "c" (mode : GLenum) { impl_CullFace(cast(u32)mode); };
+// VERSION_1_0	 CullFace :: proc "c" (mode : GLenum) { impl_CullFace(cast(u32)mode); };
 	 FrontFace :: proc "c" (mode : GLenum) { impl_FrontFace(cast(u32)mode); };
 	 Hint :: proc "c" (target : GLenum, mode : GLenum) { impl_Hint(cast(u32)target, cast(u32)mode); };
 	 LineWidth :: proc "c" (width : GLfloat) { impl_LineWidth(width); };
@@ -765,8 +727,8 @@ else {
 	 TexParameterfv :: proc "c" (target : GLenum, pname : GLenum, params : ^GLfloat) { impl_TexParameterfv(cast(u32)target, cast(u32)pname, params); };
 	 TexParameteri :: proc "c" (target : GLenum, pname : GLenum, param : GLint) { impl_TexParameteri(cast(u32)target, cast(u32)pname, param); };
 	 TexParameteriv :: proc "c" (target : GLenum, pname : GLenum, params : ^GLint) { impl_TexParameteriv(cast(u32)target, cast(u32)pname, params); };
-	 TexImage1D :: proc "c" (target : GLenum, level : GLint, internalformat : GLint, width : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr) { impl_TexImage1D(cast(u32)target, level, internalformat, width, border, cast(u32)format, cast(u32)type, pixels); };
-	 TexImage2D :: proc "c" (target : GLenum, level : GLint, internalformat : GLint, width : GLsizei, height : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr) { impl_TexImage2D(cast(u32)target, level, internalformat, width, height, border, cast(u32)format, cast(u32)type, pixels); };
+	 TexImage1D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr) { impl_TexImage1D(cast(u32)target, level, cast(u32)internalformat, width, border, cast(u32)format, cast(u32)type, pixels); };
+	 TexImage2D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, height : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr) { impl_TexImage2D(cast(u32)target, level, cast(u32)internalformat, width, height, border, cast(u32)format, cast(u32)type, pixels); };
 	 DrawBuffer :: proc "c" (mode : GLenum) { impl_DrawBuffer(cast(u32)mode); };
 	 Clear :: proc "c" (mask : GLbitfield) { impl_Clear(cast(u32)mask); };
 	 ClearColor :: proc "c" (red : GLfloat, green : GLfloat, blue : GLfloat, alpha : GLfloat) { impl_ClearColor(red, green, blue, alpha); };
@@ -799,8 +761,7 @@ else {
 	 GetTexLevelParameteriv :: proc "c" (target : GLenum, level : GLint, pname : GLenum, params : ^GLint) { impl_GetTexLevelParameteriv(cast(u32)target, level, cast(u32)pname, params); };
 	 DepthRange :: proc "c" (nearVal : GLdouble, farVal : GLdouble) { impl_DepthRange(nearVal, farVal); };
 	 Viewport :: proc "c" (x : GLint, y : GLint, width : GLsizei, height : GLsizei) { impl_Viewport(x, y, width, height); };
-// VERSION_1_1
-	 DrawArrays :: proc "c" (mode : GLenum, first : GLint, count : GLsizei) { impl_DrawArrays(cast(u32)mode, first, count); };
+// VERSION_1_1	 DrawArrays :: proc "c" (mode : GLenum, first : GLint, count : GLsizei) { impl_DrawArrays(cast(u32)mode, first, count); };
 	 DrawElements :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr) { impl_DrawElements(cast(u32)mode, count, cast(u32)type, indices); };
 	 PolygonOffset :: proc "c" (factor : GLfloat, units : GLfloat) { impl_PolygonOffset(factor, units); };
 	 CopyTexImage1D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, x : GLint, y : GLint, width : GLsizei, border : GLint) { impl_CopyTexImage1D(cast(u32)target, level, cast(u32)internalformat, x, y, width, border); };
@@ -812,13 +773,11 @@ else {
 	 BindTexture :: proc "c" (target : GLenum, texture : GLuint) { impl_BindTexture(cast(u32)target, texture); };
 	 DeleteTextures :: proc "c" (n : GLsizei, textures : ^GLuint) { impl_DeleteTextures(n, textures); };
 	 GenTextures :: proc "c" (n : GLsizei, textures : ^GLuint) { impl_GenTextures(n, textures); };
-// VERSION_1_2
-	 DrawRangeElements :: proc "c" (mode : GLenum, start : GLuint, end : GLuint, count : GLsizei, type : GLenum, indices : rawptr) { impl_DrawRangeElements(cast(u32)mode, start, end, count, cast(u32)type, indices); };
-	 TexImage3D :: proc "c" (target : GLenum, level : GLint, internalformat : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr) { impl_TexImage3D(cast(u32)target, level, internalformat, width, height, depth, border, cast(u32)format, cast(u32)type, pixels); };
+// VERSION_1_2	 DrawRangeElements :: proc "c" (mode : GLenum, start : GLuint, end : GLuint, count : GLsizei, type : GLenum, indices : rawptr) { impl_DrawRangeElements(cast(u32)mode, start, end, count, cast(u32)type, indices); };
+	 TexImage3D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, height : GLsizei, depth : GLsizei, border : GLint, format : GLenum, type : GLenum, pixels : rawptr) { impl_TexImage3D(cast(u32)target, level, cast(u32)internalformat, width, height, depth, border, cast(u32)format, cast(u32)type, pixels); };
 	 TexSubImage3D :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, format : GLenum, type : GLenum, pixels : rawptr) { impl_TexSubImage3D(cast(u32)target, level, xoffset, yoffset, zoffset, width, height, depth, cast(u32)format, cast(u32)type, pixels); };
 	 CopyTexSubImage3D :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, x : GLint, y : GLint, width : GLsizei, height : GLsizei) { impl_CopyTexSubImage3D(cast(u32)target, level, xoffset, yoffset, zoffset, x, y, width, height); };
-// VERSION_1_3
-	 ActiveTexture :: proc "c" (texture : GLenum) { impl_ActiveTexture(cast(u32)texture); };
+// VERSION_1_3	 ActiveTexture :: proc "c" (texture : GLenum) { impl_ActiveTexture(cast(u32)texture); };
 	 SampleCoverage :: proc "c" (value : GLfloat, invert : GLboolean) { impl_SampleCoverage(value, invert); };
 	 CompressedTexImage3D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, height : GLsizei, depth : GLsizei, border : GLint, imageSize : GLsizei, data : rawptr) { impl_CompressedTexImage3D(cast(u32)target, level, cast(u32)internalformat, width, height, depth, border, imageSize, data); };
 	 CompressedTexImage2D :: proc "c" (target : GLenum, level : GLint, internalformat : GLenum, width : GLsizei, height : GLsizei, border : GLint, imageSize : GLsizei, data : rawptr) { impl_CompressedTexImage2D(cast(u32)target, level, cast(u32)internalformat, width, height, border, imageSize, data); };
@@ -827,8 +786,7 @@ else {
 	 CompressedTexSubImage2D :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, width : GLsizei, height : GLsizei, format : GLenum, imageSize : GLsizei, data : rawptr) { impl_CompressedTexSubImage2D(cast(u32)target, level, xoffset, yoffset, width, height, cast(u32)format, imageSize, data); };
 	 CompressedTexSubImage1D :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, width : GLsizei, format : GLenum, imageSize : GLsizei, data : rawptr) { impl_CompressedTexSubImage1D(cast(u32)target, level, xoffset, width, cast(u32)format, imageSize, data); };
 	 GetCompressedTexImage :: proc "c" (target : GLenum, level : GLint, img : rawptr) { impl_GetCompressedTexImage(cast(u32)target, level, img); };
-// VERSION_1_4
-	 BlendFuncSeparate :: proc "c" (sfactorRGB : GLenum, dfactorRGB : GLenum, sfactorAlpha : GLenum, dfactorAlpha : GLenum) { impl_BlendFuncSeparate(cast(u32)sfactorRGB, cast(u32)dfactorRGB, cast(u32)sfactorAlpha, cast(u32)dfactorAlpha); };
+// VERSION_1_4	 BlendFuncSeparate :: proc "c" (sfactorRGB : GLenum, dfactorRGB : GLenum, sfactorAlpha : GLenum, dfactorAlpha : GLenum) { impl_BlendFuncSeparate(cast(u32)sfactorRGB, cast(u32)dfactorRGB, cast(u32)sfactorAlpha, cast(u32)dfactorAlpha); };
 	 MultiDrawArrays :: proc "c" (mode : GLenum, first : ^GLint, count : ^GLsizei, drawcount : GLsizei) { impl_MultiDrawArrays(cast(u32)mode, first, count, drawcount); };
 	 MultiDrawElements :: proc "c" (mode : GLenum, count : ^GLsizei, type : GLenum, indices : ^rawptr, drawcount : GLsizei) { impl_MultiDrawElements(cast(u32)mode, count, cast(u32)type, indices, drawcount); };
 	 PointParameterf :: proc "c" (pname : GLenum, param : GLfloat) { impl_PointParameterf(cast(u32)pname, param); };
@@ -837,8 +795,7 @@ else {
 	 PointParameteriv :: proc "c" (pname : GLenum, params : ^GLint) { impl_PointParameteriv(cast(u32)pname, params); };
 	 BlendColor :: proc "c" (red : GLfloat, green : GLfloat, blue : GLfloat, alpha : GLfloat) { impl_BlendColor(red, green, blue, alpha); };
 	 BlendEquation :: proc "c" (mode : GLenum) { impl_BlendEquation(cast(u32)mode); };
-// VERSION_1_5
-	 GenQueries :: proc "c" (n : GLsizei, ids : ^GLuint) { impl_GenQueries(n, ids); };
+// VERSION_1_5	 GenQueries :: proc "c" (n : GLsizei, ids : ^GLuint) { impl_GenQueries(n, ids); };
 	 DeleteQueries :: proc "c" (n : GLsizei, ids : ^GLuint) { impl_DeleteQueries(n, ids); };
 	 BeginQuery :: proc "c" (target : GLenum, id : GLuint) { impl_BeginQuery(cast(u32)target, id); };
 	 EndQuery :: proc "c" (target : GLenum) { impl_EndQuery(cast(u32)target); };
@@ -853,8 +810,7 @@ else {
 	 GetBufferSubData :: proc "c" (target : GLenum, offset : GLintptr, size : GLsizeiptr, data : rawptr) { impl_GetBufferSubData(cast(u32)target, offset, size, data); };
 	 GetBufferParameteriv :: proc "c" (target : GLenum, pname : GLenum, params : ^GLint) { impl_GetBufferParameteriv(cast(u32)target, cast(u32)pname, params); };
 	 GetBufferPointerv :: proc "c" (target : GLenum, pname : GLenum, params : ^rawptr) { impl_GetBufferPointerv(cast(u32)target, cast(u32)pname, params); };
-// VERSION_2_0
-	 BlendEquationSeparate :: proc "c" (modeRGB : GLenum, modeAlpha : GLenum) { impl_BlendEquationSeparate(cast(u32)modeRGB, cast(u32)modeAlpha); };
+// VERSION_2_0	 BlendEquationSeparate :: proc "c" (modeRGB : GLenum, modeAlpha : GLenum) { impl_BlendEquationSeparate(cast(u32)modeRGB, cast(u32)modeAlpha); };
 	 DrawBuffers :: proc "c" (n : GLsizei, bufs : ^GLenum) { impl_DrawBuffers(n, cast(^u32)bufs); };
 	 StencilOpSeparate :: proc "c" (face : GLenum, sfail : GLenum, dpfail : GLenum, dppass : GLenum) { impl_StencilOpSeparate(cast(u32)face, cast(u32)sfail, cast(u32)dpfail, cast(u32)dppass); };
 	 StencilFuncSeparate :: proc "c" (face : GLenum, func : GLenum, ref : GLint, mask : GLuint) { impl_StencilFuncSeparate(cast(u32)face, cast(u32)func, ref, mask); };
@@ -941,15 +897,13 @@ else {
 	 VertexAttrib4uiv :: proc "c" (index : GLuint, v : ^GLuint) { impl_VertexAttrib4uiv(index, v); };
 	 VertexAttrib4usv :: proc "c" (index : GLuint, v : ^GLushort) { impl_VertexAttrib4usv(index, v); };
 	 VertexAttribPointer :: proc "c" (index : GLuint, size : GLint, type : GLenum, normalized : GLboolean, stride : GLsizei, pointer : uintptr) { impl_VertexAttribPointer(index, size, cast(u32)type, normalized, stride, pointer); };
-// VERSION_2_1
-	 UniformMatrix2x3fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat) { impl_UniformMatrix2x3fv(location, count, transpose, value); };
+// VERSION_2_1	 UniformMatrix2x3fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat) { impl_UniformMatrix2x3fv(location, count, transpose, value); };
 	 UniformMatrix3x2fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat) { impl_UniformMatrix3x2fv(location, count, transpose, value); };
 	 UniformMatrix2x4fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat) { impl_UniformMatrix2x4fv(location, count, transpose, value); };
 	 UniformMatrix4x2fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat) { impl_UniformMatrix4x2fv(location, count, transpose, value); };
 	 UniformMatrix3x4fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat) { impl_UniformMatrix3x4fv(location, count, transpose, value); };
 	 UniformMatrix4x3fv :: proc "c" (location : GLint, count : GLsizei, transpose : GLboolean, value : ^GLfloat) { impl_UniformMatrix4x3fv(location, count, transpose, value); };
-//VERSION_3_0
-	 ColorMaski :: proc "c" (index : GLuint, r : GLboolean, g : GLboolean, b : GLboolean, a : GLboolean) { impl_ColorMaski(index, r, g, b, a); };
+//VERSION_3_0	 ColorMaski :: proc "c" (index : GLuint, r : GLboolean, g : GLboolean, b : GLboolean, a : GLboolean) { impl_ColorMaski(index, r, g, b, a); };
 	 GetBooleani_v :: proc "c" (target : GLenum, index : GLuint, data : ^GLboolean) { impl_GetBooleani_v(cast(u32)target, index, data); };
 	 GetIntegeri_v :: proc "c" (target : GLenum, index : GLuint, data : ^GLint) { impl_GetIntegeri_v(cast(u32)target, index, data); };
 	 Enablei :: proc "c" (target : GLenum, index : GLuint) { impl_Enablei(cast(u32)target, index); };
@@ -1025,8 +979,7 @@ else {
 	 BindVertexArray :: proc "c" (array : GLuint) { impl_BindVertexArray(array); };
 	 DeleteVertexArrays :: proc "c" (n : GLsizei, arrays : ^GLuint) { impl_DeleteVertexArrays(n, arrays); };
 	 GenVertexArrays :: proc "c" (n : GLsizei, arrays : ^GLuint) { impl_GenVertexArrays(n, arrays); };
-// VERSION_3_1
-	 DrawArraysInstanced :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei) { impl_DrawArraysInstanced(cast(u32)mode, first, count, instancecount); };
+// VERSION_3_1	 DrawArraysInstanced :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei) { impl_DrawArraysInstanced(cast(u32)mode, first, count, instancecount); };
 	 DrawElementsInstanced :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, instancecount : GLsizei) { impl_DrawElementsInstanced(cast(u32)mode, count, cast(u32)type, indices, instancecount); };
 	 TexBuffer :: proc "c" (target : GLenum, internalformat : GLenum, buffer : GLuint) { impl_TexBuffer(cast(u32)target, cast(u32)internalformat, buffer); };
 	 PrimitiveRestartIndex :: proc "c" (index : GLuint) { impl_PrimitiveRestartIndex(index); };
@@ -1037,8 +990,7 @@ else {
 	 GetActiveUniformBlockiv :: proc "c" (program : GLuint, uniformBlockIndex : GLuint, pname : GLenum, params : ^GLint) { impl_GetActiveUniformBlockiv(program, uniformBlockIndex, cast(u32)pname, params); };
 	 GetActiveUniformBlockName :: proc "c" (program : GLuint, uniformBlockIndex : GLuint, bufSize : GLsizei, length : ^GLsizei, uniformBlockName : ^GLchar) { impl_GetActiveUniformBlockName(program, uniformBlockIndex, bufSize, length, uniformBlockName); };
 	 UniformBlockBinding :: proc "c" (program : GLuint, uniformBlockIndex : GLuint, uniformBlockBinding : GLuint) { impl_UniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding); };
-// VERSION_3_2
-	 DrawElementsBaseVertex :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, basevertex : GLint) { impl_DrawElementsBaseVertex(cast(u32)mode, count, cast(u32)type, indices, basevertex); };
+// VERSION_3_2	 DrawElementsBaseVertex :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, basevertex : GLint) { impl_DrawElementsBaseVertex(cast(u32)mode, count, cast(u32)type, indices, basevertex); };
 	 DrawRangeElementsBaseVertex :: proc "c" (mode : GLenum, start : GLuint, end : GLuint, count : GLsizei, type : GLenum, indices : rawptr, basevertex : GLint) { impl_DrawRangeElementsBaseVertex(cast(u32)mode, start, end, count, cast(u32)type, indices, basevertex); };
 	 DrawElementsInstancedBaseVertex :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, instancecount : GLsizei, basevertex : GLint) { impl_DrawElementsInstancedBaseVertex(cast(u32)mode, count, cast(u32)type, indices, instancecount, basevertex); };
 	 MultiDrawElementsBaseVertex :: proc "c" (mode : GLenum, count : ^GLsizei, type : GLenum, indices : ^rawptr, drawcount : GLsizei, basevertex : ^GLint) { impl_MultiDrawElementsBaseVertex(cast(u32)mode, count, cast(u32)type, indices, drawcount, basevertex); };
@@ -1054,8 +1006,7 @@ else {
 	 TexImage3DMultisample :: proc "c" (target : GLenum, samples : GLsizei, internalformat : GLenum, width : GLsizei, height : GLsizei, depth : GLsizei, fixedsamplelocations : GLboolean) { impl_TexImage3DMultisample(cast(u32)target, samples, cast(u32)internalformat, width, height, depth, fixedsamplelocations); };
 	 GetMultisamplefv :: proc "c" (pname : GLenum, index : GLuint, val : ^GLfloat) { impl_GetMultisamplefv(cast(u32)pname, index, val); };
 	 SampleMaski :: proc "c" (maskNumber : GLuint, mask : GLbitfield) { impl_SampleMaski(maskNumber, cast(u32)mask); };
-// VERSION_3_3
-	 BindFragDataLocationIndexed :: proc "c" (program : GLuint, colorNumber : GLuint, index : GLuint, name : GLstring) { impl_BindFragDataLocationIndexed(program, colorNumber, index, name); };
+// VERSION_3_3	 BindFragDataLocationIndexed :: proc "c" (program : GLuint, colorNumber : GLuint, index : GLuint, name : GLstring) { impl_BindFragDataLocationIndexed(program, colorNumber, index, name); };
 	 GenSamplers :: proc "c" (count : GLsizei, samplers : ^GLuint) { impl_GenSamplers(count, samplers); };
 	 DeleteSamplers :: proc "c" (count : GLsizei, samplers : ^GLuint) { impl_DeleteSamplers(count, samplers); };
 	 BindSampler :: proc "c" (unit : GLuint, sampler : GLuint) { impl_BindSampler(unit, sampler); };
@@ -1111,8 +1062,7 @@ else {
 	 ColorP4uiv :: proc "c" (type : GLenum, color : ^GLuint) { impl_ColorP4uiv(cast(u32)type, color); };
 	 SecondaryColorP3ui :: proc "c" (type : GLenum, color : GLuint) { impl_SecondaryColorP3ui(cast(u32)type, color); };
 	 SecondaryColorP3uiv :: proc "c" (type : GLenum, color : ^GLuint) { impl_SecondaryColorP3uiv(cast(u32)type, color); };
-// VERSION_4_0
-	 MinSampleShading :: proc "c" (value : GLfloat) { impl_MinSampleShading(value); };
+// VERSION_4_0	 MinSampleShading :: proc "c" (value : GLfloat) { impl_MinSampleShading(value); };
 	 BlendEquationi :: proc "c" (buf : GLuint, mode : GLenum) { impl_BlendEquationi(buf, cast(u32)mode); };
 	 BlendEquationSeparatei :: proc "c" (buf : GLuint, modeRGB : GLenum, modeAlpha : GLenum) { impl_BlendEquationSeparatei(buf, cast(u32)modeRGB, cast(u32)modeAlpha); };
 	 BlendFunci :: proc "c" (buf : GLuint, src : GLenum, dst : GLenum) { impl_BlendFunci(buf, cast(u32)src, cast(u32)dst); };
@@ -1159,8 +1109,7 @@ else {
 	 MakeImageHandleResidentARB :: proc "c" (handle : GLuint64, access : GLenum) { impl_MakeImageHandleResidentARB(handle, cast(u32)access); };
 	 MakeTextureHandleNonResidentARB :: proc "c" (handle : GLuint64) { impl_MakeTextureHandleNonResidentARB(handle); };
 	 MakeImageHandleNonResidentARB :: proc "c" (handle : GLuint64) { impl_MakeImageHandleNonResidentARB(handle); };
-// VERSION_4_1
-	 ReleaseShaderCompiler :: proc "c" () { impl_ReleaseShaderCompiler(); };
+// VERSION_4_1	 ReleaseShaderCompiler :: proc "c" () { impl_ReleaseShaderCompiler(); };
 	 ShaderBinary :: proc "c" (count : GLsizei, shaders : ^GLuint, binaryFormat : GLenum, binary : rawptr, length : GLsizei) { impl_ShaderBinary(count, shaders, cast(u32)binaryFormat, binary, length); };
 	 GetShaderPrecisionFormat :: proc "c" (shadertype : GLenum, precisiontype : GLenum, range : ^GLint, precision : ^GLint) { impl_GetShaderPrecisionFormat(cast(u32)shadertype, cast(u32)precisiontype, range, precision); };
 	 DepthRangef :: proc "c" (n : GLfloat, f : GLfloat) { impl_DepthRangef(n, f); };
@@ -1246,8 +1195,7 @@ else {
 	 DepthRangeIndexed :: proc "c" (index : GLuint, n : GLdouble, f : GLdouble) { impl_DepthRangeIndexed(index, n, f); };
 	 GetFloati_v :: proc "c" (target : GLenum, index : GLuint, data : ^GLfloat) { impl_GetFloati_v(cast(u32)target, index, data); };
 	 GetDoublei_v :: proc "c" (target : GLenum, index : GLuint, data : ^GLdouble) { impl_GetDoublei_v(cast(u32)target, index, data); };
-// VERSION_4_2
-	 DrawArraysInstancedBaseInstance :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei, baseinstance : GLuint) { impl_DrawArraysInstancedBaseInstance(cast(u32)mode, first, count, instancecount, baseinstance); };
+// VERSION_4_2	 DrawArraysInstancedBaseInstance :: proc "c" (mode : GLenum, first : GLint, count : GLsizei, instancecount : GLsizei, baseinstance : GLuint) { impl_DrawArraysInstancedBaseInstance(cast(u32)mode, first, count, instancecount, baseinstance); };
 	 DrawElementsInstancedBaseInstance :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, instancecount : GLsizei, baseinstance : GLuint) { impl_DrawElementsInstancedBaseInstance(cast(u32)mode, count, cast(u32)type, indices, instancecount, baseinstance); };
 	 DrawElementsInstancedBaseVertexBaseInstance :: proc "c" (mode : GLenum, count : GLsizei, type : GLenum, indices : rawptr, instancecount : GLsizei, basevertex : GLint, baseinstance : GLuint) { impl_DrawElementsInstancedBaseVertexBaseInstance(cast(u32)mode, count, cast(u32)type, indices, instancecount, basevertex, baseinstance); };
 	 GetInternalformativ :: proc "c" (target : GLenum, internalformat : GLenum, pname : GLenum, bufSize : GLsizei, params : ^GLint) { impl_GetInternalformativ(cast(u32)target, cast(u32)internalformat, cast(u32)pname, bufSize, params); };
@@ -1259,8 +1207,7 @@ else {
 	 TexStorage3D :: proc "c" (target : GLenum, levels : GLsizei, internalformat : GLenum, width : GLsizei, height : GLsizei, depth : GLsizei) { impl_TexStorage3D(cast(u32)target, levels, cast(u32)internalformat, width, height, depth); };
 	 DrawTransformFeedbackInstanced :: proc "c" (mode : GLenum, id : GLuint, instancecount : GLsizei) { impl_DrawTransformFeedbackInstanced(cast(u32)mode, id, instancecount); };
 	 DrawTransformFeedbackStreamInstanced :: proc "c" (mode : GLenum, id : GLuint, stream : GLuint, instancecount : GLsizei) { impl_DrawTransformFeedbackStreamInstanced(cast(u32)mode, id, stream, instancecount); };
-// VERSION_4_3
-	 ClearBufferData :: proc "c" (target : GLenum, internalformat : GLenum, format : GLenum, type : GLenum, data : rawptr) { impl_ClearBufferData(cast(u32)target, cast(u32)internalformat, cast(u32)format, cast(u32)type, data); };
+// VERSION_4_3	 ClearBufferData :: proc "c" (target : GLenum, internalformat : GLenum, format : GLenum, type : GLenum, data : rawptr) { impl_ClearBufferData(cast(u32)target, cast(u32)internalformat, cast(u32)format, cast(u32)type, data); };
 	 ClearBufferSubData :: proc "c" (target : GLenum, internalformat : GLenum, offset : GLintptr, size : GLsizeiptr, format : GLenum, type : GLenum, data : rawptr) { impl_ClearBufferSubData(cast(u32)target, cast(u32)internalformat, offset, size, cast(u32)format, cast(u32)type, data); };
 	 DispatchCompute :: proc "c" (num_groups_x : GLuint, num_groups_y : GLuint, num_groups_z : GLuint) { impl_DispatchCompute(num_groups_x, num_groups_y, num_groups_z); };
 	 DispatchComputeIndirect :: proc "c" (indirect : ^DispatchIndirectCommand) { impl_DispatchComputeIndirect(indirect); };
@@ -1299,8 +1246,7 @@ else {
 	 GetObjectLabel :: proc "c" (identifier : GLenum, name : GLuint, bufSize : GLsizei, length : ^GLsizei, label : GLoutstring) { impl_GetObjectLabel(cast(u32)identifier, name, bufSize, length, label); };
 	 ObjectPtrLabel :: proc "c" (ptr : rawptr, length : GLsizei, label : GLstring) { impl_ObjectPtrLabel(ptr, length, label); };
 	 GetObjectPtrLabel :: proc "c" (ptr : rawptr, bufSize : GLsizei, length : ^GLsizei, label : GLoutstring) { impl_GetObjectPtrLabel(ptr, bufSize, length, label); };
-// VERSION_4_4
-	 BufferStorage :: proc "c" (target : GLenum, size : GLsizeiptr, data : rawptr, flags : GLbitfield) { impl_BufferStorage(cast(u32)target, size, data, cast(u32)flags); };
+// VERSION_4_4	 BufferStorage :: proc "c" (target : GLenum, size : GLsizeiptr, data : rawptr, flags : GLbitfield) { impl_BufferStorage(cast(u32)target, size, data, cast(u32)flags); };
 	 ClearTexImage :: proc "c" (texture : GLuint, level : GLint, format : GLenum, type : GLenum, data : rawptr) { impl_ClearTexImage(texture, level, cast(u32)format, cast(u32)type, data); };
 	 ClearTexSubImage :: proc "c" (texture : GLuint, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, format : GLenum, type : GLenum, data : rawptr) { impl_ClearTexSubImage(texture, level, xoffset, yoffset, zoffset, width, height, depth, cast(u32)format, cast(u32)type, data); };
 	 BindBuffersBase :: proc "c" (target : GLenum, first : GLuint, count : GLsizei, buffers : ^GLuint) { impl_BindBuffersBase(cast(u32)target, first, count, buffers); };
@@ -1309,8 +1255,7 @@ else {
 	 BindSamplers :: proc "c" (first : GLuint, count : GLsizei, samplers : ^GLuint) { impl_BindSamplers(first, count, samplers); };
 	 BindImageTextures :: proc "c" (first : GLuint, count : GLsizei, textures : ^GLuint) { impl_BindImageTextures(first, count, textures); };
 	 BindVertexBuffers :: proc "c" (first : GLuint, count : GLsizei, buffers : ^GLuint, offsets : ^GLintptr, strides : ^GLsizei) { impl_BindVertexBuffers(first, count, buffers, offsets, strides); };
-// VERSION_4_5
-	 ClipControl :: proc "c" (origin : GLenum, depth : GLenum) { impl_ClipControl(cast(u32)origin, cast(u32)depth); };
+// VERSION_4_5	 ClipControl :: proc "c" (origin : GLenum, depth : GLenum) { impl_ClipControl(cast(u32)origin, cast(u32)depth); };
 	 CreateTransformFeedbacks :: proc "c" (n : GLsizei, ids : ^GLuint) { impl_CreateTransformFeedbacks(n, ids); };
 	 TransformFeedbackBufferBase :: proc "c" (xfb : GLuint, index : GLuint, buffer : GLuint) { impl_TransformFeedbackBufferBase(xfb, index, buffer); };
 	 TransformFeedbackBufferRange :: proc "c" (xfb : GLuint, index : GLuint, buffer : GLuint, offset : GLintptr, size : GLsizeiptr) { impl_TransformFeedbackBufferRange(xfb, index, buffer, offset, size); };
@@ -1428,8 +1373,7 @@ else {
 	 GetnMinmax :: proc "c" (target : GLenum, reset : GLboolean, format : GLenum, type : GLenum, bufSize : GLsizei, values : rawptr) { impl_GetnMinmax(cast(u32)target, reset, cast(u32)format, cast(u32)type, bufSize, values); };
 	 TextureBarrier :: proc "c" () { impl_TextureBarrier(); };
 	 GetUnsignedBytevEXT :: proc "c" (pname : GLenum, data : ^GLubyte) { impl_GetUnsignedBytevEXT(cast(u32)pname, data); };
-// VERSION_4_6
-	 TexPageCommitmentARB :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, commit : GLboolean) { impl_TexPageCommitmentARB(cast(u32)target, level, xoffset, yoffset, zoffset, width, height, depth, commit); };
+// VERSION_4_6	 TexPageCommitmentARB :: proc "c" (target : GLenum, level : GLint, xoffset : GLint, yoffset : GLint, zoffset : GLint, width : GLsizei, height : GLsizei, depth : GLsizei, commit : GLboolean) { impl_TexPageCommitmentARB(cast(u32)target, level, xoffset, yoffset, zoffset, width, height, depth, commit); };
 	 SpecializeShader :: proc "c" (shader : GLuint, pEntryPoint : GLstring, numSpecializationConstants : GLuint, pConstantIndex : ^GLuint, pConstantValue : ^GLuint) { impl_SpecializeShader(shader, pEntryPoint, numSpecializationConstants, pConstantIndex, pConstantValue); };
 	 MultiDrawArraysIndirectCount :: proc "c" (mode : GLenum, indirect : ^DrawArraysIndirectCommand, drawcount : GLsizei, maxdrawcount : GLsizei, stride : GLsizei) { impl_MultiDrawArraysIndirectCount(cast(u32)mode, indirect, drawcount, maxdrawcount, stride); };
 	 MultiDrawElementsIndirectCount :: proc "c" (mode : GLenum, type : GLenum, indirect : ^DrawElementsIndirectCommand, drawcount : GLsizei, maxdrawcount : GLsizei, stride : GLsizei) { impl_MultiDrawElementsIndirectCount(cast(u32)mode, cast(u32)type, indirect, drawcount, maxdrawcount, stride); };
@@ -1437,30 +1381,21 @@ else {
 
 
 	//functions with return values
-// VERSION_1_0
-	 GetError :: proc "c" () -> GLenum { return cast(GLenum) impl_GetError(); };
+// VERSION_1_0	 GetError :: proc "c" () -> GLenum { return cast(GLenum) impl_GetError(); };
 	 GetString :: proc "c" (name : GLenum) -> GLstring { return impl_GetString(cast(u32)name); };
 	 IsEnabled :: proc "c" (cap : GLenum) -> GLboolean { return impl_IsEnabled(cast(u32)cap); };
-// VERSION_1_1
-	 IsTexture :: proc "c" (texture : GLuint) -> GLboolean { return impl_IsTexture(texture); };
-// VERSION_1_2
-// VERSION_1_3
-// VERSION_1_4
-// VERSION_1_5
-	 IsQuery :: proc "c" (id : GLuint) -> GLboolean { return impl_IsQuery(id); };
+// VERSION_1_1	 IsTexture :: proc "c" (texture : GLuint) -> GLboolean { return impl_IsTexture(texture); };
+// VERSION_1_2// VERSION_1_3// VERSION_1_4// VERSION_1_5	 IsQuery :: proc "c" (id : GLuint) -> GLboolean { return impl_IsQuery(id); };
 	 IsBuffer :: proc "c" (buffer : GLuint) -> GLboolean { return impl_IsBuffer(buffer); };
 	 MapBuffer :: proc "c" (target : GLenum, access : GLenum) -> rawptr { return impl_MapBuffer(cast(u32)target, cast(u32)access); };
 	 UnmapBuffer :: proc "c" (target : GLenum) -> GLboolean { return impl_UnmapBuffer(cast(u32)target); };
-// VERSION_2_0
-	 CreateProgram :: proc "c" () -> GLuint { return impl_CreateProgram(); };
+// VERSION_2_0	 CreateProgram :: proc "c" () -> GLuint { return impl_CreateProgram(); };
 	 CreateShader :: proc "c" (type : GLenum) -> GLuint { return impl_CreateShader(cast(u32)type); };
 	 GetAttribLocation :: proc "c" (program : GLuint, name : GLstring) -> GLint { return impl_GetAttribLocation(program, name); };
 	 GetUniformLocation :: proc "c" (program : GLuint, name : GLstring) -> GLint { return impl_GetUniformLocation(program, name); };
 	 IsProgram :: proc "c" (program : GLuint) -> GLboolean { return impl_IsProgram(program); };
 	 IsShader :: proc "c" (shader : GLuint) -> GLboolean { return impl_IsShader(shader); };
-// VERSION_2_1
-//VERSION_3_0
-	 IsEnabledi :: proc "c" (target : GLenum, index : GLuint) -> GLboolean { return impl_IsEnabledi(cast(u32)target, index); };
+// VERSION_2_1//VERSION_3_0	 IsEnabledi :: proc "c" (target : GLenum, index : GLuint) -> GLboolean { return impl_IsEnabledi(cast(u32)target, index); };
 	 GetFragDataLocation :: proc "c" (program : GLuint, name : GLstring) -> GLint { return impl_GetFragDataLocation(program, name); };
 	 GetStringi :: proc "c" (name : GLenum, index : GLuint) -> GLstring { return impl_GetStringi(cast(u32)name, index); };
 	 IsRenderbuffer :: proc "c" (renderbuffer : GLuint) -> GLboolean { return impl_IsRenderbuffer(renderbuffer); };
@@ -1468,34 +1403,25 @@ else {
 	 CheckFramebufferStatus :: proc "c" (target : GLenum) -> GLenum { return cast(GLenum) impl_CheckFramebufferStatus(cast(u32)target); };
 	 MapBufferRange :: proc "c" (target : GLenum, offset : GLintptr, length : GLsizeiptr, access : GLbitfield) -> rawptr { return impl_MapBufferRange(cast(u32)target, offset, length, cast(u32)access); };
 	 IsVertexArray :: proc "c" (array : GLuint) -> GLboolean { return impl_IsVertexArray(array); };
-// VERSION_3_1
-	 GetUniformBlockIndex :: proc "c" (program : GLuint, uniformBlockName : GLstring) -> GLuint { return impl_GetUniformBlockIndex(program, uniformBlockName); };
-// VERSION_3_2
-	 FenceSync :: proc "c" (condition : GLenum, flags : GLbitfield) -> GLsync { return impl_FenceSync(cast(u32)condition, cast(u32)flags); };
+// VERSION_3_1	 GetUniformBlockIndex :: proc "c" (program : GLuint, uniformBlockName : GLstring) -> GLuint { return impl_GetUniformBlockIndex(program, uniformBlockName); };
+// VERSION_3_2	 FenceSync :: proc "c" (condition : GLenum, flags : GLbitfield) -> GLsync { return impl_FenceSync(cast(u32)condition, cast(u32)flags); };
 	 IsSync :: proc "c" (sync : GLsync) -> GLboolean { return impl_IsSync(sync); };
 	 ClientWaitSync :: proc "c" (sync : GLsync, flags : GLbitfield, timeout : GLuint64) -> GLenum { return cast(GLenum) impl_ClientWaitSync(sync, cast(u32)flags, timeout); };
-// VERSION_3_3
-	 GetFragDataIndex :: proc "c" (program : GLuint, name : GLstring) -> GLint { return impl_GetFragDataIndex(program, name); };
+// VERSION_3_3	 GetFragDataIndex :: proc "c" (program : GLuint, name : GLstring) -> GLint { return impl_GetFragDataIndex(program, name); };
 	 IsSampler :: proc "c" (sampler : GLuint) -> GLboolean { return impl_IsSampler(sampler); };
-// VERSION_4_0
-	 GetSubroutineUniformLocation :: proc "c" (program : GLuint, shadertype : GLenum, name : GLstring) -> GLint { return impl_GetSubroutineUniformLocation(program, cast(u32)shadertype, name); };
+// VERSION_4_0	 GetSubroutineUniformLocation :: proc "c" (program : GLuint, shadertype : GLenum, name : GLstring) -> GLint { return impl_GetSubroutineUniformLocation(program, cast(u32)shadertype, name); };
 	 GetSubroutineIndex :: proc "c" (program : GLuint, shadertype : GLenum, name : GLstring) -> GLuint { return impl_GetSubroutineIndex(program, cast(u32)shadertype, name); };
 	 IsTransformFeedback :: proc "c" (id : GLuint) -> GLboolean { return impl_IsTransformFeedback(id); };
 	 GetTextureHandleARB :: proc "c" (target : GLenum) -> GLuint64 { return impl_GetTextureHandleARB(cast(u32)target); };
 	 GetTextureSamplerHandleARB :: proc "c" (target : GLenum, sampler : GLuint) -> GLuint64 { return impl_GetTextureSamplerHandleARB(cast(u32)target, sampler); };
 	 GetImageHandleARB :: proc "c" (texture : GLuint, level : GLint, layered : GLboolean, layer : GLint, format : GLenum) -> GLuint64 { return impl_GetImageHandleARB(texture, level, layered, layer, cast(u32)format); };
-// VERSION_4_1
-	 CreateShaderProgramv :: proc "c" (type : GLenum, count : GLsizei, conststrings : ^GLstring) -> GLuint { return impl_CreateShaderProgramv(cast(u32)type, count, conststrings); };
+// VERSION_4_1	 CreateShaderProgramv :: proc "c" (type : GLenum, count : GLsizei, conststrings : ^GLstring) -> GLuint { return impl_CreateShaderProgramv(cast(u32)type, count, conststrings); };
 	 IsProgramPipeline :: proc "c" (pipeline : GLuint) -> GLboolean { return impl_IsProgramPipeline(pipeline); };
-// VERSION_4_2
-// VERSION_4_3
-	 GetProgramResourceIndex :: proc "c" (program : GLuint, programInterface : GLenum, name : GLstring) -> GLuint { return impl_GetProgramResourceIndex(program, cast(u32)programInterface, name); };
+// VERSION_4_2// VERSION_4_3	 GetProgramResourceIndex :: proc "c" (program : GLuint, programInterface : GLenum, name : GLstring) -> GLuint { return impl_GetProgramResourceIndex(program, cast(u32)programInterface, name); };
 	 GetProgramResourceLocation :: proc "c" (program : GLuint, programInterface : GLenum, name : GLstring) -> GLint { return impl_GetProgramResourceLocation(program, cast(u32)programInterface, name); };
 	 GetProgramResourceLocationIndex :: proc "c" (program : GLuint, programInterface : GLenum, name : GLstring) -> GLint { return impl_GetProgramResourceLocationIndex(program, cast(u32)programInterface, name); };
 	 GetDebugMessageLog :: proc "c" (count : GLuint, bufSize : GLsizei, sources : ^GLenum, types : ^GLenum, ids : ^GLuint, severities : ^GLenum, lengths : ^GLsizei, messageLog : GLoutstring) -> GLuint { return impl_GetDebugMessageLog(count, bufSize, cast(^u32)sources, cast(^u32)types, ids, cast(^u32)severities, lengths, messageLog); };
-// VERSION_4_4
-// VERSION_4_5
-	 MapNamedBuffer :: proc "c" (buffer : GLuint, access : GLenum) -> rawptr { return impl_MapNamedBuffer(buffer, cast(u32)access); };
+// VERSION_4_4// VERSION_4_5	 MapNamedBuffer :: proc "c" (buffer : GLuint, access : GLenum) -> rawptr { return impl_MapNamedBuffer(buffer, cast(u32)access); };
 	 MapNamedBufferRange :: proc "c" (buffer : GLuint, offset : GLintptr, length : GLsizeiptr, access : GLbitfield) -> rawptr { return impl_MapNamedBufferRange(buffer, offset, length, cast(u32)access); };
 	 UnmapNamedBuffer :: proc "c" (buffer : GLuint) -> GLboolean { return impl_UnmapNamedBuffer(buffer); };
 	 CheckNamedFramebufferStatus :: proc "c" (framebuffer : GLuint, target : GLenum) -> GLenum { return cast(GLenum) impl_CheckNamedFramebufferStatus(framebuffer, cast(u32)target); };
