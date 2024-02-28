@@ -84,6 +84,7 @@ bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
 }
 
+@(private)
 bind_camera :: proc (camera : Camera, loc := #caller_location) {
 
 	if cam, ok := camera.(Camera2D); ok {

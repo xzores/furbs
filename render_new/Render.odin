@@ -6,6 +6,8 @@ import "core:fmt"
 import "core:mem"
 import "core:strings"
 import "core:reflect"
+import "core:log"
+import "core:container/queue"
 
 import "vendor:glfw"
 import fs "vendor:fontstash"
@@ -217,7 +219,7 @@ destroy :: proc (loc := #caller_location) {
 	delete(state.shader_defines); state.shader_defines = {};
 
 	destroy_shaders();
-
+	
 	//Check that all sub windows have been destroyed.
 	if len(state.active_windows) != 0 {
 		panic("You must close all window before calling destroy");
@@ -232,7 +234,7 @@ destroy :: proc (loc := #caller_location) {
 	state.font_context = {};
 
 	//destroy gl
-	fmt.printf("Destroying gl_wrappers\n");
+	log.infof("Destroying gl_wrappers");
 	gl.destroy();
 
 	//Destroy main window
@@ -245,6 +247,14 @@ destroy :: proc (loc := #caller_location) {
 		free(state.main_window);
 		state.main_window = nil;
 	}
+
+	queue.destroy(&state.key_input_events);
+	queue.destroy(&state.key_release_input_events);
+	queue.destroy(&state.char_input_buffer);
+	queue.destroy(&state.char_input);
+	queue.destroy(&state.button_input_events);
+	queue.destroy(&state.button_release_input_events);
+	queue.destroy(&state.scroll_input_event);
 	
 	glfw.Terminate();
 
@@ -256,6 +266,7 @@ destroy :: proc (loc := #caller_location) {
 			val := any{data = auto_cast ptr, id = field.type.id};
 			fmt.assertf(mem.check_zero_ptr(val.data, reflect.size_of_typeid(val.id)), "State must be reset before closing (internal error). The field %s is : %#v", field.name, val);
 		}
+		fmt.panicf("state is not zero : %v", state);
 	}
 }
 

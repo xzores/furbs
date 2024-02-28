@@ -10,13 +10,3 @@ Pair :: struct(A : typeid, B : typeid) {
 	a : A,
 	b : B,
 }
-
-is_number :: proc (codepoint : rune) -> bool {
-
-	switch codepoint {
-		case '0'..='9':
-			return true;
-		case:
-			return false;
-	}
-}

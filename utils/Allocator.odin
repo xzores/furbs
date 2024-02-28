@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:mem"
 import "core:sync"
 import "core:runtime"
+import "core:os"
 
 tracking_allcoators : [dynamic]Pair(^mem.Tracking_Allocator, int);
 tracking_allcoators_allocator : mem.Allocator;
@@ -125,6 +126,8 @@ investigator_allocator_proc :: proc(allocator_data: rawptr, mode: mem.Allocator_
 	return
 }
 
+
+
 //////////////////////////// printers /////////////////////////////////
 
 Megabyte :: cast(f64)runtime.Megabyte;
@@ -173,38 +176,42 @@ print_tracking_memory_results :: proc() -> (found_leak : bool) {
 
 	found_leak = false;
 
-	fmt.printf("Tracking memory results:\n\n");
+	fmt.printf("%sTracking memory results:%s\n\n", ON_BLUE, RESET);
 	for t in tracking_allcoators {
 		using t.a;
-		fmt.printf("Thread : %i\n", t.b);
+		fmt.printf("%sThread : %i%s\n", BLUE, t.b, RESET);
 		if len(allocation_map) == 0 {
-			fmt.printf("\tNo leaks found\n");
+			fmt.printf("\t%sNo leaks found%s\n", GREEN, RESET);
 		}
 		else {
 
 			leaks := make(map[runtime.Source_Code_Location]u32);
 			defer delete(leaks);
 			
-			fmt.printf("\tThe following leaks was found:\n");
+			fmt.printf("\t%sThe following leaks where found:%s\n", ON_RED, RESET);
 			for p, entry in allocation_map {
 				leaks[entry.location] += 1;
 				found_leak = true;
 			}
 			
+			fmt.printf(RED);
 			for loc, cnt in leaks {
 				fmt.printf("\t\tcnt : %v, \tloc : %v\n", cnt, loc);
 			}
+			fmt.printf(RESET);
 		}
 
 		if len(bad_free_array) == 0 {
-			fmt.printf("\tNo bad frees was found\n");
+			fmt.printf("\t%sNo bad frees where found%s\n", GREEN, RESET);
 		}
 		else {
 			
-			fmt.printf("\tThe bad frees was found:\n");
+			fmt.printf("\t%sThe bad frees where found:%s\n", ON_RED, RESET);
+			fmt.printf(RED);
 			for bf in bad_free_array {
-				fmt.printf("\t\tbad_free : %v\n", bf);
+				fmt.printf("\t\tbad_free : %v\n", bf.location);
 			}
+			fmt.printf(RESET);
 		}
 		fmt.printf("\n\n");
 	}

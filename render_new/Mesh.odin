@@ -5,6 +5,7 @@ import "core:reflect"
 import "core:runtime"
 import "core:mem"
 import "core:slice"
+import "core:log"
 
 import glsl "core:math/linalg/glsl"
 import linalg "core:math/linalg"
@@ -72,7 +73,7 @@ get_attribute_info_from_typeid :: proc (t : typeid, loc := #caller_location) -> 
 				normalized = normalized,
 			}
 
-			fmt.printf("attrib_ex : %#v\n", attrib_ex);
+			log.debugf("attrib_ex : %#v\n", attrib_ex);
 
 			append(&attribs, attrib_ex);
 		}
@@ -177,7 +178,7 @@ upload_mesh_data :: proc(mesh : ^Mesh, data : []$T, loc := #caller_location) {
 
 	when ODIN_DEBUG {
 		if !gl.is_fence_ready(mesh.vertex_data_fence) {
-			fmt.printf("Preformence warning: upload_mesh_data sync is not ready, increase the amount of buffering\n");
+			log.warnf("Preformence warning: upload_mesh_data sync is not ready, increase the amount of buffering\n");
 		}
 	}
 

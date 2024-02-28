@@ -115,8 +115,6 @@ Window_desc :: struct {
 	antialiasing : Antialiasing,
 }
 
-
-
 Window :: struct {
 	glfw_window : glfw.WindowHandle, //dont touch
 	framebuffer : Frame_buffer,			//This and context_framebuffer makes up the "fake" backbuffer.
@@ -206,7 +204,7 @@ setup_window_no_backbuffer :: proc(desc : Window_desc, window : ^Window) {
 	glfw.SetWindowUserPointer(window.glfw_window, window);
 
 	state.window_in_focus = window;
-} 
+}
 
 destroy_window :: proc (window : ^Window, loc := #caller_location) {
 	
@@ -227,7 +225,8 @@ destroy_window :: proc (window : ^Window, loc := #caller_location) {
 	unordered_remove(&state.active_windows, index);
 
 	glfw.DestroyWindow(window.glfw_window);
-	
+	gl.destroy_state(window.gl_states);
+
 	free(window);
 }
 

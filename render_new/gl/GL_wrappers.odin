@@ -10,6 +10,7 @@ import "core:fmt"
 import "core:math"
 import "core:time"
 import "core:slice"
+import "core:log"
 
 import gl "OpenGL"
 import utils "../../utils"
@@ -813,7 +814,7 @@ when RENDER_DEBUG {
 		offset_length : [2]int
 	}
 
-	GL_debug_state :: struct {
+	Living_state :: struct {
 		programs 	: map[Shader_program_id]Source_Code_Location,
 		buffers 	: map[Buffer_id]Source_Code_Location,
 		vaos 		: map[Vao_id]Source_Code_Location,
@@ -822,10 +823,13 @@ when RENDER_DEBUG {
 		tex2ds 		: map[Tex2d_id]Source_Code_Location,
 		tex3ds 		: map[Tex3d_id]Source_Code_Location,
 		rbos 		: map[Rbo_id]Source_Code_Location,
-		syncs 		: map[gl.sync_t]Source_Code_Location,	
+		syncs 		: map[gl.sync_t]Source_Code_Location,
 	}
 
-	accessed_buffers : map[Buffer_id][dynamic]^Buffer_access; 	//what range of the buffer is accessed
+	GL_debug_state :: struct {
+		using living : Living_state,
+		accessed_buffers : map[Buffer_id][dynamic]^Buffer_access, //what range of the buffer is accessed
+	}
 	
 	debug_state : GL_debug_state;
 
@@ -838,20 +842,13 @@ when RENDER_DEBUG {
 
 	@(private)
 	init_debug_state :: proc() -> (s : GL_debug_state) {
-		s.programs		= make(map[Shader_program_id]Source_Code_Location);
-		s.buffers		= make(map[Buffer_id]Source_Code_Location);
-		s.vaos			= make(map[Vao_id]Source_Code_Location);
-		s.fbos			= make(map[Fbo_id]Source_Code_Location);
-		s.tex1ds		= make(map[Tex1d_id]Source_Code_Location);
-		s.tex2ds		= make(map[Tex2d_id]Source_Code_Location);
-		s.tex3ds		= make(map[Tex3d_id]Source_Code_Location);
-		s.rbos			= make(map[Rbo_id]Source_Code_Location);
-		s.syncs			= make(map[gl.sync_t]Source_Code_Location);
+		log.infof("init_debug_state");
 		return;
 	}
 
 	@(private)
-	destroy_debug_state :: proc(s : ^GL_debug_state) {
+	destroy_debug_state :: proc(s : GL_debug_state) {
+		log.infof("destroy_debug_state");
 		delete(s.programs);
 		delete(s.buffers);
 		delete(s.vaos);
@@ -861,7 +858,7 @@ when RENDER_DEBUG {
 		delete(s.tex3ds);
 		delete(s.rbos);
 		delete(s.syncs);
-		s^ = {};
+		delete(s.accessed_buffers);
 	}
 }
 
@@ -919,10 +916,9 @@ GL_info :: struct {
 
 init_state :: proc () -> GL_states_comb {
 
-	state : GL_states_comb;
+	log.infof("initializing gl_states");
 
-	state.cpu_state.bound_buffer = make(map[Buffer_type]Buffer_id);
-	state.gpu_state.bound_buffer = make(map[Buffer_type]Buffer_id);
+	state : GL_states_comb;
 
 	when RENDER_DEBUG {
 		state.debug_state = init_debug_state();
@@ -931,22 +927,34 @@ init_state :: proc () -> GL_states_comb {
 	return state;
 }
 
-destroy_state :: proc (state : ^GL_states_comb) {
+destroy_state :: proc (state : GL_states_comb) {
+
+	log.infof("destorying gl_states");
 
 	delete(state.cpu_state.bound_buffer);
 	delete(state.gpu_state.bound_buffer);
-	state.cpu_state = {};
-	state.gpu_state = {};
-
+	
 	when RENDER_DEBUG {
-		destroy_debug_state(&state.debug_state);
+		destroy_debug_state(state.debug_state);
 	}
 }
 
 debug_callback : gl.debug_proc_t : proc "c" (source: gl.GLenum, type: gl.GLenum, id: gl.GLuint, severity: gl.GLenum, length: gl.GLsizei, message: cstring, user_param : rawptr) {
 	context = runtime.default_context();
     // Print or handle the debug message here
-    fmt.printf("OpenGL Debug Message: %.*s\n", length, message);
+
+	if severity == .DEBUG_SEVERITY_LOW {
+    	log.debugf("From %v, OpenGL Debug Message: %.*s", source, length, message);
+	}
+	else if severity == .DEBUG_SEVERITY_MEDIUM {
+		log.infof("From %v, OpenGL Debug Message: %.*s", source, length, message);
+	}
+	else if severity == .DEBUG_SEVERITY_HIGH {
+		log.warnf("From %v, OpenGL Debug Message: %.*s", source, length, message);
+	}
+	else {
+		panic("Unhandled severity");
+	}
 }
 
 swap_states :: proc (new_states : ^GL_states_comb, old_states : ^GL_states_comb, loc := #caller_location) {
@@ -984,7 +992,7 @@ init :: proc() {
 		
 		if cpu_state.gl_version >= .opengl_4_3 {
 			// Enable debug messages
-			//fmt.printf("Enable : %v", gl.Enable);
+			log.infof("Enable debug messages");
 			gl.Enable(.DEBUG_OUTPUT);
 			gl.Enable(.DEBUG_OUTPUT_SYNCHRONOUS);
 
@@ -993,12 +1001,11 @@ init :: proc() {
 
 			// Optionally, specify debug message control
 			//gl.DebugMessageControl(.DONT_CARE, .DONT_CARE, .DONT_CARE, 0, nil, true);
-			//fmt.printf("Subscribed to OpenGL debug messages\n");
 		}
 	}
 
 	info = fetch_gl_info();
-	fmt.printf("System info : %#v\n", info);
+	log.debugf("System info : %#v", info);
 }
 
 destroy :: proc(loc := #caller_location) {
@@ -1008,7 +1015,7 @@ destroy :: proc(loc := #caller_location) {
 	when RENDER_DEBUG {
 		leaks := 0;
 		
-		for field in reflect.struct_fields_zipped(GL_debug_state) {
+		for field in reflect.struct_fields_zipped(Living_state) {
 			
 			key_size : int;
 
@@ -1016,7 +1023,7 @@ destroy :: proc(loc := #caller_location) {
 				key_size = map_type_info.key.size;
 				
 				if value_info, ok := map_type_info.value.variant.(runtime.Type_Info_Named); ok {
-					fmt.assertf(value_info.name == "Source_Code_Location", "Map must hold Source_Code_Location, found : %s\n", value_info.name)
+					fmt.assertf(value_info.name == "Source_Code_Location", "Map must hold Source_Code_Location, found : %s", value_info.name)
 				}
 				//assert(map_type_info.value.varient.(Type_Info_Named));
 			}
@@ -1025,16 +1032,16 @@ destroy :: proc(loc := #caller_location) {
 			}
 
 			if key_size == 4 {
-				s := cast(^map[u32]Source_Code_Location)(cast(uintptr)&debug_state + field.offset);
+				s := cast(^map[u32]Source_Code_Location)(cast(uintptr)&debug_state.living + field.offset);
 				for id, loc in s {
-					fmt.printf("Leak detected! %v with id %i has not been deleted, but allocated at location : %v\n", field.name, id, loc);
+					log.errorf("Leak detected! %v with id %i has not been deleted, but allocated at location : %v", field.name, id, loc);
 					leaks += 1;
 				}
 			}
 			else if key_size == 8 {
-				s := cast(^map[u64]Source_Code_Location)(cast(uintptr)&debug_state + field.offset);
+				s := cast(^map[u64]Source_Code_Location)(cast(uintptr)&debug_state.living + field.offset);
 				for id, loc in s {
-					fmt.printf("Leak detected! %v with id %i has not been deleted, but allocated at location : %v\n", field.name, id, loc);
+					log.errorf("Leak detected! %v with id %i has not been deleted, but allocated at location : %v", field.name, id, loc);
 					leaks += 1;
 				}
 			}
@@ -1045,6 +1052,15 @@ destroy :: proc(loc := #caller_location) {
 		
 		fmt.assertf(leaks == 0, "%v OpenGL object(s) has not been destroyed\n", leaks, loc = loc);
 	}
+	
+	when RENDER_DEBUG {
+		s : GL_states_comb = {cpu_state, gpu_state, debug_state};
+		destroy_state(s);
+	}
+	else {
+		s : GL_states_comb = {cpu_state, gpu_state};
+		destroy_state(s);
+	}	
 
 	/* TODO delete, this is handled by window creation/destruction
 	destroy_state(&cpu_state, &gpu_state);
@@ -1071,7 +1087,7 @@ setup_call_recorder :: proc (filename : string = "gl_calls.txt") {
 			panic("Could not open record file");
 		}
 		else {
-			fmt.printf("recording calles to %v\n", filename);
+			log.infof("recording calles to %v", filename);
 		}
 		time_being = time.now();
 	}
@@ -1129,18 +1145,18 @@ record_call :: proc(from_loc : runtime.Source_Code_Location, ret_val : any, args
 
 record_err :: proc(from_loc: runtime.Source_Code_Location, err_val: any, err : Error_Enum, args : []any, loc : runtime.Source_Code_Location) {
 
-	fmt.printf("glGetError() returned GL_%v\n", err)
-	fmt.printf("	from: gl%s(", loc.procedure);
+	log.errorf("glGetError() returned GL_%v\n", err)
+	log.errorf("	from: gl%s(", loc.procedure);
 	for arg, i in args {
 		if i != 0 {
-			fmt.printf(", ");
+			log.errorf(", ");
 		}
-		fmt.printf("%v", arg);
+		log.errorf("%v", arg);
 	}
-	fmt.printf(")\n");
+	log.errorf(")\n");
 
 	// add location
-	//fmt.printf("	in:   %s(%d:%d)\n", from_loc.file_path, from_loc.line, from_loc.column)
+	//log.errorf("	in:   %s(%d:%d)\n", from_loc.file_path, from_loc.line, from_loc.column)
 
 	if cpu_state.gl_version >= .opengl_4_3 {
 		
@@ -1185,13 +1201,13 @@ record_err :: proc(from_loc: runtime.Source_Code_Location, err_val: any, err : E
 			gl.GetDebugMessageLog(1, l, raw_data(message_sources[:]), raw_data(message_types[:]), nil, raw_data(message_severities[:]), &l, raw_data(err_str));
 			//(count : GLuint, bufSize : GLsizei, sources : ^GLenum, types : ^GLenum, ids : ^GLuint, severities : ^GLenum, lengths : ^GLsizei, messageLog : GLoutstring
 
-			fmt.printf("	recive debug message : %v\n", string(err_str));
+			log.errorf("	recive debug message : %v", string(err_str));
 			gl.GetIntegerv(.DEBUG_LOGGED_MESSAGES, &mes_cnt)
 		}
 	}
-
-	fmt.printf("Current cpu state : %#v\n\n\n", cpu_state);
-	fmt.printf("Current gpu state : %#v\n\n\n", gpu_state);
+	
+	log.infof("Current cpu state : %#v", cpu_state);
+	log.infof("Current gpu state : %#v", gpu_state);
 
 	panic("Caught opengl error!", from_loc);
 }
@@ -1220,6 +1236,8 @@ get_version :: proc() -> GL_version {
 
 	Major : int = strconv.atoi(version[0:1]);
 	Minor : int = strconv.atoi(version[2:3]);
+	
+	delete(version);
 
 	if Major < 3 {
 		panic("A higher version of opengl is required");
@@ -1443,10 +1461,15 @@ clear :: proc(clear_color : [4]f32, flags : Clear_flags = {.color_bit, .depth_bi
 
 /////////// shaders ///////////
 
+Compilation_error :: struct {
+	msg : string,
+	type : enum {vertex, fragment, link},
+}
+
 //return true if error
 @(require_results)
-load_shader_program :: proc(name : string, vertex_src : string, fragment_src : string, loc := #caller_location) -> (Shader_program_id, bool) {
-
+load_shader_program :: proc(name : string, vertex_src : string, fragment_src : string, loc := #caller_location) -> (Shader_program_id, Maybe(Compilation_error)) {
+	
 	compile_shader :: proc (shader_id : u32) -> (err : bool, msg : string) {
 		gl.CompileShader(auto_cast shader_id);
 
@@ -1457,7 +1480,7 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 			log_length  : i32;
 			gl.GetShaderiv(shader_id, .INFO_LOG_LENGTH, &log_length);
 
-			err_info : []u8 = make([]u8, log_length + 1, allocator = context.temp_allocator);
+			err_info : []u8 = make([]u8, log_length + 1);
 			gl.GetShaderInfoLog(shader_id, log_length, nil, auto_cast raw_data(err_info));
 
 			return true, string(err_info);
@@ -1477,7 +1500,7 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 			log_length  : i32;
 			gl.GetProgramiv(shader_id, .INFO_LOG_LENGTH, &log_length);
 
-			err_info : []u8 = make_slice([]u8, log_length + 1, allocator = context.temp_allocator);
+			err_info : []u8 = make_slice([]u8, log_length + 1);
 			gl.GetProgramInfoLog(shader_id, log_length, nil, auto_cast raw_data(err_info));
 
 			return {};
@@ -1489,22 +1512,28 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 	shader_id_vertex := gl.CreateShader(.VERTEX_SHADER);
 	shader_id_fragment := gl.CreateShader(.FRAGMENT_SHADER);
 
-	fmt.printf("Sending the vertex shader code to openGL : \n%s\n", vertex_src);
-	shader_sources_vertex : [1]cstring = { strings.clone_to_cstring(vertex_src, allocator = context.temp_allocator) }
+	log.debugf("Sending the vertex shader code to openGL : \n%s", vertex_src);
+	shader_sources_vertex : [1]cstring = { strings.clone_to_cstring(vertex_src) }
+	defer delete(shader_sources_vertex[0]);
 	gl.ShaderSource(shader_id_vertex, 1, auto_cast &shader_sources_vertex, nil);
-	
-	fmt.printf("Sending the fragment shader code to openGL : \n%s\n", fragment_src);
-	shader_sources_fragment : [1]cstring = { strings.clone_to_cstring(fragment_src, allocator = context.temp_allocator) }
-	gl.ShaderSource(shader_id_fragment, 1, auto_cast &shader_sources_fragment, nil);
 
 	if err, msg := compile_shader(auto_cast shader_id_vertex); err {
-		fmt.printf("Failed to compile vertex shader %v, ERROR : '%s'\n", name, msg);
-		return 0, true;
+		log.errorf("Failed to compile vertex shader %v, ERROR : '%s'", name, msg);
+		gl.DeleteShader(shader_id_vertex);
+		gl.DeleteShader(shader_id_fragment);
+		return 0, Compilation_error{msg, .vertex};
 	}
 
+	log.debugf("Sending the fragment shader code to openGL : \n%s", fragment_src);
+	shader_sources_fragment : [1]cstring = { strings.clone_to_cstring(fragment_src) }
+	defer delete(shader_sources_fragment[0]);
+	gl.ShaderSource(shader_id_fragment, 1, auto_cast &shader_sources_fragment, nil);
+
 	if err, msg := compile_shader(auto_cast shader_id_fragment); err {
-		fmt.printf("Failed to compile fragment shader %v, ERROR : '%s'\n", name, msg);
-		return 0, true;
+		log.errorf("Failed to compile fragment shader %v, ERROR : %s", name, msg);
+		gl.DeleteShader(shader_id_vertex);
+		gl.DeleteShader(shader_id_fragment);
+		return 0, Compilation_error{msg, .fragment};
 	}
 
 	shader_program : Shader_program_id = auto_cast gl.CreateProgram();
@@ -1512,10 +1541,14 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 	gl.AttachShader(auto_cast shader_program, auto_cast shader_id_fragment);
 	
 	if err := link_shader_program(auto_cast shader_program); err != {} {
-		fmt.printf("Failed to link shader program %v, ERROR : %s\n", name, err);
-		return 0, true;
+		log.errorf("Failed to link shader program %v, ERROR : %s", name, err);
+		gl.DeleteShader(shader_id_vertex);
+		gl.DeleteShader(shader_id_fragment);
+		gl.DeleteProgram(auto_cast shader_program);
+		return 0, Compilation_error{err, .link};
 	}
 
+	//These are ok to delete because they are still referenced by the shader program. So their acctual deletion will happen when the shader program is deleted.
 	gl.DeleteShader(shader_id_vertex);
 	gl.DeleteShader(shader_id_fragment);
 
@@ -1523,7 +1556,7 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 		debug_state.programs[shader_program] = loc;
 	}
 
-	return shader_program, false;
+	return shader_program, nil;
 }
 
 unload_shader_program :: proc(shader : Shader_program_id) {
@@ -1656,7 +1689,7 @@ associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes 
 	bind_buffer(.array_buffer, auto_cast buffer);
 	
 	for attrib, i in attributes {
-		//fmt.printf("setting up VertexAttribPointer : %v, %v, %v, %v, %v, %v\n", attrib.location, get_attribute_type_dimensions(attrib.attribute_type), get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
+		//log.infof("setting up VertexAttribPointer : %v, %v, %v, %v, %v, %v\n", attrib.location, get_attribute_type_dimensions(attrib.attribute_type), get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
 		gl.VertexAttribPointer(auto_cast attrib.location, auto_cast get_attribute_type_dimensions(attrib.attribute_type), auto_cast get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
 		gl.EnableVertexAttribArray(auto_cast attrib.location);
 		//VertexAttribPointer      :: proc "c" (index: u32, size: i32, type: u32, normalized: bool, stride: i32, pointer: uintptr)
@@ -1689,7 +1722,6 @@ gen_buffers :: proc(_ : Buffer_type, buffers : []Buffer_id, loc := #caller_locat
 			debug_state.buffers[b] = loc;
 		}
 	}
-
 }
 
 gen_buffer :: proc(_ : Buffer_type, loc := #caller_location) -> (buf : Buffer_id) {
@@ -1808,7 +1840,7 @@ place_fence :: proc (loc := #caller_location) -> Fence {
 		//add all current access to the sync object, when the sync object gets synced we can remove them from the global list.
 		access_map := make(map[Buffer_id][dynamic]^Buffer_access);
 		
-		for buffer, accessed_list in accessed_buffers {
+		for buffer, accessed_list in debug_state.accessed_buffers {
 
 			new_access_list := make([dynamic]^Buffer_access);
 
@@ -1838,27 +1870,6 @@ is_fence_ready :: proc (fence : Fence) -> bool {
 }
 
 sync_fence :: proc (fence : ^Fence) {
-
-	when RENDER_DEBUG {	
-		
-		for buffer, list in fence.access_map {
-			
-			for access in list {
-				index, found := slice.linear_search(accessed_buffers[buffer][:], access)
-				assert(found);
-				unordered_remove(&accessed_buffers[buffer], index);
-				free(access);
-			}
-
-			delete(list);
-			if len(accessed_buffers[buffer]) == 0 {
-				delete(accessed_buffers[buffer]);
-				delete_key(&accessed_buffers, buffer);
-			}
-		}
-		
-		delete(fence.access_map);
-	}
 	
 	if fence.sync == nil {
 		return;
@@ -1874,8 +1885,8 @@ sync_fence :: proc (fence : ^Fence) {
             break;
         } 
 		else if waitResult == auto_cast gl.TIMEOUT_EXPIRED {
-            fmt.printf("Timeout waiting for fence sync object, trying again\n");
-        } 
+        	log.warnf("Timeout waiting for fence sync object, trying again\n");
+        }
 		else if waitResult == auto_cast gl.WAIT_FAILED {
             panic("Wait for fence sync object failed\n");
         }
@@ -1883,13 +1894,35 @@ sync_fence :: proc (fence : ^Fence) {
 			panic("What now?");
 		}
 	}
-
+	
 	discard_fence(fence);
 }
 
 discard_fence :: proc(fence : ^Fence){
 
-	when RENDER_DEBUG {
+	when RENDER_DEBUG {	
+		
+		for buffer, list in fence.access_map {
+			
+			for access in list {
+				index, found := slice.linear_search(debug_state.accessed_buffers[buffer][:], access)
+				assert(found);
+				unordered_remove(&debug_state.accessed_buffers[buffer], index);
+				free(access);
+			}
+
+			delete(list);
+			if len(debug_state.accessed_buffers[buffer]) == 0 {
+				fmt.printf("deleted accessed_buffers[buffer] : %v\n", debug_state.accessed_buffers[buffer]);
+				delete(debug_state.accessed_buffers[buffer]);
+				delete_key(&debug_state.accessed_buffers, buffer);
+			}
+
+			delete_key(&fence.access_map, buffer);
+		}
+		
+		assert(len(fence.access_map) == 0);
+		delete(fence.access_map);
 		delete_key(&debug_state.syncs, fence.sync);
 	}
 
@@ -1938,8 +1971,8 @@ access_buffer :: proc (buffer : Buffer_id, offset, length : int, usage : Resourc
 		}
 		
 		//if we are accessing now, check if something is currently using from the buffer.
-		if is_accessing && buffer in accessed_buffers {
-			for access in accessed_buffers[buffer] {
+		if is_accessing && buffer in debug_state.accessed_buffers {
+			for access in debug_state.accessed_buffers[buffer] {
 				if collides_with_offset_length({offset, length}, access.offset_length) {
 					//this buffer has been accessed
 					fmt.panicf("You are already accessing this buffer from %v\ncreate a sync point before accessing again\n", access.location, loc = loc);
@@ -1953,10 +1986,10 @@ access_buffer :: proc (buffer : Buffer_id, offset, length : int, usage : Resourc
 		if is_accessing {
 			buf_ac := new(Buffer_access);
 			buf_ac^ = Buffer_access{loc, {offset, length}};
-			if accessed_buffers[buffer] == nil {
-				accessed_buffers[buffer] = make([dynamic]^Buffer_access);				
+			if debug_state.accessed_buffers[buffer] == nil {
+				debug_state.accessed_buffers[buffer] = make([dynamic]^Buffer_access, loc = loc);
 			}
-			append(&accessed_buffers[buffer], buf_ac);
+			append(&debug_state.accessed_buffers[buffer], buf_ac);
 		}
 	}
 }
@@ -2496,7 +2529,7 @@ validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid 
 				gl.GetFramebufferAttachmentParameteriv(.FRAMEBUFFER, attachemfvt_id_enum, .FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, auto_cast &attachment_type);
 
 				if (attachment_type == .NONE) {
-					fmt.printf("Framebuffer is missing a color attachment %v", i);
+					log.errorf("Framebuffer is missing a color attachment %v", i);
 				}
 				assert(attachment_type == .RENDERBUFFER, "attachment_type is not a renderbuffer!");
 			}
@@ -2505,7 +2538,7 @@ validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid 
 		depth_attachment_type : gl.GLenum;
 		gl.GetFramebufferAttachmentParameteriv(.FRAMEBUFFER, .DEPTH_ATTACHMENT, .FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, auto_cast &depth_attachment_type);
 		if (depth_attachment_type == .NONE) {
-			fmt.printf("Framebuffer is missing a depth attachment");
+			log.errorf("Framebuffer is missing a depth attachment");
 		}
 		assert(depth_attachment_type == .RENDERBUFFER, "attachment_type is not a renderbuffer!");
 		fmt.panicf("TODO move this. Framebuffer is not complete! Statues : %v", status, loc = loc);
