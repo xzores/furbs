@@ -173,10 +173,10 @@ print_investigator_memory_results :: proc(using self: Investigator_Allocator, si
 }
 
 print_tracking_memory_results :: proc() -> (found_leak : bool) {
-
+	
 	found_leak = false;
-
-	fmt.printf("%sTracking memory results:%s\n\n", ON_BLUE, RESET);
+	
+	fmt.printf("%sTracking memory results:%s\n", BLUE, RESET);
 	for t in tracking_allcoators {
 		using t.a;
 		fmt.printf("%sThread : %i%s\n", BLUE, t.b, RESET);
@@ -213,7 +213,7 @@ print_tracking_memory_results :: proc() -> (found_leak : bool) {
 			}
 			fmt.printf(RESET);
 		}
-		fmt.printf("\n\n");
+		fmt.printf("\n");
 	}
 	
 	fmt.printf("Concluding tracking memory results.\n");

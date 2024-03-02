@@ -126,6 +126,7 @@ Attribute_info_ex :: struct {
 	using _ : Attribute_info,
 }
 
+@(require_results)
 odin_type_to_uniform_type :: proc (odin_type : typeid) -> Uniform_type {
 	switch odin_type {
 		case f32:
@@ -167,7 +168,7 @@ odin_type_to_uniform_type :: proc (odin_type : typeid) -> Uniform_type {
 	return .invalid;
 }
 
-
+@(require_results)
 odin_type_to_attribute_type :: proc (odin_type : typeid) -> Attribute_type {
 	switch odin_type {
 		case f32:
@@ -202,6 +203,7 @@ odin_type_to_attribute_type :: proc (odin_type : typeid) -> Attribute_type {
 }
 
 //return the "entries" or number of dimensions. numbers are between 0 and 4.
+@(require_results)
 get_attribute_type_dimensions :: proc (at : Attribute_type) -> int {
 	switch at {
 		case .invalid:
@@ -219,6 +221,7 @@ get_attribute_type_dimensions :: proc (at : Attribute_type) -> int {
 	return 0;
 }
 
+@(require_results)
 get_attribute_primary_type :: proc (at : Attribute_type) -> Attribute_primary_type {
 	switch at {
 		case .invalid:
@@ -234,6 +237,7 @@ get_attribute_primary_type :: proc (at : Attribute_type) -> Attribute_primary_ty
 	return .invalid;
 }
 
+@(require_results)
 get_attribute_primary_byte_len :: proc (at : Attribute_primary_type) -> int {
 	switch at {
 		case .invalid:
@@ -598,38 +602,54 @@ Pixel_format_internal :: enum i32 {
 	uncompressed_S_RGBA8 = gl.SRGB8_ALPHA8,
 
 	uncompressed_RGB5_A1 = gl.RGB5_A1, //float format, use when you need an on off alpha.
+	
+	//Depth formats (only used with framebuffers)
+	depth_component16 = gl.DEPTH_COMPONENT16,
+	depth_component24 = gl.DEPTH_COMPONENT24,
+	depth_component32 = gl.DEPTH_COMPONENT32,
 
 	//Some int formats
-	uncompressed_int_R8 = gl.R8I,
-	uncompressed_int_RG8 = gl.RG8I,
-	uncompressed_int_RGB8 = gl.RGB8I,
-	uncompressed_int_RGBA8 = gl.RGBA8I,
+	uncompressed_R8_int = gl.R8I,
+	uncompressed_RG8_int = gl.RG8I,
+	uncompressed_RGB8_int = gl.RGB8I,
+	uncompressed_RGBA8_int = gl.RGBA8I,
 
-	uncompressed_int_R16 = gl.R16I,
-	uncompressed_int_RG16 = gl.RG16I,
-	uncompressed_int_RGB16 = gl.RGB16I,
-	uncompressed_int_RGBA16 = gl.RGBA16I,
+	uncompressed_R16_int = gl.R16I,
+	uncompressed_RG16_int = gl.RG16I,
+	uncompressed_RGB16_int = gl.RGB16I,
+	uncompressed_RGBA16_int = gl.RGBA16I,
 
-	uncompressed_int_R32 = gl.R32I,
-	uncompressed_int_RG32 = gl.RG32I,
-	uncompressed_int_RGB32 = gl.RGB32I,
-	uncompressed_int_RGBA32 = gl.RGBA32I,
+	uncompressed_R32_int = gl.R32I,
+	uncompressed_RG32_int = gl.RG32I,
+	uncompressed_RGB32_int = gl.RGB32I,
+	uncompressed_RGBA32_int = gl.RGBA32I,
 
 	//Some unsigned int formats
-	uncompressed_uint_R8 = gl.R8UI,
-	uncompressed_uint_RG8 = gl.RG8UI,
-	uncompressed_uint_RGB8 = gl.RGB8UI,
-	uncompressed_uint_RGBA8 = gl.RGBA8UI,
+	uncompressed_R8_uint = gl.R8UI,
+	uncompressed_RG8_uint = gl.RG8UI,
+	uncompressed_RGB8_uint = gl.RGB8UI,
+	uncompressed_RGBA8_uint = gl.RGBA8UI,
 
-	uncompressed_uint_R16 = gl.R16UI,
-	uncompressed_uint_RG16 = gl.RG16UI,
-	uncompressed_uint_RGB16 = gl.RGB16UI,
-	uncompressed_uint_RGBA16 = gl.RGBA16UI,
+	uncompressed_R16_uint = gl.R16UI,
+	uncompressed_RG16_uint = gl.RG16UI,
+	uncompressed_RGB16_uint = gl.RGB16UI,
+	uncompressed_RGBA16_uint = gl.RGBA16UI,
 
-	uncompressed_uint_R32 = gl.R32UI,
-	uncompressed_uint_RG32 = gl.RG32UI,
-	uncompressed_uint_RGB32 = gl.RGB32UI,
-	uncompressed_uint_RGBA32 = gl.RGBA32UI,
+	uncompressed_R32_uint = gl.R32UI,
+	uncompressed_RG32_uint = gl.RG32UI,
+	uncompressed_RGB32_uint = gl.RGB32UI,
+	uncompressed_RGBA32_uint = gl.RGBA32UI,
+
+	//Some float formats
+	uncompressed_R16_float = gl.R16F,
+	uncompressed_RG16_float = gl.RG16F,
+	uncompressed_RGB16_float = gl.RGB16F,
+	uncompressed_RGBA16_float = gl.RGBA16F,
+
+	uncompressed_R32_float = gl.R32F,
+	uncompressed_RG32_float = gl.RG32F,
+	uncompressed_RGB32_float = gl.RGB32F,
+	uncompressed_RGBA32_float = gl.RGBA32F,
 }
 
 Pixel_format_upload :: enum i32 {
@@ -651,8 +671,29 @@ Pixel_format_upload :: enum i32 {
 	uncompressed_RGBA32,
 }
 
+
 @(require_results)
-Upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) {
+construct_upload_format :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
+
+	switch f {
+		case .uncompressed_R8, .uncompressed_RG8, .uncompressed_RGB8, .uncompressed_RGBA8:
+			return .UNSIGNED_BYTE;
+		case .uncompressed_R16, .uncompressed_RG16, .uncompressed_RGB16, .uncompressed_RGBA16:
+			return .UNSIGNED_SHORT;
+		case .uncompressed_R32, .uncompressed_RG32, .uncompressed_RGB32, .uncompressed_RGBA32:
+			return .UNSIGNED_INT;
+		case .no_upload:
+			return nil;
+		case:
+			panic("TODO");
+	}
+
+	unreachable();
+}
+
+
+@(require_results)
+upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) {
 
 	switch f {
 		case .uncompressed_R8, .uncompressed_R16, .uncompressed_R32:
@@ -673,7 +714,7 @@ Upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) 
 }
 
 @(require_results)
-Upload_format_to_gl_format :: proc (f : Pixel_format_upload) -> (components : gl.GLenum) {
+upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components : gl.GLenum) {
 
 	switch f {
 		case .uncompressed_R8, .uncompressed_R16, .uncompressed_R32:
@@ -694,7 +735,7 @@ Upload_format_to_gl_format :: proc (f : Pixel_format_upload) -> (components : gl
 }
 
 @(require_results)
-Upload_format_to_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
+upload_format_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 
 	switch f {
 		case .uncompressed_R8, .uncompressed_RG8, .uncompressed_RGB8, .uncompressed_RGBA8:
@@ -714,7 +755,7 @@ Upload_format_to_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum)
 
 //Size in bytes
 @(require_results)
-Upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes_per_component : int) {
+upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes_per_component : int) {
 
 	switch f {
 		case .uncompressed_R8, .uncompressed_RG8, .uncompressed_RGB8, .uncompressed_RGBA8:
@@ -933,7 +974,7 @@ destroy_state :: proc (state : GL_states_comb) {
 
 	delete(state.cpu_state.bound_buffer);
 	delete(state.gpu_state.bound_buffer);
-	
+
 	when RENDER_DEBUG {
 		destroy_debug_state(state.debug_state);
 	}
@@ -1008,12 +1049,15 @@ init :: proc() {
 	log.debugf("System info : %#v", info);
 }
 
-destroy :: proc(loc := #caller_location) {
+
+destroy :: proc(loc := #caller_location) -> (leaks : int) {
+	
+	leaks = 0;
+
 	when RECORD_DEBUG {
 		destroy_call_recorder();
 	}
 	when RENDER_DEBUG {
-		leaks := 0;
 		
 		for field in reflect.struct_fields_zipped(Living_state) {
 			
@@ -1049,8 +1093,13 @@ destroy :: proc(loc := #caller_location) {
 				panic("handle this case");
 			}
 		}
-		
-		fmt.assertf(leaks == 0, "%v OpenGL object(s) has not been destroyed\n", leaks, loc = loc);
+
+		if leaks == 0 {
+			log.infof("No OpenGL object(s) leaks detected");
+		}
+		else {
+			log.errorf("%v OpenGL object(s) has not been destroyed\n", leaks);
+		}
 	}
 	
 	when RENDER_DEBUG {
@@ -1068,6 +1117,8 @@ destroy :: proc(loc := #caller_location) {
 		destroy_debug_state(&debug_state);
 	}
 	*/
+
+	return;
 }
 
 /////////// recording ///////////
@@ -1913,7 +1964,6 @@ discard_fence :: proc(fence : ^Fence){
 
 			delete(list);
 			if len(debug_state.accessed_buffers[buffer]) == 0 {
-				fmt.printf("deleted accessed_buffers[buffer] : %v\n", debug_state.accessed_buffers[buffer]);
 				delete(debug_state.accessed_buffers[buffer]);
 				delete_key(&debug_state.accessed_buffers, buffer);
 			}
@@ -2303,7 +2353,7 @@ gen_frame_buffer :: proc (loc := #caller_location) -> Fbo_id {
 
 	// Create a framebuffer object (FBO)
 	framebuffer_id : Fbo_id;
-
+	
 	if cpu_state.gl_version >= .opengl_4_5 {
 		gl.CreateFramebuffers(1, auto_cast &framebuffer_id);
 	}
@@ -2398,19 +2448,20 @@ unbind_render_buffer :: proc() {
 	cpu_state.bound_rbo = 0;
 }
 
-Color_format :: enum u32 {
-	rgba8 = gl.RGBA8,
-	rgba16f = gl.RGBA16F,
-	rgba32f = gl.RGBA32F,
-	rgb8 = gl.RGB8,
-	rgb16f = gl.RGB16F,
-	rgb32f = gl.RGB32F,
-}
-
-associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_buffers : []Rbo_id, width, height, samples_hint : i32, start_index : int = 0, color_format : Color_format = .rgba8, loc := #caller_location) -> (samples : i32) {
+associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_buffers : []Rbo_id, width, height, samples_hint : i32,
+						start_index : int = 0, color_format : Pixel_format_internal = .uncompressed_RGBA8, loc := #caller_location) -> (samples : i32) {
 
 	assert(len(render_buffers) + start_index <= MAX_COLOR_ATTACH, "you can only have up to 8 color attachments", loc);
 	assert(color_format != nil, "color_format is nil", loc);
+
+	#partial switch color_format {
+		case .uncompressed_RGBA8, .uncompressed_RGBA16_float, .uncompressed_RGBA32_float:
+			//everthing is ok
+		case .uncompressed_RGB8, .uncompressed_RGB16_float, .uncompressed_RGB32_float:
+			//everthing is ok
+		case:
+			fmt.panicf("The format %v is not valid, it must be uncompressed_RGBA8, uncompressed_float_RGBA16, uncompressed_float_RGBA32, uncompressed_RGB8, uncompressed_float_RGB16 or uncompressed_float_RGB32", color_format, loc = loc);
+	}
 
 	samples = math.min(samples_hint, info.MAX_SAMPLES, info.MAX_INTEGER_SAMPLES);
 	//fmt.assertf(samples != 0, "something wrong, samples are : %v, %v, %v", samples_hint, info.MAX_SAMPLES, info.MAX_INTEGER_SAMPLES);
@@ -2450,22 +2501,24 @@ associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_bu
 			gl.FramebufferRenderbuffer(.FRAMEBUFFER, auto_cast (cast(u32)gl.GLenum.COLOR_ATTACHMENT0 + auto_cast (i + start_index)), .RENDERBUFFER, auto_cast render_buffers[i]);
 		}
 		
-		bind_render_buffer(0);
+		unbind_render_buffer();
 		bind_frame_buffer(0);
 	}
 
 	return;
 }
 
-Depth_format :: enum u32 {
-	depth_component16 = gl.DEPTH_COMPONENT16,
-	depth_component24 = gl.DEPTH_COMPONENT24,
-	depth_component32 = gl.DEPTH_COMPONENT32,
-}
+@(deprecated="This should be rethought to be like the one with textures, the same should happen for associate_color_render_buffers_with_frame_buffer")
+associate_depth_render_buffer_with_frame_buffer :: proc(fbo : Fbo_id, render_buffer : Rbo_id, width, height, samples_hint : i32, depth_format : Pixel_format_internal = .depth_component24, loc := #caller_location) -> (samples : i32) {
 
-associate_depth_render_buffer_with_frame_buffer :: proc(fbo : Fbo_id, render_buffer : Rbo_id, width, height, samples_hint : i32, depth_format : Depth_format = .depth_component24, loc := #caller_location) -> (samples : i32) {
-
-	assert(depth_format != nil, "color_format is nil", loc);
+	assert(depth_format != nil, "depth_format is nil", loc);
+	
+	#partial switch depth_format {
+		case .depth_component16, .depth_component24, .depth_component32:
+			//everthing is ok
+		case:
+			fmt.panicf("The format %v is not valid, it must be depth_component16, depth_component24 or depth_component32", depth_format, loc = loc);
+	}
 	
 	samples = math.min(samples_hint, info.MAX_SAMPLES, info.MAX_INTEGER_SAMPLES);
 	assert(samples != 0, "something wrong");
@@ -2494,10 +2547,69 @@ associate_depth_render_buffer_with_frame_buffer :: proc(fbo : Fbo_id, render_buf
 		}
 		gl.FramebufferRenderbuffer(.FRAMEBUFFER, .DEPTH_ATTACHMENT, .RENDERBUFFER, auto_cast render_buffer);
 		
-		bind_render_buffer(0);
+		unbind_render_buffer();
 		bind_frame_buffer(0);
 	}
 
+	return;
+}
+
+associate_color_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex2d_id, start_index : int = 0, loc := #caller_location) {
+
+	assert(len(textures) + start_index <= MAX_COLOR_ATTACH, "you can only have up to 8 color attachments", loc);
+	if cpu_state.gl_version >= .opengl_4_5 {
+		
+		// Create a multisampled renderbuffer object for color attachment
+		for i in 0 ..< len(textures) {
+			gl.NamedFramebufferTexture(auto_cast fbo, auto_cast (cast(u32)gl.GLenum.COLOR_ATTACHMENT0 + auto_cast (i + start_index)), auto_cast textures[i], 0);
+		}
+	}
+	else {
+		
+		//TODO move the generation out of this function so we can reuse more code. Have the function be like "attach_frame_buffer_render_attachmetns".
+		bind_frame_buffer(fbo);
+		
+		// Create a (non-)multisampled renderbuffer object for color attachment
+		for i in 0 ..< len(textures) {
+
+			bind_texture_2D(textures[i]);
+			gl.FramebufferTexture(.FRAMEBUFFER, auto_cast (cast(u32)gl.GLenum.COLOR_ATTACHMENT0 + auto_cast (i + start_index)), auto_cast textures[i], 0);
+		}
+		
+		unbind_texture_2D();
+		bind_frame_buffer(0);
+	}
+
+	return;
+}
+
+associate_depth_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex2d_id, start_index : int = 0, loc := #caller_location) -> (samples : i32) {
+
+	assert(len(textures) + start_index <= MAX_COLOR_ATTACH, "you can only have up to 8 color attachments", loc);
+
+	if cpu_state.gl_version >= .opengl_4_5 {
+		
+		// Create a multisampled renderbuffer object for color attachment
+		for i in 0 ..< len(textures) {
+			gl.NamedFramebufferTexture(auto_cast fbo, .DEPTH_ATTACHMENT, auto_cast textures[i], 0);
+		}
+	}
+	else {
+		
+		//TODO move the generation out of this function so we can reuse more code. Have the function be like "attach_frame_buffer_render_attachmetns".
+		bind_frame_buffer(fbo);
+		
+		// Create a (non-)multisampled renderbuffer object for color attachment
+		for i in 0 ..< len(textures) {
+
+			bind_texture_2D(textures[i]);
+			gl.FramebufferTexture(.FRAMEBUFFER, .DEPTH_ATTACHMENT, auto_cast textures[i], 0);
+		}
+		
+		unbind_texture_2D();
+		bind_frame_buffer(0);
+	}
+	
 	return;
 }
 
@@ -2677,11 +2789,11 @@ write_texure_data_1D :: proc (tex : Tex1d_id, level, offset : i32, width : gl.GL
 	}
 
 	if cpu_state.gl_version >= .opengl_4_5 { 
-		gl.TextureSubImage1D(cast(u32)tex, level, offset, width, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		gl.TextureSubImage1D(cast(u32)tex, level, offset, width, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 	}
 	else {
 		bind_texture_1D(tex);
-		gl.TexSubImage1D(.TEXTURE_1D, level, offset, width, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		gl.TexSubImage1D(.TEXTURE_1D, level, offset, width, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 		unbind_texture_1D();
 	}
 }
@@ -2735,19 +2847,34 @@ wrapmode_texture_1D :: proc(tex_id : Tex1d_id, mode : Wrapmode) {
 	}
 }
 
-filtermode_texture_1D :: proc(tex_id : Tex1d_id, mode : Filtermode) {
-
+filtermode_texture_1D :: proc(tex_id : Tex1d_id, mode : Filtermode, using_mipmaps : bool) {
+	
 	min_mode : gl.GLenum;
 	mag_mode : gl.GLenum;
 
 	switch mode {
 		case .nearest:
-			min_mode = .NEAREST //.NEAREST_MIPMAP_NEAREST;
+			
+			if using_mipmaps {
+				min_mode = .NEAREST_MIPMAP_NEAREST;
+			}
+			else {
+				min_mode = .NEAREST;
+			}
+
 			mag_mode = .NEAREST;
 		case .linear:
-			min_mode = .NEAREST //.LINEAR_MIPMAP_LINEAR;
+			
+			if using_mipmaps {
+				min_mode = .LINEAR_MIPMAP_LINEAR;;
+			}
+			else {
+				min_mode = .LINEAR;
+			}
+
 			mag_mode = .LINEAR;
 	}
+	
 	
 	if cpu_state.gl_version >= .opengl_4_5 { 
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
@@ -2867,11 +2994,11 @@ write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, wid
 	}
 
 	if cpu_state.gl_version >= .opengl_4_5 { 
-		gl.TextureSubImage2D(cast(u32)tex, level, xoffset, yoffset, width, height, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		gl.TextureSubImage2D(cast(u32)tex, level, xoffset, yoffset, width, height, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 	}
 	else {
 		bind_texture_2D(tex);
-		gl.TexSubImage2D(.TEXTURE_2D, level, xoffset, yoffset, width, height, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		gl.TexSubImage2D(.TEXTURE_2D, level, xoffset, yoffset, width, height, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 		unbind_texture_2D();
 	}
 }
@@ -2989,7 +3116,7 @@ active_bind_texture_2D :: proc (tex : Tex2d_id, slot : i32) {
 	bind_texture_2D(tex);
 }
 
-/*
+/* TODO, allow binding many textures at a time
 active_bind_texture_2Ds :: proc (tex : []struct{Tex2d_id, slot : u32}) {
 	panic("TODO");
 }
@@ -3084,11 +3211,11 @@ write_texure_data_3D :: proc (tex : Tex3d_id, level, xoffset, yoffset, zoffset :
 	}
 
 	if cpu_state.gl_version >= .opengl_4_5 { 
-		gl.TextureSubImage3D(cast(u32)tex, level, xoffset, yoffset, zoffset, width, height, depth, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		gl.TextureSubImage3D(cast(u32)tex, level, xoffset, yoffset, zoffset, width, height, depth, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 	}
 	else {
 		bind_texture_3D(tex);
-		gl.TexSubImage3D(.TEXTURE_3D, level, xoffset, yoffset, zoffset, width, height, depth, Upload_format_to_gl_format(format), Upload_format_to_gl_type(format), data_ptr);
+		gl.TexSubImage3D(.TEXTURE_3D, level, xoffset, yoffset, zoffset, width, height, depth, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 		unbind_texture_3D();
 	}
 }
@@ -3146,20 +3273,34 @@ wrapmode_texture_3D :: proc(tex_id : Tex3d_id, mode : Wrapmode) {
 	}
 }
 
-filtermode_texture_3D :: proc(tex_id : Tex3d_id, mode : Filtermode) {
+filtermode_texture_3D :: proc(tex_id : Tex3d_id, mode : Filtermode, using_mipmaps : bool) {
 	
 	min_mode : gl.GLenum;
 	mag_mode : gl.GLenum;
-	
+
 	switch mode {
 		case .nearest:
-			min_mode = .NEAREST_MIPMAP_NEAREST;
+			
+			if using_mipmaps {
+				min_mode = .NEAREST_MIPMAP_NEAREST;
+			}
+			else {
+				min_mode = .NEAREST;
+			}
+
 			mag_mode = .NEAREST;
 		case .linear:
-			min_mode = .LINEAR_MIPMAP_LINEAR;
+			
+			if using_mipmaps {
+				min_mode = .LINEAR_MIPMAP_LINEAR;;
+			}
+			else {
+				min_mode = .LINEAR;
+			}
+
 			mag_mode = .LINEAR;
 	}
-	
+
 	if cpu_state.gl_version >= .opengl_4_5 { 
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);

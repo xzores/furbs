@@ -5,63 +5,121 @@ import c "core:c/libc"
 import "core:os"
 import "core:bytes"
 import "core:mem"
+import "core:slice"
 
 import "core:image"
 import "core:image/png"
 
+import "gl"
+
 import "../utils"
 
+Texture_desc :: struct {
+	wrapmode : gl.Wrapmode,
+	filtermode : gl.Filtermode,
+	mipmaps : bool,						// Is mipmaps enabled?
+	format	: gl.Pixel_format_internal,	// Data format (PixelFormat type)
+}
+
+/////////////////////////////////// Texture 1D ///////////////////////////////////
+Texture1D :: struct {
+	id			: gl.Tex1d_id,            	// OpenGL texture id
+	width		: i32,               		// Texture base width
+
+	using desc : Texture_desc,
+}
+
+@(require_results)
+make_texture_1D :: proc(mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.Filtermode, internal_format : gl.Pixel_format_internal,
+							 width : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture1D {
+
+	desc : Texture_desc = {
+		mipmaps 		= mipmaps,
+		wrapmode 		= wrapmode,
+		filtermode 		= filtermode,
+		format 			= internal_format,
+	};
+
+	return make_texture_1D_desc(desc, width, upload_format, data, loc);
+}
+
+@(require_results)
+make_texture_1D_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture1D {
+
+	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
+
+	id : gl.Tex1d_id = gl.gen_texture_1D(loc);
+	assert(id > 0, "TEXTURE: Failed to load texture", loc);
+
+    gl.wrapmode_texture_1D(id, desc.wrapmode);
+	gl.filtermode_texture_1D(id, desc.filtermode, mipmaps);
+
+	size_per_component, channels : int;
+	size_per_component = gl.upload_format_component_size(upload_format);
+	channels = gl.upload_format_channel_cnt(upload_format);
+
+	gl.setup_texure_1D(id, mipmaps, width, format);
+
+	if len(data) == 0 {
+		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
+	}
+	else {
+		assert(upload_format != .no_upload, "upload_format is no_upload, but there is data", loc);
+		length := int(cast(int)width * channels);
+		fmt.assertf(len(data) == length, "Data is not in the correct format, len is %i, while it should have been %i", len(data), length, loc = loc);
+		gl.write_texure_data_1D(id, 0, 0, width, upload_format, data, loc);
+	}
+
+	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
+		gl.generate_mip_maps_1D(id);
+	}
+
+	tex : Texture1D = {
+		id, 
+		width,
+		desc,
+	}
+
+    return tex;
+}
+
+destroy_texture_1D :: proc(tex : ^Texture1D) {
+	gl.delete_texture_1D(tex.id);
+	tex^ = {};
+}
+
+upload_texture_1D_data :: proc(tex : ^Texture1D, #any_int pixel_offset : i32, #any_int pixel_cnt : i32, format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) {
+	
+	gl.write_texure_data_1D(tex.id, 0, auto_cast pixel_offset, auto_cast pixel_cnt, format, data, loc);
+	
+	if (tex.mipmaps) {
+		gl.generate_mip_maps_1D(tex.id);
+	}
+}
+
+/////////////////////////////////// Texture 2D ///////////////////////////////////
 Texture2D :: struct {
-	id:      Texture_id,            // OpenGL texture id
-	width:   i32,               	// Texture base width
-	height:  i32,               	// Texture base height
-	mipmaps: i32,               	// Mipmap levels, 1 by default
-	format:  Pixel_format,         	// Data format (PixelFormat type)
+	id			: gl.Tex2d_id,            	// OpenGL texture id
+	width		: i32,               		// Texture base width
+	height		: i32,               		// Texture base height
+
+	using desc : Texture_desc,
 }
 
-Depth_attachment :: union {Texture_id, Render_buffer_id}
-Depth_texture2D :: struct {
-	id					: Depth_attachment,          // OpenGL texture/renderbuffer id
-	width				: c.int,               // Texture base width
-	height				: c.int,               // Texture base height
-	format				: Depth_format,        // Data format (PixelFormat type)
-}
-
-// RenderTexture type, for texture rendering
-Render_texture :: struct {
-	id				:   Frame_buffer_id,        			// OpenGL framebuffer object id
-	texture			: 	Texture2D,          				// Color buffer attachment texture
-	depth			:   Depth_texture2D, // Depth buffer attachment texture/renderbuffer
-}
-
-load_texture_from_file :: proc(filename : string, loc := #caller_location) -> Texture2D {
+@(require_results)
+load_texture_2D_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .uncompressed_RGBA8}, loc := #caller_location) -> Texture2D {
 	
 	data, ok := os.read_entire_file_from_filename(filename);
 	defer delete(data);
 
 	fmt.assertf(ok, "loading texture data for %v failed", filename, loc = loc);
 
-    return load_texture_from_png_bytes(data, filename, loc = loc);
-}
-
-flip_texture :: proc (data : []byte, width, height, channels : int) {
-	
-	line_size := width * channels;
-	line_mem, err := mem.alloc_bytes(line_size, allocator = context.temp_allocator);
-
-	assert(err == nil, "Failed to allocate");
-
-	for h in 0..<height/2 {
-		row_1 : = h;
-		row_2 := (height-h-1);
-		mem.copy(raw_data(line_mem), 				&data[h * line_size], 				line_size);	
-		mem.copy(&data[h * line_size], 				&data[(height-h-1) * line_size], 	line_size);
-		mem.copy(&data[(height-h-1) * line_size], 	raw_data(line_mem), 				line_size);
-	}
+    return load_texture_2D_from_png_bytes(desc, data, filename, loc = loc);
 }
 
 //Data is compressed bytes (ex png format)
-load_texture_from_png_bytes :: proc(data : []byte, texture_path := "", flipped := true, loc := #caller_location) -> Texture2D {
+@(require_results)
+load_texture_2D_from_png_bytes :: proc(desc : Texture_desc, data : []byte, texture_path := "", flipped := true, loc := #caller_location) -> Texture2D {
 	using image;
 
 	options := Options{
@@ -69,12 +127,12 @@ load_texture_from_png_bytes :: proc(data : []byte, texture_path := "", flipped :
 	};
 
     img, err := png.load_from_bytes(data, options);
-
+	
 	if err != nil {
 		fmt.panicf("Failed to load texture %s, err : %v", texture_path, err, loc = loc);
 	}
 
-	defer destroy(img)
+	defer destroy(img);
 
 	//fmt.printf("Image: %vx%vx%v, %v-bit.\n", img.width, img.height, img.channels, img.depth)
 
@@ -92,30 +150,238 @@ load_texture_from_png_bytes :: proc(data : []byte, texture_path := "", flipped :
 	assert(img.channels == 4);
 
 	raw_data := bytes.buffer_to_bytes(&img.pixels);
-
+	
 	if flipped {
-		flip_texture(raw_data, img.width, img.height, img.channels);
+		flip_texture_2D(raw_data, img.width, img.height, img.channels);
 	}
 
-    return load_texture_from_raw_bytes(raw_data, auto_cast img.width, auto_cast img.height, .uncompressed_RGBA8, loc = loc);
+	return make_texture_2D_desc(desc, auto_cast img.width, auto_cast img.height, .uncompressed_RGBA8, raw_data, loc);
 }
 
-load_texture_from_raw_bytes :: proc (data : []byte, width, height : i32, format : Pixel_format, loc := #caller_location) -> Texture2D {
+@(require_results)
+make_texture_2D :: proc(mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.Filtermode, internal_format : gl.Pixel_format_internal,
+							 width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
 
-    texture : Texture2D = {
-		id			= load_texture_id(data, width, height, format, loc = loc),              // OpenGL texture id
-		width   	= width,        	// Texture base width
-		height  	= height,       	// Texture base height
-		mipmaps 	= 1,            				// TODO Mipmap levels, 1 by default
-		format  	= format,         				// Data format (PixelFormat type)
+	desc : Texture_desc = {
+		mipmaps 		= mipmaps,
+		wrapmode 		= wrapmode,
+		filtermode 		= filtermode,
+		format 			= internal_format,
 	};
 
-	return texture;
+	return make_texture_2D_desc(desc, width, height, upload_format, data, loc);
+}
+
+@(require_results)
+make_texture_2D_desc :: proc(using desc : Texture_desc, width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
+
+	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
+
+	id : gl.Tex2d_id = gl.gen_texture_2D(loc);
+	assert(id > 0, "TEXTURE: Failed to load texture", loc);
+
+    gl.wrapmode_texture_2D(id, desc.wrapmode);
+	gl.filtermode_texture_2D(id, desc.filtermode, mipmaps);
+
+	size_per_component, channels : int;
+	size_per_component = gl.upload_format_component_size(upload_format);
+	channels = gl.upload_format_channel_cnt(upload_format);
+
+	gl.setup_texure_2D(id, mipmaps, width, height, format);
+
+	if len(data) == 0 {
+		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
+	}
+	else {
+		assert(upload_format != .no_upload, "upload_format is no_upload, but there is data", loc);
+		length := int(cast(int)width * cast(int)height * channels);
+		fmt.assertf(len(data) == length, "Data is not in the correct format, len is %i, while it should have been %i", len(data), length, loc = loc);
+		gl.write_texure_data_2D(id, 0, 0, 0, width, height, upload_format, data, loc);
+	}
+
+	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
+		gl.generate_mip_maps_2D(id);
+	}
+
+	tex : Texture2D = {
+		id, 
+		width,
+		height,
+		desc,
+	}
+
+    return tex;
+}
+
+upload_texture_2D_data :: proc(tex : ^Texture2D, pixel_offset : [2]i32, pixel_cnt : [2]i32, data : []$T, loc := #caller_location) {
+	
+	gl.write_texure_data_2D(tex.id, 0, pixel_offset.x, pixel_offset.y, pixel_cnt.x, pixel_cnt.y, format, data, loc);
+	
+	if (tex.mipmaps) {
+		gl.generate_mip_maps_2D(tex.id);
+	}
+}
+
+destroy_texture_2D :: proc(tex : ^Texture2D) {
+	gl.delete_texture_2D(tex.id);
+	tex^ = {};
+}
+
+flip_texture_2D :: proc(data : []byte, width, height, channels : int) {
+	
+	line_size := width * channels;
+	line_mem, err := mem.alloc_bytes(line_size, allocator = context.temp_allocator);
+
+	assert(err == nil, "Failed to allocate");
+
+	for h in 0..<height/2 {
+		row_1 : = h;
+		row_2 := (height-h-1);
+		mem.copy(raw_data(line_mem), 				&data[h * line_size], 				line_size);	
+		mem.copy(&data[h * line_size], 				&data[(height-h-1) * line_size], 	line_size);
+		mem.copy(&data[(height-h-1) * line_size], 	raw_data(line_mem), 				line_size);
+	}
+}
+
+
+/////////////////////////////////// Texture 3D ///////////////////////////////////
+Texture3D :: struct {
+	id			: gl.Tex3d_id,            	// OpenGL texture id
+	width		: i32,               		// Texture base width
+	height		: i32,               		// Texture base height
+	depth 		: i32, 						// Texture base depth
+
+	using desc : Texture_desc,
+}
+
+@(require_results)
+make_texture_3D :: proc(mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.Filtermode, internal_format : gl.Pixel_format_internal,
+							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture3D {
+
+	desc : Texture_desc = {
+		mipmaps 		= mipmaps,
+		wrapmode 		= wrapmode,
+		filtermode 		= filtermode,
+		format 			= internal_format,
+	};
+
+	return make_texture_3D_desc(desc, width, height, depth, upload_format, data, loc);
+}
+
+@(require_results)
+make_texture_3D_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture3D {
+
+	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
+
+	id : gl.Tex3d_id = gl.gen_texture_3D(loc);
+	assert(id > 0, "TEXTURE: Failed to load texture", loc);
+
+    gl.wrapmode_texture_3D(id, desc.wrapmode);
+	gl.filtermode_texture_3D(id, desc.filtermode, mipmaps);
+	
+	size_per_component, channels : int;
+	size_per_component = gl.upload_format_component_size(upload_format);
+	channels = gl.upload_format_channel_cnt(upload_format);
+
+	gl.setup_texure_3D(id, mipmaps, width, height, depth, format);
+
+	if len(data) == 0 {
+		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
+	}
+	else {
+		assert(upload_format != .no_upload, "upload_format is no_upload, but there is data", loc);
+		length := int(cast(int)width * channels);
+		fmt.assertf(len(data) == length, "Data is not in the correct format, len is %i, while it should have been %i", len(data), length, loc = loc);
+		gl.write_texure_data_3D(id, 0, 0, 0, 0, width, height, depth, upload_format, data, loc);
+	}
+
+	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
+		gl.generate_mip_maps_3D(id);
+	}
+
+	tex : Texture3D = {
+		id, 
+		width,
+		height,
+		depth,
+		desc,
+	}
+
+    return tex;
+}
+
+destroy_texture_3D :: proc(tex : ^Texture3D) {
+	gl.delete_texture_3D(tex.id);
+	tex^ = {};
+}
+
+upload_texture_3D_data :: proc(tex : ^Texture3D, pixel_offset : [3]i32, pixel_cnt : [3]i32, format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) {
+	
+	gl.write_texure_data_3D(tex.id, 0, pixel_offset.x, pixel_offset.y, pixel_offset.z, pixel_cnt.x, pixel_cnt.y, pixel_cnt.z, format, data, loc);
+	
+	if (tex.mipmaps) {
+		gl.generate_mip_maps_3D(tex.id);
+	}
+}
+
+
+/////////////////////////////////// Texture 2D multisampled ///////////////////////////////////
+
+
+
+
+/////////////////////////////////// Texture arrays 2D ///////////////////////////////////
+
+
+
+
+
+/////////////////////////////////// Texture cubemap 2D ///////////////////////////////////
+//TODO use glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+Depth_attachment :: union {Texture_id, Render_buffer_id}
+
+Depth_texture2D :: struct {
+	id					: Depth_attachment,          // OpenGL texture/renderbuffer id
+	width				: c.int,               // Texture base width
+	height				: c.int,               // Texture base height
+	format				: Depth_format,        // Data format (PixelFormat type)
 }
 
 // Load texture for rendering (framebuffer)
 // NOTE: Render texture is loaded by default with RGBA color attachment and depth RenderBuffer
-load_render_texture :: proc (width : i32, height : i32, number_of_color_attachments : int = 1, depth_as_render_buffer : bool = false,
+load_render_texture :: proc(width : i32, height : i32, number_of_color_attachments : int = 1, depth_as_render_buffer : bool = false,
 							 depth_buffer_bits : Depth_format = .bits_24, color_format : Pixel_format = .uncompressed_RGBA8, loc := #caller_location) -> Render_texture {
 	
 	//TODO number_of_color_attachments							
@@ -270,13 +536,14 @@ blit_render_texture_to_screen :: proc(render_texture : Render_texture, loc := #c
 	disable_frame_buffer_read(render_texture.id);
 }
 
+/* 
 begin_texture_mode :: proc(target : Render_texture, loc := #caller_location){
 	
 	fmt.assertf(bound_frame_buffer_id == 0, "Another frame buffer (render texture) is already bound, its id is : %v", bound_frame_buffer_id, loc = loc);
 
 	current_render_target_width = cast(f32)target.texture.width;
 	current_render_target_height = cast(f32)target.texture.height;
-	
+		
 	assert(current_render_target_width != 0);
 	assert(current_render_target_height != 0);
 
@@ -299,12 +566,12 @@ end_texture_mode :: proc(target : Render_texture, loc := #caller_location){
 	set_view();
 	
 	//fmt.printf("current_render_target_width : %v, current_render_target_height : %v\n", current_render_target_width, current_render_target_height);
-
 }
+*/
 
 ////////////////////////
 
-get_white_texture :: proc () -> Texture2D {
+get_white_texture :: proc() -> Texture2D {
 
 	if !is_texture_ready(white_texture) {
 		white_texture = load_texture_from_raw_bytes({255, 255, 255, 255}, 1, 1, .uncompressed_RGBA8);
@@ -335,4 +602,5 @@ TextureCubemap :: Texture
 gl.activeTextureId();
 
 
+*/
 */

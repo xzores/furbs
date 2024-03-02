@@ -1,6 +1,7 @@
 package render;
 
 import "core:fmt"
+import "core:math/linalg"
 
 import "vendor:glfw"
 
@@ -50,9 +51,9 @@ make_pipeline_desc :: proc(desc : Pipeline_desc, loc := #caller_location) -> (pi
 
 make_pipeline :: proc {make_pipeline_desc, make_pipeline_parameterized};
 
-begin_pipeline :: proc (pipeline : Pipeline, camera : Camera) {
+begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, clear_if_fbo : Maybe([4]f32) = [4]f32{0,0,0,0}, flip_if_fbo := true) {
 	using gl;
-	
+
 	if window, ok := pipeline.render_target.(^Window); ok {
 		if window.glfw_window == state.owner_context {
 			state.target_pixel_width, state.target_pixel_height = cast(f32)window.width, cast(f32)window.height;
@@ -66,12 +67,33 @@ begin_pipeline :: proc (pipeline : Pipeline, camera : Camera) {
 	else if fbo, ok := pipeline.render_target.(^Frame_buffer); ok {
 		state.target_pixel_width, state.target_pixel_height = cast(f32)fbo.width, cast(f32)fbo.height;
 		gl.bind_frame_buffer(fbo.id);
+
+		if clear_colorm, ok := clear_if_fbo.?; ok {
+			gl.clear(clear_colorm, {.color_bit, .depth_bit});
+		}
 	}
 	else {
 		panic("TODO");
 	}
-	
-	bind_camera(camera);
+
+	bind_camera(camera); //must be here so we can flip the camera y-axis when desired.
+
+	if _, ok := pipeline.render_target.(^Frame_buffer); ok {
+		if flip_if_fbo { //Because of opengl texcoords, it is ussually desired to flip the texture, we instead flip the camera.
+			inverse := matrix[4,4]f32{  //TODO WHY DO WE FLIP THE X-axis? and not the Y-axis? Is is something to do the the camera being 3D? does it work for 2D cameras?
+			1,0,0,0,
+			0,1,0,0,
+			0,0,1,0,
+			0,0,0,1,
+			};
+
+			state.view_mat = state.view_mat * inverse;
+			state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);
+			state.prj_mat = state.prj_mat * inverse;
+			state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
+		}
+	}
+
 	bind_shader(pipeline.shader);
 
 	gl.set_viewport(0, 0, state.target_pixel_width, state.target_pixel_height);

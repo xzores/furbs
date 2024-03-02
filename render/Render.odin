@@ -273,7 +273,7 @@ destroy :: proc (loc := #caller_location) {
 begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}) {
 	
 	begin_inputs();
-
+	
 	handle_clear_color :: proc (w : ^Window, clear_color : [4]f32, falgs : gl.Clear_flags) {
 		gl.bind_frame_buffer(w.framebuffer.id);
 		gl.clear(clear_color, falgs);
@@ -296,7 +296,8 @@ begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {
 			else {
 				//resize both the framebuffer and the context_framebuffer.
 				destroy_frame_buffer(w.framebuffer);
-				w.framebuffer = make_frame_buffer(1, sw, sh, w.framebuffer.samples, true, w.framebuffer.color_format, w.framebuffer.depth_format);
+				assert(w.framebuffer.color_format != nil, "w.framebuffer.color_format is nil");
+				init_frame_buffer_render_buffers(&w.framebuffer, 1, sw, sh, w.framebuffer.samples, w.framebuffer.color_format, w.framebuffer.depth_format);
 				w.width, w.height = sw, sh;
 
 				_make_context_current(w);

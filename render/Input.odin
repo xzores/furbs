@@ -31,12 +31,6 @@ Input_modifier :: bit_set[Input_modifier_enum; i32];
 
 ////////// Keys //////////
 
-key_input_events : queue.Queue(Key_input_event);
-key_release_input_events : queue.Queue(Key_input_event);
-
-char_input_buffer : queue.Queue(rune);
-char_input : queue.Queue(rune);
-
 Key_code :: enum i32 {
 
 	/* The unknown glfw.KEY */
@@ -183,53 +177,43 @@ Key_code :: enum i32 {
 }
 
 Key_input_event :: struct {
-
-	glfw_handle : glfw.WindowHandle,
+	window : ^Window,
 	key : Key_code,
 	scancode : i32,
 	action : Input_state,
 	mods : Input_modifier,
 }
 
-//Current key state
-@(private="file")
-keys_down 		: #sparse [Key_code]bool;
-@(private="file")
-keys_released 	: #sparse [Key_code]bool;
-@(private="file")
-keys_pressed 	: #sparse [Key_code]bool;
-@(private="file")
-keys_triggered 	: #sparse [Key_code]bool;
 
 @(private="file")
 pasted : bool;
 
 //constantly down
 is_key_down :: proc(key : Key_code) -> bool {
-	return keys_down[key];
+	return state.keys_down[key];
 }
 
 //trigger on pressed key
 is_key_pressed :: proc(key : Key_code) -> bool {
-	return keys_released[key] ;
+	return state.keys_released[key] ;
 }
 
 //trigger on release key
 is_key_released :: proc(key : Key_code) -> bool {
-	return keys_pressed[key];
+	return state.keys_pressed[key];
 }
 
 //triggers when press and repeat signals
 is_key_triggered :: proc(key : Key_code) -> bool {
-	return keys_triggered[key];
+	return state.keys_triggered[key];
 }
 
 recive_next_input :: proc () -> (char : rune, done : bool) {
 
-	done = queue.len(char_input) != 0;
+	done = queue.len(state.char_input) != 0;
 	
 	if done {
-		char = queue.pop_front(&char_input);
+		char = queue.pop_front(&state.char_input);
 	}
 	
 	return;
@@ -237,20 +221,11 @@ recive_next_input :: proc () -> (char : rune, done : bool) {
 
 get_clipboard_string :: proc (loc := #caller_location) -> string {
 
-	if window, ok := bound_window.?; ok {
-		return glfw.GetClipboardString(window.glfw_window);
-	}
-
-	panic("A window must be bound to recive clipboard string", loc = loc);
+	return glfw.GetClipboardString(state.owner_context);
 }
 
 ////////// Mouse //////////
 
-//TODO, these you the window's allocator. Is this always true???
-button_input_events : queue.Queue(Mouse_input_event);
-button_release_input_events : queue.Queue(Mouse_input_event);
-
-scroll_input_event : queue.Queue([2]f32);
 
 Mouse_code :: enum i32 {
 	
@@ -271,38 +246,25 @@ Mouse_code :: enum i32 {
 }
 
 Mouse_input_event :: struct {
-	glfw_handle : glfw.WindowHandle,
+	window : ^Window,
 	button : Mouse_code, 
 	action : Input_state, 
 	mods : Input_modifier,
 }
 
-//Current key state
-@(private="file")
-button_down 	: [Mouse_code]bool;
-@(private="file")
-button_released : [Mouse_code]bool;
-@(private="file")
-button_pressed 	: [Mouse_code]bool;
-
-//public
-mouse_pos : [2]f32;
-mouse_delta : [2]f32;
-scroll_delta : [2]f32;
-
 //constantly down, button means mouse
-is_button_down :: proc(button : Mouse_code) -> bool {
-	return button_down[button];
+button_down :: proc(button : Mouse_code) -> bool {
+	return state.button_down[button];
 }
 
 //trigger on pressed key
-is_button_pressed :: proc(button : Mouse_code) -> bool {
-	return button_pressed[button];
+button_pressed :: proc(button : Mouse_code) -> bool {
+	return state.button_pressed[button];
 }
 
 //trigger on release key
-is_button_released :: proc(button : Mouse_code) -> bool {
-	return button_released[button];
+button_released :: proc(button : Mouse_code) -> bool {
+	return state.button_released[button];
 }
 
 ///////////////////////
@@ -311,59 +273,53 @@ is_button_released :: proc(button : Mouse_code) -> bool {
 @(private)
 begin_inputs :: proc(loc := #caller_location) {
 
-	assert(bound_window != nil, "A window must be bound", loc = loc);
-	assert(queue.len(key_release_input_events) == 0, "key_release_input_events is not zero, did  you forget to call end_inputs?", loc = loc);
+	assert(queue.len(state.key_release_input_events) == 0, "state.key_release_input_events is not zero, did  you forget to call end_inputs?", loc = loc);
 
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);
 	
-	if window, ok := bound_window.?; ok {
-		mx, my := glfw.GetCursorPos(window.glfw_window);
-		new_mouse_pos := [2]f32{auto_cast mx, auto_cast my};
-		
-		mouse_delta = new_mouse_pos - mouse_pos;
-		mouse_pos = new_mouse_pos;
-	}
-	else {
-		panic("No window is bound!", loc = loc);
+	mx, my := glfw.GetCursorPos(state.owner_context);
+	new_mouse_pos := [2]f32{auto_cast mx, auto_cast my};
+	
+	state.mouse_delta = new_mouse_pos - state.mouse_pos;
+	state.mouse_pos = new_mouse_pos;
+
+	for queue.len(state.char_input_buffer) != 0 {
+		queue.append(&state.char_input, queue.pop_front(&state.char_input_buffer));
 	}
 
-	for queue.len(char_input_buffer) != 0 {
-		queue.append(&char_input, queue.pop_front(&char_input_buffer));
+	for queue.len(state.scroll_input_event) != 0 {
+		state.scroll_delta += queue.pop_front(&state.scroll_input_event);
 	}
 
-	for queue.len(scroll_input_event) != 0 {
-		scroll_delta += queue.pop_front(&scroll_input_event);
-	}
-
-	for queue.len(button_input_events) != 0 {
-		event := queue.pop_front(&button_input_events);
+	for queue.len(state.button_input_events) != 0 {
+		event := queue.pop_front(&state.button_input_events);
 		
 		switch event.action {
 			case .press:
-				button_pressed[event.button] = true;
-				button_down[event.button] = true;
+				state.button_pressed[event.button] = true;
+				state.button_down[event.button] = true;
 			case .release:
-				button_released[event.button] = true;
-				queue.append(&button_release_input_events, event);
+				state.button_released[event.button] = true;
+				queue.append(&state.button_release_input_events, event);
 			case .repeat: 
 				panic("unimplemented");
 		}
 	}
 
-	for queue.len(key_input_events) != 0 {
-		event := queue.pop_front(&key_input_events);
+	for queue.len(state.key_input_events) != 0 {
+		event := queue.pop_front(&state.key_input_events);
 		
 		switch event.action {
 			case .press:
-				keys_pressed[event.key] = true;
-				keys_triggered[event.key] = true;
-				keys_down[event.key] = true;
+				state.keys_pressed[event.key] = true;
+				state.keys_triggered[event.key] = true;
+				state.keys_down[event.key] = true;
 			case .release:
-				keys_released[event.key] = true;
-				queue.append(&key_release_input_events, event);
+				state.keys_released[event.key] = true;
+				queue.append(&state.key_release_input_events, event);
 			case .repeat:
-				keys_triggered[event.key] = true;
+				state.keys_triggered[event.key] = true;
 		}
 	}
 }
@@ -371,56 +327,54 @@ begin_inputs :: proc(loc := #caller_location) {
 @(private)
 end_inputs :: proc(loc := #caller_location) {
 
-	assert(bound_window != nil, "A window must be bound", loc = loc);
-
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);
 	
-	scroll_delta = [2]f32{0,0};
+	state.scroll_delta = [2]f32{0,0};
 
-	for queue.len(button_release_input_events) != 0 {
-		event := queue.pop_front(&button_release_input_events);
+	for queue.len(state.button_release_input_events) != 0 {
+		event := queue.pop_front(&state.button_release_input_events);
 
 		if event.action == .release {
-			button_down[event.button] = false;
+			state.button_down[event.button] = false;
 		}
 		else {
-			panic("Only release buttons in button_release_input_events");
+			panic("Only release buttons in state.button_release_input_events");
 		}
 	}
 
-	for queue.len(key_release_input_events) != 0 {
-		event := queue.pop_front(&key_release_input_events);
+	for queue.len(state.key_release_input_events) != 0 {
+		event := queue.pop_front(&state.key_release_input_events);
 
 		if event.action == .release {
-			keys_down[event.key] = false;
+			state.keys_down[event.key] = false;
 		}
 		else {
-			panic("Only release keys in key_release_input_events");
+			panic("Only release keys in state.key_release_input_events");
 		}
 	}
 
-	for &button in button_released {
+	for &button in state.button_released {
 		button = false;
 	}
 
-	for &button in button_pressed {
+	for &button in state.button_pressed {
 		button = false;
 	}
 
-	for &key in keys_released {
+	for &key in state.keys_released {
 		key = false;
 	}
 
-	for &key in keys_pressed {
+	for &key in state.keys_pressed {
 		key = false;
 	}
 
-	for &key in keys_triggered {
+	for &key in state.keys_triggered {
 		key = false;
 	}
 
-	queue.clear(&char_input);
+	queue.clear(&state.char_input);
 
 }
 

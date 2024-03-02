@@ -80,18 +80,6 @@ console_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string,
 		case .Error, .Fatal: col = RED
 	}
 	
-	when time.IS_SUPPORTED {
-		if log.Full_Timestamp_Opts & options != nil {
-			fmt.sbprint(&buf, "[")
-			t := time.now()
-			y, m, d := time.date(t)
-			h, min, s := time.clock(t)
-			if .Date in options { fmt.sbprintf(&buf, "%d-%02d-%02d ", y, m, d)    }
-			if .Time in options { fmt.sbprintf(&buf, "%02d:%02d:%02d", h, min, s) }
-			fmt.sbprint(&buf, "] ")
-		}
-	}
-
 	do_location_header(options, &buf, location)
 	
 	if .Thread_Id in options {

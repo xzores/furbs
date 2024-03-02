@@ -9,7 +9,6 @@ import glfw "vendor:glfw"
 import glsl "core:math/linalg/glsl"
 import linalg "core:math/linalg"
 
-
 // Camera projection
 CameraProjection :: enum {
 	perspective = 0,                  // Perspective projection
@@ -22,7 +21,7 @@ Camera3D :: struct {
 	up:       [3]f32,            	// Camera up vector (rotation over its axis)
 	fovy:     f32,                	// Camera field-of-view apperture in Y (degrees) in perspective
 	projection: CameraProjection, 	// Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
-
+	
 	far, near : f32,
 }
 
@@ -32,95 +31,84 @@ Camera2D :: struct {
 	target_relative:[2]f32,				// 
 	rotation: 		f32,				// in degrees
 	zoom:   		f32,            	//
-
+	
 	far, near : 	f32,
 }
 
-Camera_pixel :: struct {
-	position : [2]f32,
-	Anchor_point : [2]f32,
+Camera :: union {
+	Camera2D,
+	Camera3D,
 }
 
-begin_mode_3D :: proc(using camera : Camera3D, use_transparency := true, loc := #caller_location) {
+//////////////////////////////////////////////////////////////////////////////////
 
-	assert(bound_camera == nil, "A camera is already bound, unbind it first", loc = loc);
-	bound_camera = camera;
+@(private)
+bind_camera_3D :: proc(using camera : Camera3D, loc := #caller_location) {
 
-    aspect : f32 = current_render_target_width / current_render_target_height;
+    aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 
-	view_mat = glsl.mat4LookAt(cast(glsl.vec3)camera.position, cast(glsl.vec3)camera.target, -cast(glsl.vec3)camera.up);
-	inv_view_mat = linalg.matrix4_inverse(view_mat);
+	state.view_mat = glsl.mat4LookAt(cast(glsl.vec3)camera.position, cast(glsl.vec3)camera.target, -cast(glsl.vec3)camera.up);
+	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);
 
 	assert(near != 0, "near is 0", loc);
 	assert(far != 0, "far is 0", loc);
 	
     if (camera.projection == .perspective)
     {
-		prj_mat = linalg.matrix4_perspective(camera.fovy, aspect, near, far, flip_z_axis = true); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
+		state.prj_mat = linalg.matrix4_perspective(camera.fovy, aspect, near, far, flip_z_axis = true); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
     }
     else if (camera.projection == .orthographic)
     {	
         top : f32 = camera.fovy/2.0;
         right : f32 = top*aspect;
 		
-		prj_mat = glsl.mat4Ortho3d(-right, right, -top,top, near, far);
+		state.prj_mat = glsl.mat4Ortho3d(-right, right, -top,top, near, far);
     }
 	
-	inv_prj_mat = linalg.matrix4_inverse(prj_mat);
-	
-	enable_depth_test();
-
-	enable_transparency(use_transparency);
+	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
 }
 
-// Ends 3D mode and returns to default 2D orthographic mode
-end_mode_3D :: proc(camera : Camera3D, loc := #caller_location) {
-	
-	assert(camera == bound_camera, "The camera you are trying to unbind is not the currently bound camera", loc = loc);
-	bound_camera = nil;
+@(private)
+bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
 
-	disable_depth_test();
-
-	enable_transparency(false);
-}
-
-begin_mode_2D :: proc(using camera : Camera2D = {{0,0}, {0,0}, 0, 1, 1, -1}, use_transparency := true, loc := #caller_location) {
-
-	assert(bound_camera == nil, "A camera is already bound, unbind it first", loc = loc);
-	bound_camera = camera;
-
-    aspect : f32 = current_render_target_width / current_render_target_height;
+    aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 	
 	translation_mat := linalg.matrix4_translate(-linalg.Vector3f32{position.x, position.y, 0});
 	rotation_mat := linalg.matrix4_from_quaternion(linalg.quaternion_angle_axis_f32(math.to_radians(-rotation), {0,0,1}));
-	view_mat = linalg.mul(translation_mat, rotation_mat);
-	inv_view_mat = linalg.matrix4_inverse(view_mat);
+	state.view_mat = linalg.mul(translation_mat, rotation_mat);
+	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);
 	
 	top : f32 = 1/zoom;
     right : f32 = top*aspect;
-	prj_mat = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
-	inv_prj_mat = linalg.matrix4_inverse(prj_mat);
-
-	enable_transparency(use_transparency);
+	state.prj_mat = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
+	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
 }
 
-// Ends 3D mode and returns to default 2D orthographic mode
-end_mode_2D :: proc(camera : Camera2D = {{0,0}, {0,0}, 0, 1, 1, -1}, loc := #caller_location) {
-	assert(bound_camera == bound_camera, "A camera is already bound, unbind it first", loc = loc);
-	bound_camera = nil;
+@(private)
+bind_camera :: proc (camera : Camera, loc := #caller_location) {
 
-	enable_transparency(false);
+	if cam, ok := camera.(Camera2D); ok {
+		bind_camera_2D(cam)
+	}
+	else if cam, ok := camera.(Camera3D); ok {
+		bind_camera_3D(cam)
+	}
+	else {
+		panic("??");
+	}
 }
 
-get_pixel_space_camera :: proc() -> (cam : Camera2D) {
+//////////////////////////////////////////////////////////////////////////////////
 
-	aspect : f32 = current_render_target_width / current_render_target_height;
+get_pixel_space_camera :: proc(loc := #caller_location) -> (cam : Camera2D) {
+
+	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 
 	cam = {
-		position 		= {current_render_target_width/2,current_render_target_height/2},
+		position 		= {state.target_pixel_width/2, state.target_pixel_height/2},
 		target_relative = {0,0},
 		rotation		= 0,
-		zoom			= 2/(current_render_target_height),
+		zoom			= 2/(state.target_pixel_height),
 
 		far 			= 1,
 		near			= -1,
@@ -151,14 +139,6 @@ camera_right :: proc(cam : Camera3D) -> [3]f32 {
 camera_move :: proc(cam : ^Camera3D, movement : [3]f32) {
 	cam.position += movement;
 	cam.target += movement;
-}
-
-camera_rotate :: proc(cam : ^Camera3D, angles_degress : [3]f32) {
-
-	forward := camera_forward(cam^);
-	m := linalg.matrix3_from_euler_angles(math.to_radians(angles_degress.x), math.to_radians(angles_degress.y), math.to_radians(angles_degress.z), .XYZ);
-	//m := linalg.matrix3_rotate_f32(math.to_radians(angle_degress), auto_cast around);
-	cam.target = linalg.matrix_mul_vector(m, forward)  + cam.position;
 }
 
 camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {

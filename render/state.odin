@@ -1,89 +1,85 @@
 package render;
 
+import "core:container/queue"
+
+import "vendor:glfw"
 import fs "vendor:fontstash"
 
-////////////// TYPES ////////////
+import "gl"
 
-Vertex_buffer_targets :: enum {
-	array_buffer,
-}
+//This contains high-level state, go to wrappers to see the opengl client side state.
 
-///////////// STATE ////////////
+state : State;
 
-font_texture : Texture2D;
-font_context : fs.FontContext;
-text_shader : Shader;
-
-prj_mat 		: matrix[4,4]f32;
-inv_prj_mat 	: matrix[4,4]f32;
-
-view_mat 		: matrix[4,4]f32;
-inv_view_mat	: matrix[4,4]f32;
-
-shader_folder_location : string;
-
-current_render_target_width : f32;
-current_render_target_height : f32;
-current_render_target_unit : f32; //TODO
-
-bound_window : Maybe(Window);
-
-opengl_version : GL_version;
-
-/////////// Optional helpers stuff ////////////
-
-//TODO shapes_buffer : Mesh_buffer; //TODO unused
-gui_shader : Shader;
-white_texture : Texture2D; //Use get_white_texture to get it as it will init it if it is not.
-
-//TODO make this a single mesh buffer
-shape_quad : Mesh;
-shape_circle : Mesh;
-
-///////////// DEBUG STATE ////////////
-
-render_has_been_init : bool = false;
-
-////////////////
-
-when ODIN_DEBUG {
-
-	//What is alive
-	//not it map = not created,
-	//false = deleted,
-	//true = alive,
-	shader_program_alive : map[Shader_program_id]bool; //All array_buffers alive
-	shader_vertex_alive : map[Shader_vertex_id]bool; //All array_buffers alive
-	shader_fragment_alive : map[Shader_fragment_id]bool; //All array_buffers alive
-
-	textures_alive : map[Texture_id]bool; //All array_buffers alive
-	render_buffer_alive : map[Render_buffer_id]bool; //All array_buffers alive
-	frame_buffer_alive : map[Frame_buffer_id]bool; //All array_buffers alive
+State :: struct {
 	
-	vertex_buffers_alive : map[Vbo_ID]bool; //All array_buffers alive
-	array_buffers_alive : map[Vao_ID]struct{
-		is_alive : bool,
-		vertex_attrib_enabled : [8]bool,
-	}; //All array_buffers alive
+	//Input stuff
+	button_down 	: [Mouse_code]bool,
+	button_released : [Mouse_code]bool,
+	button_pressed 	: [Mouse_code]bool,
+	
+	keys_down 		: #sparse [Key_code]bool,
+	keys_released 	: #sparse [Key_code]bool,
+	keys_pressed 	: #sparse [Key_code]bool,
+	keys_triggered 	: #sparse [Key_code]bool,
+	
+	key_input_events : queue.Queue(Key_input_event),
+	key_release_input_events : queue.Queue(Key_input_event),
+	
+	char_input_buffer : queue.Queue(rune),
+	char_input : queue.Queue(rune),
 
-	texture_slots_binds : map[Texture_slot]Texture_id;
+	button_input_events : queue.Queue(Mouse_input_event),
+	button_release_input_events : queue.Queue(Mouse_input_event),
 
-	//What is bound
-	bound_shader_program : Shader_program_id;
-	bound_array_buffer : Vao_ID;
-	bound_element_buffer : Vbo_ID;
-	//TODO check bound_texture2D 	: Texture_id;
-	vertex_buffer_targets : [Vertex_buffer_targets]Vbo_ID;
+	scroll_input_event : queue.Queue([2]f32),
 
-	bound_frame_buffer_id : Frame_buffer_id;
-	bound_read_frame_buffer_id : Frame_buffer_id;
-	bound_write_frame_buffer_id : Frame_buffer_id;
+	mouse_pos : [2]f32,
+	mouse_delta : [2]f32,
+	scroll_delta : [2]f32,
 
+	//Render init variable
+	is_init : bool,
+	
+	//Window stuff
+	owner_context : glfw.WindowHandle,
+	current_context : glfw.WindowHandle,
+	owner_gl_states : gl.GL_states_comb,
+	opengl_version : GL_version,
+	active_windows : [dynamic]^Window,
+	vsync : bool,
+	
+	bound_window : Maybe(^Window),
+	window_in_focus : ^Window,
+
+	main_window : ^Window,
+
+	target_pixel_width, target_pixel_height : f32,
+
+	//Text stuff
+	font_context : fs.FontContext,
+	
+	//Shader stuff
+	is_init_shader : bool,
+	default_shader : ^Shader,
+	shader_defines : map[string]string,
+
+	loaded_shaders : [dynamic]^Shader,
+	
+	bound_shader : ^Shader,
+
+	//Camera projection stuff
+	using camera : struct {
+		prj_mat 		: matrix[4,4]f32,
+		inv_prj_mat 	: matrix[4,4]f32,
+		view_mat 		: matrix[4,4]f32,
+		inv_view_mat	: matrix[4,4]f32,
+	},
+
+	
 }
 
-///////// camera /////////
-bound_camera : union {
-	Camera_pixel,
-	Camera2D,
-	Camera3D,
-};
+
+
+
+
