@@ -74,14 +74,15 @@ glfw_error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstrin
 }
 
 init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [Attribute_location]Attribute_info, shader_defines : map[string]string, 
-			window_desc : Maybe(Window_desc) = nil, required_gl_verion : Maybe(GL_version) = nil, loc := #caller_location) -> ^Window {
+			window_desc : Maybe(Window_desc) = nil, required_gl_verion : Maybe(GL_version) = nil, render_context := context, loc := #caller_location) -> ^Window {
 	
 	using gl;
 
 	window : ^Window = nil;
 
 	fmt.assertf(mem.check_zero_ptr(&state, size_of(state)), "it looks like the state is not cleared correctly, did you forget to close the last state correctly, or did you already call init_render?\nThe state : %v", state, loc = loc);
-
+	state.render_context = render_context;
+	
 	// Initialize GLFW
     if !glfw.Init() {
 		panic("Could not init glfw\n");
@@ -268,17 +269,14 @@ destroy :: proc (loc := #caller_location) {
 		}
 		fmt.panicf("state is not zero : %v", state);
 	}
+
+	//state.render_context = {};
 }
 
-begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}) {
+begin_frame :: proc() {
 	
 	begin_inputs();
 	
-	handle_clear_color :: proc (w : ^Window, clear_color : [4]f32, falgs : gl.Clear_flags) {
-		gl.bind_frame_buffer(w.framebuffer.id);
-		gl.clear(clear_color, falgs);
-	}
-
 	for w in state.active_windows {
 		
 		if w.is_fullscreen != w.fullscreen_target_state {
@@ -307,8 +305,6 @@ begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {
 				_make_context_current(nil);
 			}
 		}
-
-		handle_clear_color(w, clear_color, falgs);
 	}
 	
 	//back to main window//
@@ -323,7 +319,6 @@ begin_frame :: proc(clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {
 			w.is_fullscreen = !w.is_fullscreen;
 		}
 		state.main_window.width, state.main_window.height = get_screen_size(state.main_window);
-		handle_clear_color(state.main_window, clear_color, falgs);
 	}
 }
 

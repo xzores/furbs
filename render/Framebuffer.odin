@@ -149,7 +149,7 @@ init_frame_buffer_textures :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, w
 
 	//setup depth buffer
 	{
-		fmt.printf("TODO textures, not renderbuffers");
+		fmt.printf("TODO textures, not renderbuffers\n");
 		depth_buf := gl.gen_render_buffer();
 		depth_samples := gl.associate_depth_render_buffer_with_frame_buffer(fbo.id, depth_buf, width, height, 1, auto_cast depth_format)
 		fmt.assertf(fbo.samples == depth_samples, "inconsistent FBO samples %v, %v", fbo.samples, depth_samples); 

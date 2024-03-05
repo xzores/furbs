@@ -1,6 +1,7 @@
 package render;
 
 import "core:container/queue"
+import "base:runtime"
 
 import "vendor:glfw"
 import fs "vendor:fontstash"
@@ -76,7 +77,7 @@ State :: struct {
 		inv_view_mat	: matrix[4,4]f32,
 	},
 
-	
+	render_context : runtime.Context,	
 }
 
 

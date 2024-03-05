@@ -20,10 +20,10 @@ Mouse_mode :: enum {
 key_callback : glfw.KeyProc : proc "c" (glfw_window : glfw.WindowHandle, key : i32, scancode : i32, action : i32, mods : i32) {
 	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
 	
+	context = runtime.default_context();
+
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);
-
-	context = runtime.default_context();
 
 	event : Key_input_event = {
 		window = window,
@@ -39,10 +39,10 @@ key_callback : glfw.KeyProc : proc "c" (glfw_window : glfw.WindowHandle, key : i
 button_callback : glfw.MouseButtonProc : proc "c" (glfw_window : glfw.WindowHandle, button, action, mods : i32) {
 	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
 
+	context = runtime.default_context();
+
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);
-
-	context = runtime.default_context();
 
 	event : Mouse_input_event = {
 		window = window,
@@ -57,10 +57,10 @@ button_callback : glfw.MouseButtonProc : proc "c" (glfw_window : glfw.WindowHand
 scroll_callback : glfw.ScrollProc : proc "c" (glfw_window : glfw.WindowHandle, xoffset, yoffset: f64) {
 	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
 	
+	context = runtime.default_context();
+
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);
-
-	context = runtime.default_context();
 
 	queue.append(&state.scroll_input_event, [2]f32{auto_cast xoffset, auto_cast yoffset});
 }
@@ -68,18 +68,16 @@ scroll_callback : glfw.ScrollProc : proc "c" (glfw_window : glfw.WindowHandle, x
 input_callback : glfw.CharModsProc : proc "c" (glfw_window : glfw.WindowHandle, codepoint: rune, mods : i32) {
 	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
 
+	context = runtime.default_context();
+
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);
-
-	context = runtime.default_context();
 	
 	queue.append(&state.char_input_buffer, codepoint);
 }
 
 window_focus_callback : glfw.WindowFocusProc : proc "c" (glfw_window : glfw.WindowHandle, focused : c.int) {
 	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
-	
-	context = runtime.default_context();
 
 	focused : bool = focused == 1;
 
@@ -247,7 +245,9 @@ _make_context_current ::proc(window : ^Window, loc := #caller_location) {
 		if con == state.current_context {
 			return;
 		}
-		helper(con, loc, loc);
+		if gl._gl_context != {} {
+			helper(con, loc, loc);
+		}
 		glfw.MakeContextCurrent(con);
 		state.current_context = con;
 	}

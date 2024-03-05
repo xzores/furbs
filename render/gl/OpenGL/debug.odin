@@ -17,10 +17,10 @@ Error_Enum :: enum {
 	// TODO: What if the return enum is invalid?
 }
 
-capture_error_callback_type :: #type proc(runtime.Source_Code_Location, any, Error_Enum, []any, runtime.Source_Code_Location);
+capture_error_callback_type :: #type proc (runtime.Source_Code_Location, any, Error_Enum, []any, runtime.Source_Code_Location);
 capture_error_callback : capture_error_callback_type = nil;
 
-capture_gl_callback_type :: #type proc(runtime.Source_Code_Location, any, []any, runtime.Source_Code_Location);
+capture_gl_callback_type :: #type proc (runtime.Source_Code_Location, any, []any, runtime.Source_Code_Location);
 capture_gl_callback : capture_gl_callback_type = nil;
 
 when GL_DEBUG {

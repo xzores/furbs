@@ -1,7 +1,7 @@
 package wrappers;
 
 import "core:mem"
-import "core:runtime"
+import "base:runtime"
 import "core:os"
 import "core:strconv"
 import "core:reflect"
@@ -338,6 +338,12 @@ Resource_usage_3_3 :: enum u32 {
 	dynamic_write = gl.DYNAMIC_DRAW,
 	dynamic_read = 	gl.DYNAMIC_READ,
 	dynamic_copy = gl.DYNAMIC_COPY,
+}
+
+Index_buffer_type :: enum u32 {
+	no_index_buffer,
+	unsigned_short = gl.UNSIGNED_SHORT,
+	unsigned_int = gl.UNSIGNED_INT,
 }
 
 /*
@@ -930,6 +936,8 @@ GL_state_ex :: struct {
 	depth_test : bool,
 	polygon_mode : Polygon_mode,
 	culling : Cull_method,
+	depth_clamp : bool,
+	depth_clamp_range : [2]f64,
 	viewport : [4]i32,
 	clear_color : [4]f32,
 
@@ -1017,7 +1025,10 @@ else {
 	}
 }
 
-init :: proc() {
+
+_gl_context : runtime.Context;
+
+init :: proc(gl_context := context) {
 	
 	/* TODO delete, this is handled by window creation
 	cpu_state, gpu_state = init_state();
@@ -1025,6 +1036,8 @@ init :: proc() {
 		debug_state = init_debug_state();
 	}
 	*/
+
+	_gl_context = gl_context;
 
 	when RECORD_DEBUG {
 		setup_call_recorder();
@@ -1048,7 +1061,6 @@ init :: proc() {
 	info = fetch_gl_info();
 	log.debugf("System info : %#v", info);
 }
-
 
 destroy :: proc(loc := #caller_location) -> (leaks : int) {
 	
@@ -1118,6 +1130,8 @@ destroy :: proc(loc := #caller_location) -> (leaks : int) {
 	}
 	*/
 
+	_gl_context = {};
+
 	return;
 }
 
@@ -1153,8 +1167,11 @@ destroy_call_recorder :: proc () {
 	}
 }
 
-record_call :: proc(from_loc : runtime.Source_Code_Location, ret_val : any, args : []any, loc : runtime.Source_Code_Location = #caller_location) {
-	
+record_call :: proc (from_loc : runtime.Source_Code_Location, ret_val : any, args : []any, loc := #caller_location) {
+
+	context = _gl_context;
+	assert(_gl_context != {}, "_gl_context is nil", loc);
+
 	when RECORD_DEBUG {
 		call_time_mil_sec : f64 = time.duration_milliseconds(time.since(time_being));
 		os.write_string(record_output, fmt.tprintf("%.3f : gl%s(", call_time_mil_sec, loc.procedure));
@@ -1194,71 +1211,71 @@ record_call :: proc(from_loc : runtime.Source_Code_Location, ret_val : any, args
 	}
 }
 
-record_err :: proc(from_loc: runtime.Source_Code_Location, err_val: any, err : Error_Enum, args : []any, loc : runtime.Source_Code_Location) {
+record_err :: proc (from_loc: runtime.Source_Code_Location, err_val: any, err : Error_Enum, args : []any, loc : runtime.Source_Code_Location) {
 
-	log.errorf("glGetError() returned GL_%v\n", err)
-	log.errorf("	from: gl%s(", loc.procedure);
-	for arg, i in args {
-		if i != 0 {
-			log.errorf(", ");
-		}
-		log.errorf("%v", arg);
-	}
-	log.errorf(")\n");
+	context = _gl_context;
+	assert(_gl_context != {}, "_gl_context is nil", loc);
 
-	// add location
-	//log.errorf("	in:   %s(%d:%d)\n", from_loc.file_path, from_loc.line, from_loc.column)
+	{
+		s := fmt.aprintf("glGetError() returned GL_%v\n\tfrom:\tgl%s(%v)\n\tin:\t%v(%v:%v)\n", err, loc.procedure, args, from_loc.file_path, from_loc.line, from_loc.column);
+		defer delete(s);
 
-	if cpu_state.gl_version >= .opengl_4_3 {
-		
-		mes_cnt : gl.GLint;
-		gl.GetIntegerv(.DEBUG_LOGGED_MESSAGES, &mes_cnt)
-		
-		for mes_cnt != 0 {
+		log.errorf(s);
+
+		// add location
+		//log.errorf("	in:   %s(%d:%d)\n", from_loc.file_path, from_loc.line, from_loc.column)
+
+		if cpu_state.gl_version >= .opengl_4_3 {
 			
-			l : gl.GLint;
-			gl.GetIntegerv(.DEBUG_NEXT_LOGGED_MESSAGE_LENGTH, &l);
-			
-			err_str := make([]u8, l+2);
-
-			message_sources : []gl.GLenum = {
-				.DEBUG_SOURCE_API,
-				.DEBUG_SOURCE_WINDOW_SYSTEM,
-				.DEBUG_SOURCE_SHADER_COMPILER,
-				.DEBUG_SOURCE_THIRD_PARTY,
-				.DEBUG_SOURCE_APPLICATION,
-				.DEBUG_SOURCE_OTHER,
-			}
-
-			message_types : []gl.GLenum = {
-				.DEBUG_TYPE_ERROR,
-				.DEBUG_TYPE_DEPRECATED_BEHAVIOR,
-				.DEBUG_TYPE_UNDEFINED_BEHAVIOR,
-				.DEBUG_TYPE_PORTABILITY,
-				//.DEBUG_TYPE_PERFORMANCE,
-				//.DEBUG_TYPE_MARKER,
-				//.DEBUG_TYPE_PUSH_GROUP,
-				//.DEBUG_TYPE_POP_GROUP,
-				//.DEBUG_TYPE_OTHER,
-			}
-			
-			message_severities : []gl.GLenum = {
-				.DEBUG_SEVERITY_HIGH,
-				.DEBUG_SEVERITY_MEDIUM,
-				.DEBUG_SEVERITY_LOW,
-				.DEBUG_SEVERITY_NOTIFICATION,
-			}
-
-			gl.GetDebugMessageLog(1, l, raw_data(message_sources[:]), raw_data(message_types[:]), nil, raw_data(message_severities[:]), &l, raw_data(err_str));
-			//(count : GLuint, bufSize : GLsizei, sources : ^GLenum, types : ^GLenum, ids : ^GLuint, severities : ^GLenum, lengths : ^GLsizei, messageLog : GLoutstring
-
-			log.errorf("	recive debug message : %v", string(err_str));
+			mes_cnt : gl.GLint;
 			gl.GetIntegerv(.DEBUG_LOGGED_MESSAGES, &mes_cnt)
+			
+			for mes_cnt != 0 {
+				
+				l : gl.GLint;
+				gl.GetIntegerv(.DEBUG_NEXT_LOGGED_MESSAGE_LENGTH, &l);
+				
+				err_str := make([]u8, l+2);
+
+				message_sources : []gl.GLenum = {
+					.DEBUG_SOURCE_API,
+					.DEBUG_SOURCE_WINDOW_SYSTEM,
+					.DEBUG_SOURCE_SHADER_COMPILER,
+					.DEBUG_SOURCE_THIRD_PARTY,
+					.DEBUG_SOURCE_APPLICATION,
+					.DEBUG_SOURCE_OTHER,
+				}
+
+				message_types : []gl.GLenum = {
+					.DEBUG_TYPE_ERROR,
+					.DEBUG_TYPE_DEPRECATED_BEHAVIOR,
+					.DEBUG_TYPE_UNDEFINED_BEHAVIOR,
+					.DEBUG_TYPE_PORTABILITY,
+					//.DEBUG_TYPE_PERFORMANCE,
+					//.DEBUG_TYPE_MARKER,
+					//.DEBUG_TYPE_PUSH_GROUP,
+					//.DEBUG_TYPE_POP_GROUP,
+					//.DEBUG_TYPE_OTHER,
+				}
+				
+				message_severities : []gl.GLenum = {
+					.DEBUG_SEVERITY_HIGH,
+					.DEBUG_SEVERITY_MEDIUM,
+					.DEBUG_SEVERITY_LOW,
+					.DEBUG_SEVERITY_NOTIFICATION,
+				}
+
+				gl.GetDebugMessageLog(1, l, raw_data(message_sources[:]), raw_data(message_types[:]), nil, raw_data(message_severities[:]), &l, raw_data(err_str));
+				//(count : GLuint, bufSize : GLsizei, sources : ^GLenum, types : ^GLenum, ids : ^GLuint, severities : ^GLenum, lengths : ^GLsizei, messageLog : GLoutstring
+
+				log.errorf("	recive debug message : %v", string(err_str));
+				gl.GetIntegerv(.DEBUG_LOGGED_MESSAGES, &mes_cnt)
+			}
 		}
+		
+		log.errorf("Current cpu state : %#v", cpu_state);
+		log.errorf("Current gpu state : %#v", gpu_state);
 	}
-	
-	log.infof("Current cpu state : %#v", cpu_state);
-	log.infof("Current gpu state : %#v", gpu_state);
 
 	panic("Caught opengl error!", from_loc);
 }
@@ -1431,6 +1448,33 @@ set_depth_test :: proc(depth_test : bool) {
 
 	cpu_state.depth_test = depth_test;
 
+}
+
+set_depth_clamp :: proc(depth_clamp : bool) {
+	
+	if cpu_state.depth_clamp == depth_clamp {
+		return;
+	}
+	
+	if depth_clamp {
+		gl.Enable(.DEPTH_CLAMP);
+	}
+	else {
+		gl.Disable(.DEPTH_CLAMP);
+	}
+
+	cpu_state.depth_clamp = depth_clamp;
+}
+
+set_depth_clamp_range :: proc(range : [2]f64) {
+	
+	if cpu_state.depth_clamp_range == range {
+		return;
+	}
+
+	gl.DepthRange(range.x, range.y);
+
+	cpu_state.depth_clamp_range = range;
 }
 
 set_polygon_mode :: proc(polygon_mode : Polygon_mode) {
@@ -1756,6 +1800,18 @@ draw_arrays :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count 
    	unbind_vertex_array();
 }
 
+draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int count : i32, index_type : Index_buffer_type, index_buf : Buffer_id) {
+	assert(index_type != .no_index_buffer, "What are you trying to do -.-");
+	
+	bind_vertex_array(auto_cast vao);
+	bind_buffer(.element_array_buffer, index_buf);
+
+    gl.DrawElements(auto_cast primitive, count, auto_cast index_type, nil);
+	
+	bind_buffer(.element_array_buffer, 0);
+   	unbind_vertex_array();
+}
+
 /////////// Buffer stuff ///////////
 
 //TODO should we even use Buffer_type? we keep it, it is easier to remove then add.
@@ -1842,6 +1898,17 @@ unbind_buffer :: proc(location : Buffer_type) {
 	cpu_state.bound_buffer[location] = 0;
 }
 
+buffer_sub_data :: proc (buffer : Buffer_id, buffer_type : Buffer_type, #any_int offset_bytes : int, data : []u8) {
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.NamedBufferSubData(auto_cast buffer, offset_bytes, len(data), raw_data(data));
+	}
+	else {
+		bind_buffer(buffer_type, buffer);
+		gl.BufferSubData(auto_cast buffer_type, offset_bytes, len(data), raw_data(data));
+		unbind_buffer(buffer_type);
+	}
+}
+
 //Setup the buffer (with optional data, data = nil. No data)
 buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data : rawptr, usage : Resource_usage) {	
 	
@@ -1862,19 +1929,6 @@ buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data :
 		unbind_buffer(target);
 	}
 }
-
-/*
-buffer_sub_data :: proc (buffer : Buffer_id, target : Buffer_type, #any_int offset_bytes : int, data : []u8) {
-	if cpu_state.gl_version >= .opengl_4_5 {
-		gl.NamedBufferSubData(auto_cast buffer, offset_bytes, len(data), raw_data(data));
-	}
-	else {
-		bind_buffer(target, buffer);
-		gl.BufferSubData(auto_cast target, offset_bytes, len(data), raw_data(data));
-		unbind_buffer(target);
-	}
-}
-*/
 
 place_fence :: proc (loc := #caller_location) -> Fence {
 	fence_id := gl.FenceSync(auto_cast gl.SYNC_GPU_COMMANDS_COMPLETE, auto_cast 0);
@@ -1977,8 +2031,6 @@ discard_fence :: proc(fence : ^Fence){
 	}
 
 	gl.DeleteSync(fence.sync);
-
-	fence^ = {};
 }
 
 access_buffer :: proc (buffer : Buffer_id, offset, length : int, usage : Resource_usage, loc := #caller_location) {
@@ -2044,7 +2096,7 @@ access_buffer :: proc (buffer : Buffer_id, offset, length : int, usage : Resourc
 	}
 }
 
-map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type, offset, length : int, usage : Resource_usage, loc := #caller_location) -> (p : rawptr) {
+map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type,  #any_int offset, length : int, usage : Resource_usage, loc := #caller_location) -> (p : rawptr) {
 
 	access_buffer(buffer, offset, length, usage, loc);
 
@@ -2117,7 +2169,7 @@ make_resource_desc :: proc(desc : Resource_desc, data : []u8, loc := #caller_loc
 
 make_resource :: proc {make_resource_parameterized, make_resource_desc};
 
-destroy_resource :: proc(resource : ^Resource) {
+destroy_resource :: proc(resource : Resource) {
 
 	needs_unmapping : bool;
 
@@ -2151,6 +2203,10 @@ resize_buffer :: proc (resource : ^Resource, #any_int new_size : int, loc := #ca
 	}
 
 	panic("TODO!");
+}
+
+buffer_upload_sub_data :: proc (resource : ^Resource, #any_int offset_bytes : int, data : []u8) {
+	buffer_sub_data(resource.buffer, resource.buffer_type, offset_bytes, data);
 }
 
 //if range == nil then the entire buffer is returned. Range is {being, end}
