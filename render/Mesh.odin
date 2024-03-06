@@ -100,20 +100,22 @@ Mesh_buffers :: struct {
 	fence : gl.Fence, //Only used when streaming.
 }
 
-//mesh should be more complex, as it needs to handle:
-	//static meshes																			- done
-	//Async upload 																			- done
-	//Dynamicly changing the mesh (sync or async)											- done
-	//Double/triple and auto buffering														- this can be done now
-	//Frustum culling should be a thing we handle											- We can do this when we have made a camera
-	//Somehow there is also a need for instance drawing (closely realated to mesh)			- 
-	//And we should make multidraw a thing too												- 
-	//Occlusion culling should be handled somehow? 											- 
-	//If this supportes dynamic meshes, then we should have multiple VAO's					- 
-Mesh :: struct {
+/*
+Mesh_container :: struct {
+
+	data_type : typeid,
+	buffering : Buffering,
+	usage : Usage,
+	indices_type : Index_buffer_type,
 	
-	vertex_count 	: int, 				//The amount of verticies
-	triangle_count 	: int, 				//The amount of verticies
+	current_resource : int,
+	resources : [dynamic]Mesh_buffers,
+}
+
+Mesh_shared :: struct {
+	
+	vertex_range 	: [2]int,
+	triangle_range 	: Maybe([2]int),
 
 	data_type : typeid,
 	buffering : Buffering,
@@ -122,8 +124,32 @@ Mesh :: struct {
 
 	//TODO bouding_distance for culling??
 
-	//TODO make mesh implementation.
-	//implementaion :
+	owner : ^Mesh_container,
+}
+*/
+
+//mesh should be more complex, as it needs to handle:
+	//static meshes																			- done
+	//Async upload 																			- done
+	//Dynamicly changing the mesh (sync or async)											- done
+	//Double/triple and auto buffering														- in the works
+	//Frustum culling should be a thing we handle											- We can do this when we have made a camera
+	//Somehow there is also a need for instance drawing (closely realated to mesh)			- 
+	//And we should make multidraw a thing too												- 
+	//Occlusion culling should be handled somehow? 											- 
+	//If this supportes dynamic meshes, then we should have multiple VAO's					- 
+Mesh :: struct {
+	
+	vertex_count 	: int,
+	triangle_count 	: int,
+
+	data_type : typeid,
+	buffering : Buffering,
+	usage : Usage,
+	indices_type : Index_buffer_type,
+
+	//TODO bouding_distance for culling??
+	
 	current_resource : int,
 	resources : [dynamic]Mesh_buffers,
 }
@@ -147,6 +173,8 @@ Usage :: enum {
 //Used internally for setup up a resource for a mesh
 add_resource :: proc (mesh : ^Mesh, init_vertex_data : []u8, init_index_data : []u8, loc := #caller_location) {
 
+	assert(init_vertex_data != nil, "init_vertex_data may not be nil", loc);
+
 	desc : gl.Resource_desc = {
 		usage = cast(gl.Resource_usage)mesh.usage,
 		buffer_type = .array_buffer,
@@ -165,10 +193,13 @@ add_resource :: proc (mesh : ^Mesh, init_vertex_data : []u8, init_index_data : [
 
 	switch mesh.indices_type {
 		
+
 		case .no_index_buffer:
 			index_buf = nil;
 
 		case .unsigned_short, .unsigned_int:
+			assert(init_index_data != nil, "init_index_data may not be nil", loc);
+
 			s : int;
 			if mesh.indices_type == .unsigned_short {
 				s = size_of(u16);
@@ -190,22 +221,25 @@ add_resource :: proc (mesh : ^Mesh, init_vertex_data : []u8, init_index_data : [
 	append(&mesh.resources, Mesh_buffers{vao, vertex_resouce, index_buf, {}});
 }
 
-Indicies_types :: union {
+Indicies :: union {
 	[]u16,
 	[]u32,
 }
 
 //vertex_data and index_data may be nil if no data is to be uploaded. 
-make_mesh :: proc (vertex_data : []$T, index_data : Indicies_types, buffering : Buffering, usage : Usage, loc := #caller_location) -> Mesh {
+make_mesh :: proc (vertex_data : []$T, index_data : Indicies, buffering : Buffering, usage : Usage, loc := #caller_location) -> Mesh {
 	mesh : Mesh;
-
+	
 	if usage == .static_use {
 		assert(buffering == .single, "It does not make sense to use anything else then single buffering for a static mesh", loc);
 	}
 	if usage == .stream_use {
 		assert(buffering != .single, "It does not make sense to use single buffering for a streaming mesh", loc);
 	}
-
+	if buffering == .auto {
+		assert(usage == .stream_use, "Auto buffering is only allowed with stream usage", loc);
+	}
+	
 	mesh.vertex_count = len(vertex_data);
 	mesh.data_type = T;
 	mesh.buffering = buffering;
@@ -231,6 +265,7 @@ make_mesh :: proc (vertex_data : []$T, index_data : Indicies_types, buffering : 
 	
 	switch mesh.buffering {
 		case .single:
+			assert(vertex_data != nil)
 			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
 		case .double:
 			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
@@ -247,6 +282,59 @@ make_mesh :: proc (vertex_data : []$T, index_data : Indicies_types, buffering : 
 	return mesh;
 }
 
+make_mesh_empty :: proc (data_type : typeid, index_type : Index_buffer_type, buffering : Buffering, usage : Usage, #any_int init_size := 3, loc := #caller_location) -> Mesh {
+	mesh : Mesh;
+
+	if usage == .static_use {
+		assert(buffering == .single, "It does not make sense to use anything else then single buffering for a static mesh", loc);
+	}
+	if usage == .stream_use {
+		assert(buffering != .single, "It does not make sense to use single buffering for a streaming mesh", loc);
+	}
+	if buffering == .auto {
+		assert(usage == .stream_use, "Auto buffering is only allowed with stream usage", loc);
+	}
+
+	mesh.vertex_count = init_size;
+	mesh.data_type = data_type;
+	mesh.buffering = buffering;
+	mesh.usage = usage;
+	
+	mesh.triangle_count = init_size;
+	mesh.indices_type = index_type;
+	
+	vertex_data := make([]u8, mesh.vertex_count * reflect.size_of_typeid(data_type));
+	mesh_index_buf_data : []u8;
+	
+	switch mesh.indices_type {
+		case .unsigned_short:
+			mesh_index_buf_data = make([]u8, mesh.triangle_count * size_of(u16));
+		case .unsigned_int:
+			mesh_index_buf_data = make([]u8, mesh.triangle_count * size_of(u32));
+		case .no_index_buffer:
+			mesh.triangle_count = 0;
+			mesh_index_buf_data = nil;
+	}
+
+	switch mesh.buffering {
+		case .single:
+			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
+		case .double:
+			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
+			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
+		case .trible:
+			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
+			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
+			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
+		case .auto:
+			//more will be added as the mesh needs it.
+			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
+	}
+
+	return mesh;
+}
+
+
 destroy_mesh :: proc (mesh : Mesh) {
 
 	for &res in mesh.resources {
@@ -257,18 +345,22 @@ destroy_mesh :: proc (mesh : Mesh) {
 		}
 		gl.delete_vertex_array(res.vao);
 	}
-
+	
 	delete(mesh.resources);
 }
 
-//You can upload once per frame
-upload_mesh_data :: proc(mesh : ^Mesh, data : []$T, loc := #caller_location) {
+//You can upload once per frame when streaming.
+//The mesh does not change its size, it will error of you pass to much data.
+upload_vertex_data :: proc(mesh : ^Mesh, start_vertex : int, data : []$T, loc := #caller_location) {
 	
+	assert(start_vertex >= 0, "start_vertex cannot be negative", loc);
 	assert(T == mesh.data_type, "The data type you are trying to upload does not match the meshes data type", loc);
-	assert(mesh.vertex_count == len(data), "data is not the same length as vertex count (should that be legal?)", loc);
+	assert(mesh.vertex_count >= len(data) + start_vertex, "data out of bounds", loc);
 	
 	buffers : Mesh_buffers = mesh.resources[mesh.current_resource];
 	
+	vert_byte_size := reflect.size_of_typeid(mesh.data_type);
+
 	when ODIN_DEBUG {
 		if mesh.usage == .stream_use && !gl.is_fence_ready(buffers.fence) {
 			log.warnf("Preformence warning: upload_mesh_data sync is not ready, increase the amount of buffering\n");
@@ -278,20 +370,40 @@ upload_mesh_data :: proc(mesh : ^Mesh, data : []$T, loc := #caller_location) {
 	if mesh.usage == .stream_use {
 		gl.sync_fence(&buffers.fence);
 	}
+
+	//Currently 3 things can happen
+	//We destroy the old one creating a new buffer that will fit the mesh exactly
+		//We should not do this as it would destroy the idea of a persistent mapped buffer
+	//Alternatively we could resize if there is not enough space, this would be ok
+		//But should we then also shrink? and when? should be a reserve behavior???
+	//We could also require there is enough space
+
+	//Also we need client side buffer/array that keep track of the newest version of the data, when using non-single buffering.
 	
+	//We need to check the current resouce size is the same as the vertex_size
+	if buffers.vertex_data.bytes_count < vert_byte_size * mesh.vertex_count {
+		//The resouce should be resized
+	}
+	
+	//Then upload
 	switch mesh.usage {
 		case .static_use:
 			panic("Cannot upload to a static mesh");
 		case .dynamic_use:
-			gl.buffer_upload_sub_data(&buffers.vertex_data, 0, slice.reinterpret([]u8, data));
+			gl.buffer_upload_sub_data(&buffers.vertex_data, vert_byte_size * start_vertex, slice.reinterpret([]u8, data));
 		case .stream_use:
 			dst : []u8 = gl.begin_buffer_write(&buffers.vertex_data);
 			assert(len(dst) == len(data) * size_of(T), "length of buffer and length of data does not match", loc);
 			mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst));
 			gl.end_buffer_writes(&buffers.vertex_data);
+			panic("raw_data(dst) is not offset");
 	}
 	
 	mesh.current_resource = (mesh.current_resource + 1) %% len(mesh.resources);
+}
+
+upload_index_data :: proc(mesh : ^Mesh, #any_int start_index : int, data : Indicies, loc := #caller_location) {
+	panic("TODO");
 }
 
 draw_mesh_single :: proc (mesh : ^Mesh, model_matrix : matrix[4,4]f32, loc := #caller_location) {
@@ -323,6 +435,9 @@ draw_mesh_single :: proc (mesh : ^Mesh, model_matrix : matrix[4,4]f32, loc := #c
 	}
 }
 
+
+
+
 /*
 Reserve_behavior :: enum {
 	skinny, 	//Don't reserve more then needed
@@ -342,9 +457,23 @@ Mesh :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 }
 */
 
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////// Mesh generation //////////////////////////////
+
 //converts a index buffer and an vertex arrsay into a vertex arrray without an index buffer
 //Used internally
-convert_to_non_indexed :: proc (verts : []$T, indices : Indicies_types) -> (new_verts : []T){
+convert_to_non_indexed :: proc (verts : []$T, indices : Indicies) -> (new_verts : []T){
 
 	vert_index : int = 0;
 	
@@ -367,6 +496,8 @@ convert_to_non_indexed :: proc (verts : []$T, indices : Indicies_types) -> (new_
 
 	return;
 }
+
+//append_mesh_data :: proc (verts : [dynamic]Default_vertex, indices : [dynamic]Indicies, to_append_verts : []Default_vertex, to_append_indices : [dynamic]Indicies) {}
 
 @(require_results)
 generate_quad :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool, alloc := context.allocator) -> (verts : []Default_vertex, indices : []u16) {
@@ -420,7 +551,7 @@ make_mesh_quad :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool
 		delete(index);
 	}
 	delete(vert);
-
+	
 	return;
 }
 
@@ -739,7 +870,7 @@ generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32, stacks : int 
 make_mesh_sphere :: proc(offset : [3]f32, diameter : f32, stacks : int, sectors : int, use_index_buffer : bool) -> (res : Mesh) {
 	
 	vert, index := generate_sphere(offset, diameter, stacks, sectors, use_index_buffer);
-
+	
 	if index == nil {
 		res = make_mesh(vert, nil, .single, .static_use);
 	}

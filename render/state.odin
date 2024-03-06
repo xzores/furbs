@@ -59,6 +59,7 @@ State :: struct {
 
 	//Text stuff
 	font_context : fs.FontContext,
+	font_texture : Texture2D,
 	
 	//Shader stuff
 	is_init_shader : bool,

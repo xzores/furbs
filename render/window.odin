@@ -123,9 +123,11 @@ Window :: struct {
 	resize_behavior : Resize_behavior,
 	width, height : i32,
 	
+	cursor : glfw.CursorHandle, //optional
+
 	//To handle the gl stategl_states
 	gl_states : gl.GL_states_comb,
-
+	
 	//Just to handle fullscreen
 	is_fullscreen : bool,
 	fullscreen_target_state : bool,
@@ -227,6 +229,10 @@ destroy_window :: proc (window : ^Window, loc := #caller_location) {
 		panic("the window you are trying to destroy is not in active windows.")
 	}
 	unordered_remove(&state.active_windows, index);
+	
+	if window.cursor != nil {
+		glfw.DestroyCursor(window.cursor);
+	}
 
 	glfw.DestroyWindow(window.glfw_window);
 	gl.destroy_state(window.gl_states);
@@ -351,21 +357,21 @@ mouse_mode :: proc(window : ^Window, mouse_mode : Mouse_mode, loc := #caller_loc
 	glfw.SetInputMode(window.glfw_window, glfw.CURSOR, auto_cast mouse_mode);
 }
 
-
-
-/*
 //The image data is 32-bit, little-endian, non-premultiplied RGBA, i.e. eight bits per channel. The pixels are arranged canonically as sequential rows, starting from the top-left corner.
-set_cursor :: proc(using s : ^Render_state($U,$A), cursor : []u8, size : i32, loc := #caller_location) {
+//Cleanup happens when window closes or cursor is replaced.
+set_cursor :: proc(window : ^Window, #any_int width, height : i32, cursor : []u8, loc := #caller_location) {
 	
-	fmt.assertf(len(cursor) == auto_cast(size * size * 4), "Size does not match array data. Data length : %v, expected : %v\n", len(cursor), size * size * 4, loc = loc)
+	fmt.assertf(len(cursor) == auto_cast(width * height * 4), "Size does not match array data. Data length : %v, expected : %v\n", len(cursor), width * height * 4, loc = loc)
+
+	if window.cursor != nil {
+		glfw.DestroyCursor(window.cursor);
+	}
 
 	image : glfw.Image;
-	image.width = size;
-	image.height = size;
+	image.width = width;
+	image.height = height;
 	image.pixels = raw_data(cursor);
 	
-	cursor : glfw.CursorHandle = glfw.CreateCursor(&image, 0, 0); //TODO this is leaked, i belive.
-	glfw.SetCursor(window.glfw_window, cursor);
-	//glfw.DestroyCursor(cursor);
+	window.cursor = glfw.CreateCursor(&image, 0, 0); //TODO this is leaked, i belive.
+	glfw.SetCursor(window.glfw_window, window.cursor);
 }
-*/

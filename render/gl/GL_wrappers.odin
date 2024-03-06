@@ -541,11 +541,6 @@ Buffer_type :: enum u32 {
 	uniform_buffer = gl.UNIFORM_BUFFER,							//Version GL 3.1	//We will not use this...
 }
 
-Resource_desc :: struct {
-	usage : Resource_usage,
-	buffer_type : Buffer_type,
-	bytes_count : int,
-}
 
 /*
 There are 2 ways to redo the Resource
@@ -569,13 +564,18 @@ There are 2 ways to redo the Resource
 		
 */
 
+Resource_desc :: struct {
+	usage : Resource_usage,
+	buffer_type : Buffer_type,
+	bytes_count : int,
+}
+
 Resource :: struct {
 
 	buffer 			: Buffer_id, //Vertex buffer or somthing
-
+	
 	using desc 		: Resource_desc,
 }
-
 
 
 /////// Textures ///////
@@ -1911,7 +1911,8 @@ buffer_sub_data :: proc (buffer : Buffer_id, buffer_type : Buffer_type, #any_int
 
 //Setup the buffer (with optional data, data = nil. No data)
 buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data : rawptr, usage : Resource_usage) {	
-	
+	assert(size > 0, "size must be larger then 0");
+
 	if cpu_state.gl_version >= .opengl_4_5 {
 		buffer_falgs, _ := translate_resource_usage_4_4(usage);
 		gl.NamedBufferStorage(auto_cast buffer, size, data, auto_cast buffer_falgs);
@@ -2564,7 +2565,7 @@ associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_bu
 	return;
 }
 
-@(deprecated="This should be rethought to be like the one with textures, the same should happen for associate_color_render_buffers_with_frame_buffer")
+//@(deprecated="This should be rethought to be like the one with textures, the same should happen for associate_color_render_buffers_with_frame_buffer")
 associate_depth_render_buffer_with_frame_buffer :: proc(fbo : Fbo_id, render_buffer : Rbo_id, width, height, samples_hint : i32, depth_format : Pixel_format_internal = .depth_component24, loc := #caller_location) -> (samples : i32) {
 
 	assert(depth_format != nil, "depth_format is nil", loc);

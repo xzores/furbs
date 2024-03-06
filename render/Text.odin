@@ -59,73 +59,69 @@ something_setup :: proc () {
 }
 */
 
-/*
 Font :: distinct int;
 
+@(require_results)
 load_font_from_file :: proc(font_name : string, path : string) -> Font {
-	return auto_cast fs.AddFontPath(&font_context, font_name, path);
+	return auto_cast fs.AddFontPath(&state.font_context, font_name, path);
 }
 
+@(require_results)
 load_font_from_memory :: proc(font_name : string, data : []u8) -> Font {
 
 	data_cpy := slice.clone(data);
 
-	return auto_cast fs.AddFontMem(&font_context, font_name, data_cpy, true);
+	return auto_cast fs.AddFontMem(&state.font_context, font_name, data_cpy, true);
 }
 
+@(require_results)
 get_text_dimensions :: proc(text : string, font : Font, size : f32, spacing : f32) -> [2]f32 {
 	
-	fs.SetFont(&font_context, auto_cast font);
-	fs.SetSize(&font_context, size);
-	fs.SetSpacing(&font_context, spacing);
+	fs.SetFont(&state.font_context, auto_cast font);
+	fs.SetSize(&state.font_context, size);
+	fs.SetSpacing(&state.font_context, spacing);
 	
 	bounds : [4]f32;
-	fs.TextBounds(&font_context, text, 0, 0, &bounds);
+	fs.TextBounds(&state.font_context, text, 0, 0, &bounds);
 
 	return bounds.zw;
 }
 
+@(require_results)
 get_max_text_height :: proc(font : Font, size : f32) -> f32 {
 	
-	fs.SetFont(&font_context, auto_cast font);
-	fs.SetSize(&font_context, size);
+	fs.SetFont(&state.font_context, auto_cast font);
+	fs.SetSize(&state.font_context, size);
 
-	min, max := fs.LineBounds(&font_context, 0);
+	min, max := fs.LineBounds(&state.font_context, 0);
 	return max + min;
 }
 
+@(require_results)
 get_text_bounds :: proc(text : string, position : [2]f32, font : Font, size : f32, spacing : f32 = 0) -> (bounds : [4]f32) {
 	
-	fs.SetFont(&font_context, auto_cast font);
-	fs.SetSize(&font_context, size);
-	fs.SetSpacing(&font_context, spacing);
+	fs.SetFont(&state.font_context, auto_cast font);
+	fs.SetSize(&state.font_context, size);
+	fs.SetSpacing(&state.font_context, spacing);
 
-	fs.TextBounds(&font_context, text, 0, 0, &bounds);
+	fs.TextBounds(&state.font_context, text, 0, 0, &bounds);
 	bounds.xy = position;
 
 	return;
 }
 
-draw_text :: proc (text : string, position : [2]f32, font : Font, size : f32, spacing : f32, color : [4]f32, shader : Shader(U, A), loc := #caller_location) {
-	
-	shader := shader;
+/*
+draw_text :: proc (text : string, position : [2]f32, font : Font, size : f32, spacing : f32, color : [4]f32, loc := #caller_location) {
+	using state;
 
-	assert(false, "TODO");
-	if shader.id == 0 {
-		fmt.printf("loading default text shader\n");
-		text_shader = get_default_text_shader();
-		shader = text_shader;
-	}
-	
 	fs.SetFont(&font_context, auto_cast font);
 	fs.SetSize(&font_context, size);
 	fs.SetSpacing(&font_context, spacing);
 	//fs.SetAlignHorizontal(&font_context, .LEFT);
 	//fs.SetAlignVertical(&font_context, .BASELINE);
 
-	bind_shader(shader);
-	place_uniform(shader, .col_diffuse, color);
-	place_uniform(shader, .texture_diffuse, font_texture);
+	set_uniform(bound_shader, .color_diffuse, color);
+	set_texture(.texture_diffuse, font_texture);
 	
 	it : fs.TextIter = fs.TextIterInit(&font_context, position.x, position.y, text);
 	dirtyRect : [4]f32;
