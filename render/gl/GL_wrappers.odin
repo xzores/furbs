@@ -1912,7 +1912,7 @@ buffer_sub_data :: proc (buffer : Buffer_id, buffer_type : Buffer_type, #any_int
 //Setup the buffer (with optional data, data = nil. No data)
 buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data : rawptr, usage : Resource_usage) {	
 	assert(size > 0, "size must be larger then 0");
-
+	
 	if cpu_state.gl_version >= .opengl_4_5 {
 		buffer_falgs, _ := translate_resource_usage_4_4(usage);
 		gl.NamedBufferStorage(auto_cast buffer, size, data, auto_cast buffer_falgs);
@@ -2213,15 +2213,13 @@ buffer_upload_sub_data :: proc (resource : ^Resource, #any_int offset_bytes : in
 //if range == nil then the entire buffer is returned. Range is {being, end}
 //You must sync, so that you do not write to any data currently being used.
 @(require_results)
-begin_buffer_write :: proc(resource : ^Resource, range : Maybe([2]int) = nil, loc := #caller_location) -> (data : []u8) {
+begin_buffer_write :: proc(resource : ^Resource, begin : int = 0, length : Maybe(int) = nil, loc := #caller_location) -> (data : []u8) {
 	
-	begin : int = 0;
-	length : int = resource.bytes_count;
+	byte_len : int = resource.bytes_count - begin;
 	p : rawptr = nil;
 
-	if r, ok := range.?; ok {
-		begin = r.x;
-		length = r.y - r.x;
+	if l, ok := length.?; ok {
+		byte_len = l;
 	}
 
 	switch resource.usage {
@@ -2229,18 +2227,18 @@ begin_buffer_write :: proc(resource : ^Resource, range : Maybe([2]int) = nil, lo
 		case .stream_write, .stream_read_write:
 			if cpu_state.gl_version >= .opengl_4_4 {
 				//Nothing happens, sync happen by the user (in the render lib)
-				access_buffer(resource.buffer, begin, length, resource.usage, loc);
+				access_buffer(resource.buffer, begin, byte_len, resource.usage, loc);
 			}
 			else {
-				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage, loc);
+				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, byte_len, resource.usage, loc);
 			}
 		
 		case .dynamic_write, .dynamic_read_write:
 			if cpu_state.gl_version >= .opengl_4_4 {
-				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage, loc);
+				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, byte_len, resource.usage, loc);
 			}
 			else {
-				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, length, resource.usage, loc);
+				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, byte_len, resource.usage, loc);
 			}
 		
 		case .static_write, .static_read_write:

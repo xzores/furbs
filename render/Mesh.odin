@@ -93,75 +93,37 @@ Default_vertex :: struct {
 	normal 		: [3]f32,
 }
 
-Mesh_buffers :: struct {
-	vao : Vao_id,
-	vertex_data : gl.Resource,
-	indices_buf : Maybe(gl.Resource),
-	fence : gl.Fence, //Only used when streaming.
-}
-
-/*
-Mesh_container :: struct {
-
-	data_type : typeid,
-	buffering : Buffering,
-	usage : Usage,
-	indices_type : Index_buffer_type,
-	
-	current_resource : int,
-	resources : [dynamic]Mesh_buffers,
-}
-
-Mesh_shared :: struct {
-	
-	vertex_range 	: [2]int,
-	triangle_range 	: Maybe([2]int),
-
-	data_type : typeid,
-	buffering : Buffering,
-	usage : Usage,
-	indices_type : Index_buffer_type,
-
-	//TODO bouding_distance for culling??
-
-	owner : ^Mesh_container,
-}
-*/
+//These are removed to other locations
+	//If this supportes dynamic meshes, then we should have multiple VAO's					- 
+	//Occlusion culling should be handled somehow? 											- 
+	//Double/triple and auto b uffering																- in the works
+	//And we should make multidraw a thing too												- This will not be done for a single mesh
 
 //mesh should be more complex, as it needs to handle:
 	//static meshes																			- done
 	//Async upload 																			- done
 	//Dynamicly changing the mesh (sync or async)											- done
-	//Double/triple and auto buffering														- in the works
 	//Frustum culling should be a thing we handle											- We can do this when we have made a camera
-	//Somehow there is also a need for instance drawing (closely realated to mesh)			- 
-	//And we should make multidraw a thing too												- 
-	//Occlusion culling should be handled somehow? 											- 
-	//If this supportes dynamic meshes, then we should have multiple VAO's					- 
+	//Somehow there is also a need for instance drawing (closely realated to mesh)			- Can we do this?? we need extra attribute data
+
 Mesh :: struct {
 	
 	vertex_count 	: int,
 	triangle_count 	: int,
 
 	data_type : typeid,
-	buffering : Buffering,
 	usage : Usage,
 	indices_type : Index_buffer_type,
 
 	//TODO bouding_distance for culling??
 	
-	current_resource : int,
-	resources : [dynamic]Mesh_buffers,
+	vao : Vao_id,
+	vertex_data : gl.Resource,
+	indices_buf : Maybe(gl.Resource),
+	fence : gl.Fence, //Only used when streaming.
 }
 
 Index_buffer_type :: gl.Index_buffer_type;
-
-Buffering :: enum {
-	single,
-	double,
-	trible,
-	auto,
-}
 
 Usage :: enum {
 	static_use 	= auto_cast gl.Resource_usage.static_write,		//You cannot update this mesh
@@ -169,11 +131,20 @@ Usage :: enum {
 	stream_use	= auto_cast gl.Resource_usage.stream_write,		//Will use persistent mapped buffer and fallback to unsyncronized mapped buffers.
 }
 
+Indicies :: union {
+	[]u16,
+	[]u32,
+}
+
+////////////////////////////// Single mesh //////////////////////////////
+
 @private
 //Used internally for setup up a resource for a mesh
-add_resource :: proc (mesh : ^Mesh, init_vertex_data : []u8, init_index_data : []u8, loc := #caller_location) {
+//Nil may be passed for init_vertex_data and init_index_data. 
+//If they are not nil, then the len must match that of mesh.vertex_cnt and mesh.triangle_count respectively.
+setup_mesh :: proc (mesh : ^Mesh, init_vertex_data : []u8, init_index_data : []u8, loc := #caller_location) {
 
-	assert(init_vertex_data != nil, "init_vertex_data may not be nil", loc);
+	assert(mesh.vao == 0, "mesh already setup", loc);
 
 	desc : gl.Resource_desc = {
 		usage = cast(gl.Resource_usage)mesh.usage,
@@ -184,21 +155,17 @@ add_resource :: proc (mesh : ^Mesh, init_vertex_data : []u8, init_index_data : [
 	attrib_info := get_attribute_info_from_typeid(mesh.data_type, loc);
 	defer delete(attrib_info);
 
-	vao := gl.gen_vertex_array();
+	mesh.vao = gl.gen_vertex_array();
 
-	vertex_resouce := gl.make_resource_desc(desc, init_vertex_data, loc);
-	gl.associate_buffer_with_vao(vao, vertex_resouce.buffer, attrib_info, loc);
-
-	index_buf : Maybe(gl.Resource);
+	mesh.vertex_data = gl.make_resource_desc(desc, init_vertex_data, loc);
+	gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, loc);
 
 	switch mesh.indices_type {
-		
 
 		case .no_index_buffer:
-			index_buf = nil;
+			mesh.indices_buf = nil;
 
 		case .unsigned_short, .unsigned_int:
-			assert(init_index_data != nil, "init_index_data may not be nil", loc);
 
 			s : int;
 			if mesh.indices_type == .unsigned_short {
@@ -215,45 +182,30 @@ add_resource :: proc (mesh : ^Mesh, init_vertex_data : []u8, init_index_data : [
 				buffer_type = .element_array_buffer,
 				bytes_count = mesh.triangle_count * s,
 			}
-			index_buf = gl.make_resource_desc(index_desc, init_index_data, loc);
-	}
+			mesh.indices_buf = gl.make_resource_desc(index_desc, init_index_data, loc);
+	} 
 
-	append(&mesh.resources, Mesh_buffers{vao, vertex_resouce, index_buf, {}});
-}
-
-Indicies :: union {
-	[]u16,
-	[]u32,
 }
 
 //vertex_data and index_data may be nil if no data is to be uploaded. 
-make_mesh :: proc (vertex_data : []$T, index_data : Indicies, buffering : Buffering, usage : Usage, loc := #caller_location) -> Mesh {
+make_mesh :: proc (vertex_data : []$T, index_data : Indicies, usage : Usage, loc := #caller_location) -> Mesh {
 	mesh : Mesh;
-	
-	if usage == .static_use {
-		assert(buffering == .single, "It does not make sense to use anything else then single buffering for a static mesh", loc);
-	}
-	if usage == .stream_use {
-		assert(buffering != .single, "It does not make sense to use single buffering for a streaming mesh", loc);
-	}
-	if buffering == .auto {
-		assert(usage == .stream_use, "Auto buffering is only allowed with stream usage", loc);
-	}
 	
 	mesh.vertex_count = len(vertex_data);
 	mesh.data_type = T;
-	mesh.buffering = buffering;
 	mesh.usage = usage;
 	
 	mesh_index_buf_data : []u8;
 	switch indicies in index_data {
 		case []u16:
 			assert(indicies != nil, "there is no indicies index_data", loc);
+			assert(len(vertex_data) <= auto_cast max(u16), "The range of a u16 is exceeded", loc);
 			mesh.indices_type = .unsigned_short;
 			mesh.triangle_count = len(indicies);
 			mesh_index_buf_data = slice.reinterpret([]u8, indicies);
 		case []u32:
 			assert(indicies != nil, "there is no indicies index_data", loc);
+			assert(len(vertex_data) <= auto_cast max(u32), "The range of a u32 is exceeded", loc);
 			mesh.indices_type = .unsigned_int;
 			mesh.triangle_count = len(indicies);
 			mesh_index_buf_data = slice.reinterpret([]u8, indicies);
@@ -263,90 +215,41 @@ make_mesh :: proc (vertex_data : []$T, index_data : Indicies, buffering : Buffer
 			mesh_index_buf_data = nil;
 	}
 	
-	switch mesh.buffering {
-		case .single:
-			assert(vertex_data != nil)
-			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
-		case .double:
-			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
-			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
-		case .trible:
-			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
-			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
-			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
-		case .auto:
-			//more will be added as the mesh needs it.
-			add_resource(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
-	}
+	setup_mesh(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
 
 	return mesh;
 }
 
-make_mesh_empty :: proc (data_type : typeid, index_type : Index_buffer_type, buffering : Buffering, usage : Usage, #any_int init_size := 3, loc := #caller_location) -> Mesh {
+make_mesh_empty :: proc (#any_int vertex_size : int, $data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, loc := #caller_location) -> Mesh {
 	mesh : Mesh;
 
-	if usage == .static_use {
-		assert(buffering == .single, "It does not make sense to use anything else then single buffering for a static mesh", loc);
+	if index_type != .no_index_buffer {
+		assert(index_size != 0, "index size must not be 0, if index_type is not no_index_buffer", loc);
 	}
-	if usage == .stream_use {
-		assert(buffering != .single, "It does not make sense to use single buffering for a streaming mesh", loc);
-	}
-	if buffering == .auto {
-		assert(usage == .stream_use, "Auto buffering is only allowed with stream usage", loc);
+	else {
+		assert(index_size == 0, "index size must be 0, if index_type is no_index_buffer", loc);
 	}
 
-	mesh.vertex_count = init_size;
+	mesh.vertex_count = vertex_size;
 	mesh.data_type = data_type;
-	mesh.buffering = buffering;
 	mesh.usage = usage;
 	
-	mesh.triangle_count = init_size;
+	mesh.triangle_count = index_size;
 	mesh.indices_type = index_type;
 	
-	vertex_data := make([]u8, mesh.vertex_count * reflect.size_of_typeid(data_type));
-	mesh_index_buf_data : []u8;
-	
-	switch mesh.indices_type {
-		case .unsigned_short:
-			mesh_index_buf_data = make([]u8, mesh.triangle_count * size_of(u16));
-		case .unsigned_int:
-			mesh_index_buf_data = make([]u8, mesh.triangle_count * size_of(u32));
-		case .no_index_buffer:
-			mesh.triangle_count = 0;
-			mesh_index_buf_data = nil;
-	}
-
-	switch mesh.buffering {
-		case .single:
-			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
-		case .double:
-			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
-			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
-		case .trible:
-			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
-			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
-			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
-		case .auto:
-			//more will be added as the mesh needs it.
-			add_resource(&mesh, vertex_data, mesh_index_buf_data, loc);
-	}
+	setup_mesh(&mesh, nil, nil, loc);
 
 	return mesh;
 }
 
+destroy_mesh :: proc (mesh : ^Mesh) {
 
-destroy_mesh :: proc (mesh : Mesh) {
-
-	for &res in mesh.resources {
-		gl.destroy_resource(res.vertex_data);
-		gl.discard_fence(&res.fence); //discarding an nil fence is allowed
-		if ib, ok := res.indices_buf.?; ok {
-			gl.destroy_resource(ib);
-		}
-		gl.delete_vertex_array(res.vao);
+	gl.destroy_resource(mesh.vertex_data);
+	gl.discard_fence(&mesh.fence); //discarding an nil fence is allowed
+	if ib, ok := mesh.indices_buf.?; ok {
+		gl.destroy_resource(ib);
 	}
-	
-	delete(mesh.resources);
+	gl.delete_vertex_array(mesh.vao);
 }
 
 //You can upload once per frame when streaming.
@@ -357,18 +260,16 @@ upload_vertex_data :: proc(mesh : ^Mesh, start_vertex : int, data : []$T, loc :=
 	assert(T == mesh.data_type, "The data type you are trying to upload does not match the meshes data type", loc);
 	assert(mesh.vertex_count >= len(data) + start_vertex, "data out of bounds", loc);
 	
-	buffers : Mesh_buffers = mesh.resources[mesh.current_resource];
-	
-	vert_byte_size := reflect.size_of_typeid(mesh.data_type);
+	byte_size := reflect.size_of_typeid(mesh.data_type);
 
 	when ODIN_DEBUG {
-		if mesh.usage == .stream_use && !gl.is_fence_ready(buffers.fence) {
-			log.warnf("Preformence warning: upload_mesh_data sync is not ready, increase the amount of buffering\n");
+		if mesh.usage == .stream_use && !gl.is_fence_ready(mesh.fence) {
+			log.warnf("Preformence warning: upload_mesh_data sync is not ready\n");
 		}
 	}
-
+	
 	if mesh.usage == .stream_use {
-		gl.sync_fence(&buffers.fence);
+		gl.sync_fence(&mesh.fence);
 	}
 
 	//Currently 3 things can happen
@@ -377,36 +278,94 @@ upload_vertex_data :: proc(mesh : ^Mesh, start_vertex : int, data : []$T, loc :=
 	//Alternatively we could resize if there is not enough space, this would be ok
 		//But should we then also shrink? and when? should be a reserve behavior???
 	//We could also require there is enough space
-
-	//Also we need client side buffer/array that keep track of the newest version of the data, when using non-single buffering.
 	
 	//We need to check the current resouce size is the same as the vertex_size
-	if buffers.vertex_data.bytes_count < vert_byte_size * mesh.vertex_count {
+	if mesh.vertex_data.bytes_count < byte_size * mesh.vertex_count {
 		//The resouce should be resized
+		panic("We cannot resize");
 	}
 	
+	byte_data := slice.reinterpret([]u8, data);
+
 	//Then upload
 	switch mesh.usage {
 		case .static_use:
 			panic("Cannot upload to a static mesh");
 		case .dynamic_use:
-			gl.buffer_upload_sub_data(&buffers.vertex_data, vert_byte_size * start_vertex, slice.reinterpret([]u8, data));
+			gl.buffer_upload_sub_data(&mesh.vertex_data, byte_size * start_vertex, byte_data);
 		case .stream_use:
-			dst : []u8 = gl.begin_buffer_write(&buffers.vertex_data);
+			dst : []u8 = gl.begin_buffer_write(&mesh.vertex_data, byte_size * start_vertex, len(byte_data));
 			assert(len(dst) == len(data) * size_of(T), "length of buffer and length of data does not match", loc);
+			assert(len(dst) == len(byte_data), "internal error", loc);
 			mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst));
-			gl.end_buffer_writes(&buffers.vertex_data);
+			gl.end_buffer_writes(&mesh.vertex_data);
 			panic("raw_data(dst) is not offset");
 	}
-	
-	mesh.current_resource = (mesh.current_resource + 1) %% len(mesh.resources);
 }
 
 upload_index_data :: proc(mesh : ^Mesh, #any_int start_index : int, data : Indicies, loc := #caller_location) {
-	panic("TODO");
+
+	assert(start_index >= 0, "start_vertex cannot be negative", loc);
+	//TODO similar for Indicies assert(T == mesh.data_type, "The data type you are trying to upload does not match the meshes data type", loc);
+	assert(mesh.indices_type != .no_index_buffer, "this mesh has no index buffer", loc);
+
+	when ODIN_DEBUG {
+		if mesh.usage == .stream_use && !gl.is_fence_ready(mesh.fence) {
+			log.warnf("Preformence warning: upload_mesh_data sync is not ready\n");
+		}
+	}
+	
+	if mesh.usage == .stream_use {
+		gl.sync_fence(&mesh.fence);
+	}
+
+	byte_size := 0;
+
+	switch mesh.indices_type {
+		case .no_index_buffer:
+			panic("!?!?");
+		case .unsigned_short:
+			byte_size = size_of(u16);
+		case .unsigned_int:
+			byte_size = size_of(u32);
+	}
+
+	if indicies, ok := &mesh.indices_buf.?; ok {
+		
+		assert(indicies.bytes_count >= byte_size * mesh.triangle_count);
+		
+		byte_data : []u8;
+
+		switch d in data {
+			case nil:
+				panic("!?!");
+			case []u16:
+				assert(mesh.triangle_count >= len(d) + start_index, "data out of bounds", loc);
+				byte_data = slice.reinterpret([]u8, d);
+			case []u32:
+				assert(mesh.triangle_count >= len(d) + start_index, "data out of bounds", loc);
+				byte_data = slice.reinterpret([]u8, d);	
+		}
+
+		//Then upload
+		switch mesh.usage {
+			case .static_use:
+				panic("Cannot upload to a static mesh");
+			case .dynamic_use:
+				gl.buffer_upload_sub_data(indicies, byte_size * start_index, byte_data);
+			case .stream_use:
+				dst : []u8 = gl.begin_buffer_write(indicies, byte_size * start_index, len(byte_data));
+				assert(len(dst) == len(byte_data), "internal error");
+				mem.copy_non_overlapping(raw_data(dst), raw_data(byte_data), len(dst));
+				gl.end_buffer_writes(indicies);
+		}
+	}
+	else {
+		panic("invalid mesh state", loc);
+	}
 }
 
-draw_mesh_single :: proc (mesh : ^Mesh, model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_mesh_single :: proc (mesh : ^Mesh, model_matrix : matrix[4,4]f32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
@@ -416,13 +375,12 @@ draw_mesh_single :: proc (mesh : ^Mesh, model_matrix : matrix[4,4]f32, loc := #c
 	set_uniform(state.bound_shader, .mvp, mvp);
 	set_uniform(state.bound_shader, .inv_mvp, linalg.matrix4_inverse(mvp));
 
-	buffers : ^Mesh_buffers = &mesh.resources[mesh.current_resource];
 	switch mesh.indices_type {
 		case .no_index_buffer:
-			gl.draw_arrays(buffers.vao, .triangles, 0, mesh.vertex_count);
+			gl.draw_arrays(mesh.vao, .triangles, 0, mesh.vertex_count);
 		case .unsigned_short, .unsigned_int:
-			if i_buf, ok := buffers.indices_buf.?; ok {
-				gl.draw_elements(buffers.vao, .triangles, mesh.triangle_count, mesh.indices_type, i_buf.buffer);
+			if i_buf, ok := mesh.indices_buf.?; ok {
+				gl.draw_elements(mesh.vao, .triangles, mesh.triangle_count, mesh.indices_type, i_buf.buffer);
 			}
 			else {
 				panic("The mesh does not have a index buffer", loc);
@@ -430,13 +388,10 @@ draw_mesh_single :: proc (mesh : ^Mesh, model_matrix : matrix[4,4]f32, loc := #c
 	}
 
 	if mesh.usage == .stream_use {
-		gl.discard_fence(&buffers.fence);
-		buffers.fence = gl.place_fence();
+		gl.discard_fence(&mesh.fence);
+		mesh.fence = gl.place_fence();
 	}
 }
-
-
-
 
 /*
 Reserve_behavior :: enum {
@@ -460,10 +415,12 @@ Mesh :: struct(A : typeid) where intrinsics.type_is_enum(A) {
 
 
 
+////////////////////////////// Instaced mesh //////////////////////////////
 
 
 
 
+////////////////////////////// Shared mesh //////////////////////////////
 
 
 
@@ -500,7 +457,7 @@ convert_to_non_indexed :: proc (verts : []$T, indices : Indicies) -> (new_verts 
 //append_mesh_data :: proc (verts : [dynamic]Default_vertex, indices : [dynamic]Indicies, to_append_verts : []Default_vertex, to_append_indices : [dynamic]Indicies) {}
 
 @(require_results)
-generate_quad :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool, alloc := context.allocator) -> (verts : []Default_vertex, indices : []u16) {
+generate_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, alloc := context.allocator) -> (verts : []Default_vertex, indices : []u16) {
 
 	context.allocator = alloc;
 
@@ -508,10 +465,10 @@ generate_quad :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool,
 		verts = make([]Default_vertex, 4)
 		_indices := make([]u16, 6);
 		
-		verts[0] = Default_vertex{[3]f32{0,0,0} * size + position - {0.5,0.5,0}, {0,0}, {0,0,1}};
-		verts[2] = Default_vertex{[3]f32{0,1,0} * size + position - {0.5,0.5,0}, {0,1}, {0,0,1}};
-		verts[3] = Default_vertex{[3]f32{1,1,0} * size + position - {0.5,0.5,0}, {1,1}, {0,0,1}};
-		verts[1] = Default_vertex{[3]f32{1,0,0} * size + position - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
+		verts[2] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
+		verts[3] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
+		verts[1] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
 		
 		_indices[0] = 0;
 		_indices[1] = 1;
@@ -525,13 +482,13 @@ generate_quad :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool,
 		verts = make([]Default_vertex, 6)
 		indices = nil;
 		
-		verts[0] = Default_vertex{[3]f32{0,0,0} * size + position - {0.5,0.5,0}, {0,0}, {0,0,1}};
-		verts[1] = Default_vertex{[3]f32{1,0,0} * size + position - {0.5,0.5,0}, {1,0}, {0,0,1}};
-		verts[2] = Default_vertex{[3]f32{0,1,0} * size + position - {0.5,0.5,0}, {0,1}, {0,0,1}};
+		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
+		verts[1] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[2] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
 
-		verts[3] = Default_vertex{[3]f32{0,1,0} * size + position - {0.5,0.5,0}, {0,1}, {0,0,1}};
-		verts[4] = Default_vertex{[3]f32{1,0,0} * size + position - {0.5,0.5,0}, {1,0}, {0,0,1}};
-		verts[5] = Default_vertex{[3]f32{1,1,0} * size + position - {0.5,0.5,0}, {1,1}, {0,0,1}};
+		verts[3] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
+		verts[4] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[5] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
 	}
 	
 	return;
@@ -539,15 +496,15 @@ generate_quad :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool,
 
 //returns a static mesh containing a quad.
 @(require_results)
-make_mesh_quad :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool) -> (res : Mesh) {
+make_mesh_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) -> (res : Mesh) {
 
-	vert, index := generate_quad(size, position, use_index_buffer);
+	vert, index := generate_quad(size, offset, use_index_buffer);
 
 	if index == nil {
-		res = make_mesh(vert, nil, .single, .static_use);
+		res = make_mesh(vert, nil, .static_use);
 	}
 	else {
-		res = make_mesh(vert, index, .single, .static_use);
+		res = make_mesh(vert, index, .static_use);
 		delete(index);
 	}
 	delete(vert);
@@ -556,7 +513,7 @@ make_mesh_quad :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool
 }
 
 @(require_results)
-generate_circle :: proc(diameter : f32, positon : [3]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
+generate_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
 	
 	vertices := make([dynamic]Default_vertex);
 	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
@@ -564,7 +521,6 @@ generate_circle :: proc(diameter : f32, positon : [3]f32, sectors : int, use_ind
 	defer delete(temp_indices);
 
 	for phi in 0..<sectors {
-		//TODO this does not reuse verticies!
 		angle : f32 = f32(phi);
 
 		t := f32(angle - 1) / f32(sectors) * 2 * math.PI;
@@ -574,19 +530,19 @@ generate_circle :: proc(diameter : f32, positon : [3]f32, sectors : int, use_ind
 		x2 := math.cos(t2);
 		y2 := math.sin(t2);
 
-		vert 	:= [3]f32{x, y, 0} * 2;
-		vert2 	:= [3]f32{x2, y2, 0} * 2;
+		vert 	:= [3]f32{x, y, 0};
+		vert2 	:= [3]f32{x2, y2, 0};
 
 		//the center only added once
 		if len(vertices) == 0 {
-			append(&vertices, 	Default_vertex{[3]f32{0,0,0} *  diameter / 4 + positon, [2]f32{0,0} + 0.5, 	[3]f32{0,0,1}});
+			append(&vertices, 	Default_vertex{[3]f32{0,0,0} *  diameter / 2 + offset, [2]f32{0,0} + 0.5, 	[3]f32{0,0,1}});
 		}
 
 		if len(vertices) == 1 {
-			append(&vertices,  	Default_vertex{vert * diameter / 4 + positon, 			vert.xy/4 + 0.5, 	[3]f32{0,0,1}});
+			append(&vertices,  	Default_vertex{vert * diameter / 2 + offset, 			vert.xy/2 + 0.5, 	[3]f32{0,0,1}});
 		}
 
-		append(&vertices, 		Default_vertex{vert2 * diameter / 4 + positon, 			vert2.xy/4 + 0.5, 	[3]f32{0,0,1}});
+		append(&vertices, 		Default_vertex{vert2 * diameter / 2 + offset, 			vert2.xy/2 + 0.5, 	[3]f32{0,0,1}});
 
 		append(&temp_indices, 0);
 		append(&temp_indices, auto_cast (len(vertices) - 2));
@@ -614,15 +570,15 @@ generate_circle :: proc(diameter : f32, positon : [3]f32, sectors : int, use_ind
 
 //returns a static mesh containing a circle.
 @(require_results)
-make_mesh_circle :: proc(diameter : f32, position : [3]f32, sectors : int, use_index_buffer : bool) -> (res : Mesh) {
+make_mesh_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_index_buffer : bool) -> (res : Mesh) {
 
-	vert, index := generate_circle(diameter, position, sectors, use_index_buffer);
+	vert, index := generate_circle(diameter, offset, sectors, use_index_buffer);
 
 	if index == nil {
-		res = make_mesh(vert, nil, .single, .static_use);
+		res = make_mesh(vert, nil, .static_use);
 	}
 	else {
-		res = make_mesh(vert, index, .single, .static_use);
+		res = make_mesh(vert, index, .static_use);
 		delete(index);
 	}
 	delete(vert);
@@ -632,44 +588,44 @@ make_mesh_circle :: proc(diameter : f32, position : [3]f32, sectors : int, use_i
 
 //
 @(require_results)
-generate_cube :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
+generate_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
 
 	corners : [24]Default_vertex = {
 		//XP
 		Default_vertex{{1,0,0}, {0,0}, {1,0,0}},	
-		Default_vertex{{1,1,0}, {1,0}, {1,0,0}},
-		Default_vertex{{1,1,1}, {1,1}, {1,0,0}},
 		Default_vertex{{1,0,1}, {0,1}, {1,0,0}},
+		Default_vertex{{1,1,1}, {1,1}, {1,0,0}},
+		Default_vertex{{1,1,0}, {1,0}, {1,0,0}},
 
 		//XN
 		Default_vertex{{0,0,0}, {0,0}, {-1,0,0}},
-		Default_vertex{{0,0,1}, {0,1}, {-1,0,0}},
-		Default_vertex{{0,1,1}, {1,1}, {-1,0,0}},
 		Default_vertex{{0,1,0}, {1,0}, {-1,0,0}},
+		Default_vertex{{0,1,1}, {1,1}, {-1,0,0}},
+		Default_vertex{{0,0,1}, {0,1}, {-1,0,0}},
 
 		//YP
 		Default_vertex{{0,1,0}, {0,0}, {0,1,0}},
-		Default_vertex{{0,1,1}, {0,1}, {0,1,0}},
-		Default_vertex{{1,1,1}, {1,1}, {0,1,0}},
 		Default_vertex{{1,1,0}, {1,0}, {0,1,0}},
+		Default_vertex{{1,1,1}, {1,1}, {0,1,0}},
+		Default_vertex{{0,1,1}, {0,1}, {0,1,0}},
 
 		//YN
 		Default_vertex{{0,0,0}, {0,0}, {0,-1,0}},
-		Default_vertex{{1,0,0}, {1,0}, {0,-1,0}},
-		Default_vertex{{1,0,1}, {1,1}, {0,-1,0}},
 		Default_vertex{{0,0,1}, {0,1}, {0,-1,0}},
+		Default_vertex{{1,0,1}, {1,1}, {0,-1,0}},
+		Default_vertex{{1,0,0}, {1,0}, {0,-1,0}},
 
 		//ZP
 		Default_vertex{{0,0,1}, {0,0}, {0,0,1}},
-		Default_vertex{{1,0,1}, {1,0}, {0,0,1}},
-		Default_vertex{{1,1,1}, {1,1}, {0,0,1}},
 		Default_vertex{{0,1,1}, {0,1}, {0,0,1}},
+		Default_vertex{{1,1,1}, {1,1}, {0,0,1}},
+		Default_vertex{{1,0,1}, {1,0}, {0,0,1}},
 
 		//ZN
 		Default_vertex{{0,0,0}, {0,0}, {0,0,-1}},
-		Default_vertex{{0,1,0}, {0,1}, {0,0,-1}},
-		Default_vertex{{1,1,0}, {1,1}, {0,0,-1}},
 		Default_vertex{{1,0,0}, {1,0}, {0,0,-1}},
+		Default_vertex{{1,1,0}, {1,1}, {0,0,-1}},
+		Default_vertex{{0,1,0}, {0,1}, {0,0,-1}},
 	};
 
 	odering : [6]u16 = {
@@ -689,7 +645,7 @@ generate_cube :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool,
 	
 	verts = make([]Default_vertex, 24);
 	for c,i in corners {
-		verts[i] = Default_vertex{(c.position - {0.5,0.5,0.5} + position) * size, c.texcoord, c.normal};
+		verts[i] = Default_vertex{(c.position - {0.5,0.5,0.5} + offset) * size, c.texcoord, c.normal};
 	}
 
 	if !use_index_buffer {
@@ -705,15 +661,15 @@ generate_cube :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool,
 
 //returns a static mesh containing a cube.
 @(require_results)
-make_mesh_cube :: proc(size : [3]f32, position : [3]f32, use_index_buffer : bool) -> (res : Mesh) {
+make_mesh_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) -> (res : Mesh) {
 	
-	vert, index := generate_cube(size, position, use_index_buffer);
+	vert, index := generate_cube(size, offset, use_index_buffer);
 
 	if index == nil {
-		res = make_mesh(vert, nil, .single, .static_use);
+		res = make_mesh(vert, nil, .static_use);
 	}
 	else {
-		res = make_mesh(vert, index, .single, .static_use);
+		res = make_mesh(vert, index, .static_use);
 		delete(index);
 	}
 	delete(vert);
@@ -733,9 +689,11 @@ generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int,
 		
 		y : f32 = f32(up) / f32(stacks);
 		
+		sectors := sectors + 1;
+
 		for phi in 0..<sectors {
 			
-			angle : f32 = f32(phi);
+			angle : f32 = f32(-phi);
 
 			x := math.cos_f32(f32(angle) / f32(sectors-1) * 2 * math.PI);
 			z := math.sin_f32(f32(angle) / f32(sectors-1) * 2 * math.PI);
@@ -749,22 +707,76 @@ generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int,
 				below_i	 	:= up * sectors + phi - sectors;
 				this 		:= up * sectors + phi;
 				pos 		:= up * sectors + ((phi + 1) %% sectors);
+				append(&temp_indices, u16(below_i), u16(this), u16(pos));
 				append(&temp_indices, u16(below_i), u16(below_neg), u16(this)); 
-				append(&temp_indices, u16(below_i), u16(this), u16(pos)); 
 			}
 			
 		}
 	}
 
-	/*
-	TODO add top and bottom
-	//add top center vertex
-	top_index := len(vertices);
-	append(&vertices, Default_vertex{{0, height / 2, 0}, [2]f32{0,0} + 0.5, [3]f32{0,1,0}});
-	//add bottom center vertex
-	bottom_index := len(vertices) + 1;
-	append(&vertices, Default_vertex{{0, -height / 2, 0}, [2]f32{0,0} + 0.5, [3]f32{0,1,0}});
-	*/
+	up_center := len(vertices);
+	append(&vertices, Default_vertex{[3]f32{0, height / 2,0} + offset, [2]f32{0,0} + 0.5, 	[3]f32{0,1,0}});
+	down_center := len(vertices);
+	append(&vertices, Default_vertex{[3]f32{0, -height / 2, 0} + offset, [2]f32{0,0} + 0.5, [3]f32{0,-1,0}});
+
+	added_first := false;
+	for phi in 0..<sectors {
+		angle : f32 = f32(phi);
+
+		t := f32(angle - 1) / f32(sectors) * 2 * math.PI;
+		t2 := f32(angle) / f32(sectors) * 2 * math.PI;
+		x := math.cos(t);
+		z := math.sin(t);
+		x2 := math.cos(t2);
+		z2 := math.sin(t2);
+
+		vert 	:= [3]f32{x, -height/2, z};
+		vert2 	:= [3]f32{x2, -height/2, z2};
+		vert.xz = vert.xz * diameter / 2;
+		vert2.xz = vert2.xz * diameter / 2;
+
+		//the center only added once
+		if added_first == false {
+			append(&vertices,  	Default_vertex{vert + offset, 	[2]f32{x, z}/2 + 0.5, 	[3]f32{0,0,-1}}); //TODO calculate the normal correctly
+			added_first = true;
+		}
+
+		append(&vertices, 		Default_vertex{vert2 + offset, 	[2]f32{x2, z2}/2 + 0.5, 	[3]f32{0,0,-1}}); //TODO calculate the normal correctly
+
+		append(&temp_indices, auto_cast down_center);
+		append(&temp_indices, auto_cast (len(vertices) - 1));
+		append(&temp_indices, auto_cast (len(vertices) - 2));
+	}
+
+
+	added_first = false;
+	for phi in 0..<sectors {
+		angle : f32 = f32(phi);
+
+		t := f32(angle - 1) / f32(sectors) * 2 * math.PI;
+		t2 := f32(angle) / f32(sectors) * 2 * math.PI;
+		x := math.cos(t);
+		z := math.sin(t);
+		x2 := math.cos(t2);
+		z2 := math.sin(t2);
+
+		vert 	:= [3]f32{x, height/2, z};
+		vert2 	:= [3]f32{x2, height/2, z2};
+		vert.xz = vert.xz * diameter / 2;
+		vert2.xz = vert2.xz * diameter / 2;
+
+		//the center only added once
+		if added_first == false {
+			append(&vertices,  	Default_vertex{vert + offset, 	[2]f32{x, z}/2 + 0.5, 	[3]f32{0,0,1}}); //TODO calculate the normal correctly
+			added_first = true;
+		}
+
+		append(&vertices, 		Default_vertex{vert2 + offset, 	[2]f32{x2, z2}/2 + 0.5, 	[3]f32{0,0,1}}); //TODO calculate the normal correctly
+
+		append(&temp_indices, auto_cast up_center);
+		append(&temp_indices, auto_cast (len(vertices) - 2));
+		append(&temp_indices, auto_cast (len(vertices) - 1));
+	}
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, len(vertices)); 
@@ -792,10 +804,10 @@ make_mesh_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int
 	vert, index := generate_cylinder(offset, height, diameter, stacks, sectors, use_index_buffer);
 
 	if index == nil {
-		res = make_mesh(vert, nil, .single, .static_use);
+		res = make_mesh(vert, nil, .static_use);
 	}
 	else {
-		res = make_mesh(vert, index, .single, .static_use);
+		res = make_mesh(vert, index, .static_use);
 		delete(index);
 	}
 	delete(vert);
@@ -822,7 +834,7 @@ generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32, stacks : int 
 			
 			angle : f32 = f32(phi);
 
-			t := f32(angle) / f32(sectors-1) * 2 * math.PI;
+			t := f32(-angle) / f32(sectors-1) * 2 * math.PI;
 			x := math.cos(t) * math.cos(theta);
 			z := math.sin(t) * math.cos(theta);
 
@@ -872,10 +884,91 @@ make_mesh_sphere :: proc(offset : [3]f32, diameter : f32, stacks : int, sectors 
 	vert, index := generate_sphere(offset, diameter, stacks, sectors, use_index_buffer);
 	
 	if index == nil {
-		res = make_mesh(vert, nil, .single, .static_use);
+		res = make_mesh(vert, nil, .static_use);
 	}
 	else {
-		res = make_mesh(vert, index, .single, .static_use);
+		res = make_mesh(vert, index, .static_use);
+		delete(index);
+	}
+	delete(vert);
+
+	return;
+}
+
+@(require_results)
+generate_cone :: proc (offset : [3]f32, height, diameter : f32, sectors : int, use_index_buffer : bool) -> (verts : []Default_vertex, indices : []u16) {
+
+	vertices := make([dynamic]Default_vertex);
+	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
+	defer delete(vertices);
+	defer delete(temp_indices);
+	
+	for phi in 0..<sectors {
+		angle : f32 = f32(phi);
+
+		t := f32(angle - 1) / f32(sectors) * 2 * math.PI;
+		t2 := f32(angle) / f32(sectors) * 2 * math.PI;
+		x := math.cos(t);
+		z := math.sin(t);
+		x2 := math.cos(t2);
+		z2 := math.sin(t2);
+
+		vert 	:= [3]f32{x, -height/2, z};
+		vert2 	:= [3]f32{x2, -height/2, z2};
+		vert.xz = vert.xz * diameter / 2;
+		vert2.xz = vert2.xz * diameter / 2; 
+
+		//the center only added once
+		if len(vertices) == 0 {
+			append(&vertices, 	Default_vertex{[3]f32{0,height/2,0} + offset, [2]f32{0,0} + 0.5, 	[3]f32{0,1,0}}); //TODO calculate the normal correctly
+		}
+		if len(vertices) == 1 {
+			append(&vertices,  	Default_vertex{[3]f32{0,-height/2,0} + offset, 	 [2]f32{0,0} + 0.5, 	[3]f32{0,-1,0}});
+		}
+		if len(vertices) == 2 {
+			append(&vertices,  	Default_vertex{vert + offset, 	vert.xz/diameter + 0.5, 	[3]f32{0,0,1}}); //TODO calculate the normal correctly
+		}
+
+		append(&vertices, 		Default_vertex{vert2 + offset, 	vert2.xz/diameter + 0.5, 	[3]f32{0,0,1}}); //TODO calculate the normal correctly
+
+		append(&temp_indices, 0);
+		append(&temp_indices, auto_cast (len(vertices) - 2));
+		append(&temp_indices, auto_cast (len(vertices) - 1));
+		
+		append(&temp_indices, auto_cast (len(vertices) - 2));
+		append(&temp_indices, 1);
+		append(&temp_indices, auto_cast (len(vertices) - 1));
+	}
+
+	if use_index_buffer {
+		verts = make([]Default_vertex, len(vertices));
+		indices = make([]u16, len(temp_indices));
+		
+		for v, i in vertices {
+			verts[i] = v; 	//convert from 2D to 3D
+		}
+		for ii, i in temp_indices {
+			indices[i] = ii;
+		}
+	}
+	else {
+		non_indexed := convert_to_non_indexed(vertices[:], temp_indices[:]);
+		verts = non_indexed;
+	}
+	
+	return;
+}
+
+@(require_results)
+make_mesh_cone :: proc(offset : [3]f32, height, diameter : f32, sectors : int, use_index_buffer : bool) -> (res : Mesh) {
+	
+	vert, index := generate_cone(offset, height, diameter, sectors, use_index_buffer);
+	
+	if index == nil {
+		res = make_mesh(vert, nil, .static_use);
+	}
+	else {
+		res = make_mesh(vert, index, .static_use);
 		delete(index);
 	}
 	delete(vert);

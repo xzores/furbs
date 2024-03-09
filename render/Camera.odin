@@ -47,7 +47,7 @@ bind_camera_3D :: proc(using camera : Camera3D, loc := #caller_location) {
 
     aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 
-	state.view_mat = glsl.mat4LookAt(cast(glsl.vec3)camera.position, cast(glsl.vec3)camera.target, -cast(glsl.vec3)camera.up);
+	state.view_mat = glsl.mat4LookAt(cast(glsl.vec3)camera.position, cast(glsl.vec3)camera.target, cast(glsl.vec3)camera.up);
 	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);
 
 	assert(near != 0, "near is 0", loc);
@@ -55,14 +55,14 @@ bind_camera_3D :: proc(using camera : Camera3D, loc := #caller_location) {
 	
     if (camera.projection == .perspective)
     {
-		state.prj_mat = linalg.matrix4_perspective(camera.fovy, aspect, near, far, flip_z_axis = true); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
+		state.prj_mat = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, flip_z_axis = false); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
     }
     else if (camera.projection == .orthographic)
     {	
-        top : f32 = camera.fovy/2.0;
-        right : f32 = top*aspect;
+        top : f32 = (camera.fovy * math.PI / 180) / 2.0;
+        right : f32 = top * aspect;
 		
-		state.prj_mat = glsl.mat4Ortho3d(-right, right, -top,top, near, far);
+		state.prj_mat = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
     }
 	
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
@@ -79,7 +79,7 @@ bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
 	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);
 	
 	top : f32 = 1/zoom;
-    right : f32 = top*aspect;
+    right : f32 = top * aspect;
 	state.prj_mat = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
 }
@@ -120,12 +120,11 @@ get_pixel_space_camera :: proc(loc := #caller_location) -> (cam : Camera2D) {
 ///////////////////////////////////////////
 
 camera_forward :: proc(cam : Camera3D) -> [3]f32 {
-	res := linalg.normalize(cam.target - cam.position);
+	res := linalg.normalize(cam.position - cam.target);
 	return res;
 } 
 
 camera_forward_horizontal :: proc(cam : Camera3D) -> [3]f32 {
-
 	forward := camera_forward(cam);
 	res := linalg.normalize([3]f32{forward.x, 0, forward.z});
 	return res;
@@ -133,7 +132,7 @@ camera_forward_horizontal :: proc(cam : Camera3D) -> [3]f32 {
 
 camera_right :: proc(cam : Camera3D) -> [3]f32 {
 	forward := camera_forward(cam);
-	return linalg.cross(forward, cam.up);
+	return linalg.normalize(linalg.cross(cam.up, forward));
 } 
 
 camera_move :: proc(cam : ^Camera3D, movement : [3]f32) {
@@ -161,10 +160,7 @@ camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {
 	pitch := math.to_radians(pitch);
 
 	direction : [3]f32;
-	direction.x = cos(yaw); // Note that we convert the angle to radians first
-	direction.z = sin(yaw);
 
-	direction.y = sin(pitch);
 	direction.x = cos(yaw) * cos(pitch);
 	direction.y = sin(pitch);
 	direction.z = sin(yaw) * cos(pitch);
