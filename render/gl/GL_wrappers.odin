@@ -539,6 +539,9 @@ Buffer_type :: enum u32 {
 	texture_buffer = gl.TEXTURE_BUFFER,							//Version GL 3.1 	//Use to store access large amount of memory from the shader (it is not a real texture, it is a hacky way to access data).
 	transform_feedback_buffer = gl.TRANSFORM_FEEDBACK_BUFFER,	//Version GL 3.0 	//This is a way to process data in a vertex shader without rasterizing or fragment shader. Use for partical systems and such.
 	uniform_buffer = gl.UNIFORM_BUFFER,							//Version GL 3.1	//We will not use this...
+
+	read_copy_buffer = gl.COPY_READ_BUFFER,						
+	write_copy_buffer = gl.COPY_WRITE_BUFFER,							
 }
 
 
@@ -1267,7 +1270,7 @@ record_err :: proc (from_loc: runtime.Source_Code_Location, err_val: any, err : 
 
 				gl.GetDebugMessageLog(1, l, raw_data(message_sources[:]), raw_data(message_types[:]), nil, raw_data(message_severities[:]), &l, raw_data(err_str));
 				//(count : GLuint, bufSize : GLsizei, sources : ^GLenum, types : ^GLenum, ids : ^GLuint, severities : ^GLenum, lengths : ^GLsizei, messageLog : GLoutstring
-
+				
 				log.errorf("	recive debug message : %v", string(err_str));
 				gl.GetIntegerv(.DEBUG_LOGGED_MESSAGES, &mes_cnt)
 			}
@@ -1928,6 +1931,20 @@ buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data :
 		bind_buffer(target, buffer);
 		gl.BufferData(auto_cast target, size, data, auto_cast buffer_falgs);
 		unbind_buffer(target);
+	}
+}
+
+copy_buffer_sub_data :: proc(read : Buffer_id, write : Buffer_id, read_offset : int, write_offset : int, size : int) {
+
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.CopyNamedBufferSubData(auto_cast read, auto_cast write, read_offset, write_offset, size);
+	}
+	else {
+		bind_buffer(.read_copy_buffer, read);
+		bind_buffer(.write_copy_buffer, write);
+		gl.CopyBufferSubData(.COPY_READ_BUFFER, .COPY_WRITE_BUFFER, read_offset, write_offset, size);
+		unbind_buffer(.write_copy_buffer);
+		unbind_buffer(.read_copy_buffer);
 	}
 }
 

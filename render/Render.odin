@@ -320,6 +320,7 @@ begin_frame :: proc() {
 		}
 		state.main_window.width, state.main_window.height = get_screen_size(state.main_window);
 	}
+
 }
 
 end_frame :: proc(loc := #caller_location) {

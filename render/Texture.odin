@@ -243,6 +243,24 @@ flip_texture_2D :: proc(data : []byte, width, height, channels : int) {
 	}
 }
 
+//TODO add to state
+white_texture : Texture2D;
+get_white_texture :: proc() -> Texture2D {
+
+	if white_texture.id == 0 {
+		
+		desc := Texture_desc{
+			.repeat,
+			.nearest,
+			false,
+			.uncompressed_RGBA8,
+		};
+
+		white_texture = make_texture_2D_desc(desc, 1, 1, .uncompressed_RGBA8, {255, 255, 255, 255});
+	}
+
+	return white_texture;
+}
 
 /////////////////////////////////// Texture 3D ///////////////////////////////////
 Texture3D :: struct {
@@ -571,14 +589,6 @@ end_texture_mode :: proc(target : Render_texture, loc := #caller_location){
 
 ////////////////////////
 
-get_white_texture :: proc() -> Texture2D {
-
-	if !is_texture_ready(white_texture) {
-		white_texture = load_texture_from_raw_bytes({255, 255, 255, 255}, 1, 1, .uncompressed_RGBA8);
-	}
-
-	return white_texture;
-}
 
 ////////////////////////
 

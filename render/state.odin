@@ -76,6 +76,8 @@ State :: struct {
 		inv_prj_mat 	: matrix[4,4]f32,
 		view_mat 		: matrix[4,4]f32,
 		inv_view_mat	: matrix[4,4]f32,
+		prj_view_mat 	: matrix[4,4]f32,
+		inv_prj_view_mat: matrix[4,4]f32,
 	},
 
 	render_context : runtime.Context,	

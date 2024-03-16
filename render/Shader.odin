@@ -263,6 +263,8 @@ set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : Unifor
 set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc := #caller_location) {
 
 	switch v in value {
+		case nil:
+			gl.active_bind_texture_2D(0, cast(i32)location);
 		case Texture2D:
 			gl.active_bind_texture_2D(v.id, cast(i32)location);
 		case:

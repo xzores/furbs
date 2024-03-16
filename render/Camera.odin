@@ -42,46 +42,64 @@ Camera :: union {
 
 //////////////////////////////////////////////////////////////////////////////////
 
-@(private)
-bind_camera_3D :: proc(using camera : Camera3D, loc := #caller_location) {
+get_camera_3D_prj_view :: proc(using camera : Camera3D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
 
-    aspect : f32 = state.target_pixel_width / state.target_pixel_height;
+	view = glsl.mat4LookAt(cast(glsl.vec3)camera.position, cast(glsl.vec3)camera.target, cast(glsl.vec3)camera.up);
 
-	state.view_mat = glsl.mat4LookAt(cast(glsl.vec3)camera.position, cast(glsl.vec3)camera.target, cast(glsl.vec3)camera.up);
-	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);
-
-	assert(near != 0, "near is 0", loc);
-	assert(far != 0, "far is 0", loc);
-	
     if (camera.projection == .perspective)
     {
-		state.prj_mat = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, flip_z_axis = false); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
+		prj = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, flip_z_axis = false); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
     }
     else if (camera.projection == .orthographic)
     {	
         top : f32 = (camera.fovy * math.PI / 180) / 2.0;
         right : f32 = top * aspect;
 		
-		state.prj_mat = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
+		prj = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
     }
-	
+
+	return;
+};
+
+get_camera_2D_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
+
+	translation_mat := linalg.matrix4_translate(-linalg.Vector3f32{position.x, position.y, 0});
+	rotation_mat := linalg.matrix4_from_quaternion(linalg.quaternion_angle_axis_f32(math.to_radians(-rotation), {0,0,1}));
+	view = linalg.mul(translation_mat, rotation_mat);
+
+	top : f32 = 1/zoom;
+    right : f32 = top * aspect;
+	prj = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
+
+	return;
+};
+
+@(private)
+bind_camera_3D :: proc(using camera : Camera3D, loc := #caller_location) {
+
+	assert(near != 0, "near is 0", loc);
+	assert(far != 0, "far is 0", loc);
+
+    aspect : f32 = state.target_pixel_width / state.target_pixel_height;
+
+	state.view_mat, state.prj_mat = get_camera_3D_prj_view(camera, aspect);
+	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);	
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
+
+	state.prj_view_mat = state.prj_mat * state.view_mat;
+	state.inv_prj_view_mat = linalg.inverse(state.prj_view_mat);
 }
 
 @(private)
 bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
+	
+	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 
-    aspect : f32 = state.target_pixel_width / state.target_pixel_height;
-	
-	translation_mat := linalg.matrix4_translate(-linalg.Vector3f32{position.x, position.y, 0});
-	rotation_mat := linalg.matrix4_from_quaternion(linalg.quaternion_angle_axis_f32(math.to_radians(-rotation), {0,0,1}));
-	state.view_mat = linalg.mul(translation_mat, rotation_mat);
-	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);
-	
-	top : f32 = 1/zoom;
-    right : f32 = top * aspect;
-	state.prj_mat = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
+	state.view_mat, state.prj_mat = get_camera_2D_prj_view(camera, aspect);
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
+
+	state.prj_view_mat = state.prj_mat * state.view_mat;
+	state.inv_prj_view_mat = linalg.inverse(state.prj_mat * state.view_mat);
 }
 
 @(private)
