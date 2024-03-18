@@ -292,9 +292,14 @@ _make_context_current ::proc(window : ^Window, loc := #caller_location) {
 }
 
 enable_vsync :: proc(enable : bool, loc := #caller_location) {
-	//assert(state.bound_window == nil || state.bound_window.glfw_window == state.owner_context, "enable_vsync must only be called when the owner_context is active", loc);
+	assert(state.bound_window == nil || state.bound_window.(^Window).glfw_window == state.owner_context, "enable_vsync must only be called when the owner_context is active", loc);
 	state.vsync = enable;
-	glfw.SwapInterval(auto_cast enable);
+	if enable {
+		glfw.SwapInterval(-1);
+	}
+	else {
+		glfw.SwapInterval(0);
+	}
 }
 
 enable_fullscreen :: proc(window : ^Window, enable : bool, loc := #caller_location) {

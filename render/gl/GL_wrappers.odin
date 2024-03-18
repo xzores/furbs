@@ -1,7 +1,7 @@
 package wrappers;
 
-import "core:mem"
 import "base:runtime"
+import "core:mem"
 import "core:os"
 import "core:strconv"
 import "core:reflect"
@@ -11,6 +11,10 @@ import "core:math"
 import "core:time"
 import "core:slice"
 import "core:log"
+
+import "core:thread"
+import "core:sync"
+import "core:container/queue"
 
 import gl "OpenGL"
 import utils "../../utils"
@@ -335,9 +339,11 @@ Resource_usage_3_3 :: enum u32 {
 	static_read =	gl.STATIC_READ,
 	static_copy = 	gl.STATIC_COPY,
 	
+	//These are static because the memory other would live in heap memory. NOT GPU memory.
+	//But we likely want to to be GPU memory.
 	dynamic_write = gl.DYNAMIC_DRAW,
 	dynamic_read = 	gl.DYNAMIC_READ,
-	dynamic_copy = gl.DYNAMIC_COPY,
+	dynamic_copy =  gl.DYNAMIC_COPY,
 }
 
 Index_buffer_type :: enum u32 {
@@ -577,6 +583,8 @@ Resource :: struct {
 
 	buffer 			: Buffer_id, //Vertex buffer or somthing
 	
+	persistent_mapped_data : []u8,
+
 	using desc 		: Resource_desc,
 }
 
@@ -1043,7 +1051,7 @@ init :: proc(gl_context := context) {
 	_gl_context = gl_context;
 
 	when RECORD_DEBUG {
-		setup_call_recorder();
+		setup_call_recorder(); 
 		gl.capture_gl_callback = record_call;
 		gl.capture_error_callback = record_err;
 		
@@ -1069,9 +1077,6 @@ destroy :: proc(loc := #caller_location) -> (leaks : int) {
 	
 	leaks = 0;
 
-	when RECORD_DEBUG {
-		destroy_call_recorder();
-	}
 	when RENDER_DEBUG {
 		
 		for field in reflect.struct_fields_zipped(Living_state) {
@@ -1124,7 +1129,11 @@ destroy :: proc(loc := #caller_location) -> (leaks : int) {
 	else {
 		s : GL_states_comb = {cpu_state, gpu_state};
 		destroy_state(s);
-	}	
+	}
+
+	when RECORD_DEBUG {
+		destroy_call_recorder();
+	}
 
 	/* TODO delete, this is handled by window creation/destruction
 	destroy_state(&cpu_state, &gpu_state);
@@ -1143,75 +1152,183 @@ destroy :: proc(loc := #caller_location) -> (leaks : int) {
 Error_Enum :: gl.Error_Enum;
 
 when RECORD_DEBUG {
+	
+	//This got a little complicated, there is a alot of step to make it work for a non-thread-safe allocator.
+	//It does make debug builds way faster so I will keep it for now.
+
+	//Internal use only
 	record_output : os.Handle;
 	time_being : time.Time;
-}
 
-setup_call_recorder :: proc (filename : string = "gl_calls.txt") {
-	when RECORD_DEBUG {
+	//Internal use only
+	record_thread : ^thread.Thread;
+	record_mutex : sync.Mutex;
+	record_queue : queue.Queue(strings.Builder);
+	record_queue_2 : queue.Queue(strings.Builder);
+	record_should_close : bool;
+	record_mutex_clean : sync.Mutex;
+	record_filename : string;
+
+	//This is unlike the others owned by the recoder thread (the one that writes to the file).
+	record_queue_clean : queue.Queue(strings.Builder); //This to clean up by the main thread. We dont want to force users to use a multithreaded allocator.
+	record_mutex_showdown : sync.Mutex;
+	record_should_close_completly : bool;
+	
+	setup_call_recorder :: proc (filename : string = "gl_calls.txt") {
+		when RECORD_DEBUG {
+			time_being = time.now();
+			record_filename = strings.clone(filename);
+			
+			record_should_close = false;
+			record_should_close_completly = false;
+			//record_mutex does not need initialization
+			queue.init(&record_queue);
+			queue.init(&record_queue_2);
+			record_thread = thread.create_and_start(record_thread_loop, self_cleanup = true);
+		}
+	}
+	
+	destroy_call_recorder :: proc () {
+		when RECORD_DEBUG {
+			
+			record_should_close = true;
+			sync.lock(&record_mutex_showdown);
+			for queue.len(record_queue_clean) != 0 {
+				c := queue.pop_front(&record_queue_clean);
+				strings.builder_destroy(&c);
+			}
+			sync.unlock(&record_mutex_showdown);
+			record_should_close_completly = true;
+			thread.join(record_thread); record_thread = {};
+			queue.destroy(&record_queue);
+			queue.destroy(&record_queue_2);
+			delete(record_filename);
+		}
+	}
+	
+	@(private)
+	record_thread_loop :: proc () {
+
+		do_thing :: proc () {
+			did_something := false;
+
+			sync.lock(&record_mutex);
+			for queue.len(record_queue) != 0 {
+				record_queue, record_queue_2 = record_queue_2, record_queue; //Swap queues
+				did_something = true;
+			}
+			sync.unlock(&record_mutex);
+			
+			if !did_something {
+				time.sleep(100 * time.Microsecond);
+			}
+
+			for queue.len(record_queue_2) != 0 {
+				
+				to_write := queue.pop_front(&record_queue_2);
+				os.write_string(record_output, strings.to_string(to_write)); //Write the thing
+
+				//The builer must be cleaned by the main thread. Not all allocators are threaded.
+				sync.lock(&record_mutex_clean);
+				queue.append(&record_queue_clean, to_write);
+				sync.unlock(&record_mutex_clean);
+			}
+		}
+		
+		sync.lock(&record_mutex_showdown);
+		queue.init(&record_queue_clean);
+		defer queue.destroy(&record_queue_clean);
+
 		err : os.Errno;
-		record_output, err = os.open(filename, os.O_CREATE|os.O_TRUNC);
+		record_output, err = os.open(record_filename, os.O_CREATE|os.O_TRUNC);
 		if err != 0 {
 			panic("Could not open record file");
 		}
 		else {
-			log.infof("recording calles to %v", filename);
+			log.infof("recording calles to %v", record_filename);
 		}
-		time_being = time.now();
-	}
-}
-
-destroy_call_recorder :: proc () {
-	when RECORD_DEBUG {
-		err := os.close(record_output);
-		if err != 0 {
-			fmt.panicf("Could not close record file, %v", err);
-		}
-	}
-}
-
-record_call :: proc (from_loc : runtime.Source_Code_Location, ret_val : any, args : []any, loc := #caller_location) {
-
-	context = _gl_context;
-	assert(_gl_context != {}, "_gl_context is nil", loc);
-
-	when RECORD_DEBUG {
-		call_time_mil_sec : f64 = time.duration_milliseconds(time.since(time_being));
-		os.write_string(record_output, fmt.tprintf("%.3f : gl%s(", call_time_mil_sec, loc.procedure));
-
-		for arg, i in args {
-			
-			if i > 0 { os.write_string(record_output, ", ") }
-			
-			if v, ok := arg.(gl.GLenum); ok {
-				os.write_string(record_output, fmt.tprintf("GL_%v", v));
-			} 
-			else if v, ok := arg.(gl.GLbitfield); ok {
-				os.write_string(record_output, fmt.tprintf("GL_%v", v));
-			} 
-			else if v, ok := arg.(u32); ok {
-				os.write_string(record_output, fmt.tprintf("%v", v));
-			}
-			else if v, ok := arg.(i32); ok {
-				os.write_string(record_output, fmt.tprintf("%v", v));
-			}
-			else if v, ok := arg.(f32); ok {
-				os.write_string(record_output, fmt.tprintf("%v", v));
-			}
-			else {
-				os.write_string(record_output, fmt.tprintf("(%v)%v", arg.id, arg));
+		defer {
+			err = os.close(record_output);
+			if err != 0 {
+				fmt.panicf("Could not close record file, %v", err);
 			}
 		}
 
-		if ret_val != nil {
-			os.write_string(record_output, fmt.tprintf(") -> %v", ret_val));
-		}
-		else {
-			os.write_string(record_output, ")");
+		for !record_should_close {
+			do_thing();
+			mem.free_all(context.temp_allocator);
 		}
 		
-		os.write_string(record_output, "\n");
+		do_thing(); //To make sure we got them all
+		do_thing(); //To make sure we got them all
+		mem.free_all(context.temp_allocator);
+
+		sync.unlock(&record_mutex_showdown);
+
+		for !record_should_close_completly {
+			time.sleep(time.Microsecond);
+		}
 	}
+	
+	record_call :: proc (from_loc : runtime.Source_Code_Location, ret_val : any, args : []any, loc := #caller_location) {
+		
+		context = _gl_context;
+		assert(_gl_context != {}, "_gl_context is nil", loc); //This wont do anthing as the _gl_context is required to do something with the context...
+		
+		b := strings.builder_make_len_cap(0, 125);
+		
+		call_time_mil_sec : f64 = time.duration_milliseconds(time.since(time_being));
+		strings.write_string(&b, fmt.tprintf("%.3f : gl%s(", call_time_mil_sec, loc.procedure));
+		
+		for arg, i in args {
+			
+			if i > 0 { strings.write_string(&b, ", ") }
+			
+			if v, ok := arg.(gl.GLenum); ok {
+				strings.write_string(&b, fmt.tprintf("GL_%v", v));
+			} 
+			else if v, ok := arg.(gl.GLbitfield); ok {
+				strings.write_string(&b, fmt.tprintf("GL_%v", v));
+			} 
+			else if v, ok := arg.(u32); ok {
+				strings.write_string(&b, fmt.tprintf("%v", v));
+			}
+			else if v, ok := arg.(i32); ok {
+				strings.write_string(&b, fmt.tprintf("%v", v));
+			}
+			else if v, ok := arg.(f32); ok {
+				strings.write_string(&b, fmt.tprintf("%v", v));
+			}
+			else {
+				strings.write_string(&b, fmt.tprintf("(%v)%v", arg.id, arg));
+			}
+		}
+		
+		if ret_val != nil {
+			strings.write_string(&b, fmt.tprintf(") -> %v", ret_val));
+		}
+		else {
+			strings.write_string(&b, ")");
+		}
+		
+		strings.write_string(&b, "\n");
+
+		sync.lock(&record_mutex);
+		queue.append(&record_queue, b);
+		sync.unlock(&record_mutex);
+
+		sync.lock(&record_mutex_clean);
+		for queue.len(record_queue_clean) != 0 {
+			c := queue.pop_front(&record_queue_clean);
+			strings.builder_destroy(&c);
+		}
+		sync.unlock(&record_mutex_clean);
+	}
+}
+else {
+	record_call :: proc (from_loc : runtime.Source_Code_Location, ret_val : any, args : []any, loc := #caller_location) {}; //Do nothing
+	setup_call_recorder :: proc (filename : string) {}; //Do nothing
+	destroy_call_recorder :: proc (filename : string) {}; //Do nothing
 }
 
 record_err :: proc (from_loc: runtime.Source_Code_Location, err_val: any, err : Error_Enum, args : []any, loc : runtime.Source_Code_Location) {
@@ -2021,15 +2138,15 @@ sync_fence :: proc (fence : ^Fence) {
 	discard_fence(fence);
 }
 
-discard_fence :: proc(fence : ^Fence){
+discard_fence :: proc(fence : ^Fence, loc := #caller_location){
 
-	when RENDER_DEBUG {	
+	when RENDER_DEBUG {
 		
 		for buffer, list in fence.access_map {
 			
 			for access in list {
 				index, found := slice.linear_search(debug_state.accessed_buffers[buffer][:], access)
-				assert(found);
+				assert(found, "access not found", loc); //TODO many fences can have the same access, how do we handle?
 				unordered_remove(&debug_state.accessed_buffers[buffer], index);
 				free(access);
 			}
@@ -2049,10 +2166,13 @@ discard_fence :: proc(fence : ^Fence){
 	}
 
 	gl.DeleteSync(fence.sync);
+
+	fence^ = {};
 }
 
+//Used for debuging, it makes sures that you don't access a part of the buffer that has not been fenced.
 access_buffer :: proc (buffer : Buffer_id, offset, length : int, usage : Resource_usage, loc := #caller_location) {
-
+	
 	when RENDER_DEBUG {	
 
 		collides_with_offset_length :: proc (a, b : [2]int) -> bool {
@@ -2138,10 +2258,10 @@ map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type,  #any_i
 	return;
 }
 
-unmap_buffer :: proc (buffer : Buffer_id, buffer_type : Buffer_type) {
+unmap_buffer :: proc (buffer : Buffer_id, buffer_type : Buffer_type, loc := #caller_location) {
 
 	if cpu_state.gl_version >= .opengl_4_5 {
-		gl.UnmapNamedBuffer(auto_cast buffer);
+		gl.UnmapNamedBuffer(auto_cast buffer, loc);
 	}
 	else {
 		bind_buffer(buffer_type, buffer);
@@ -2229,6 +2349,7 @@ buffer_upload_sub_data :: proc (resource : ^Resource, #any_int offset_bytes : in
 
 //if range == nil then the entire buffer is returned. Range is {being, end}
 //You must sync, so that you do not write to any data currently being used.
+//This is unsyncronized mapped buffer or presistent mapped buffer.
 @(require_results)
 begin_buffer_write :: proc(resource : ^Resource, begin : int = 0, length : Maybe(int) = nil, loc := #caller_location) -> (data : []u8) {
 	
@@ -2243,8 +2364,22 @@ begin_buffer_write :: proc(resource : ^Resource, begin : int = 0, length : Maybe
 
 		case .stream_write, .stream_read_write:
 			if cpu_state.gl_version >= .opengl_4_4 {
-				//Nothing happens, sync happen by the user (in the render lib)
-				access_buffer(resource.buffer, begin, byte_len, resource.usage, loc);
+				//If this is the first time it gets mapped persistently, then acctually map it.
+				if resource.persistent_mapped_data == nil {
+					//map the entire buffer
+					p_p := map_buffer_range(resource.buffer, resource.buffer_type, 0, resource.bytes_count, resource.usage, loc);
+					raw : runtime.Raw_Slice = {data = p_p, len = byte_len};
+					resource.persistent_mapped_data = transmute([]u8)raw;
+				}
+				else {
+					//if it has been mapped before use that mapping.
+					//Note that it is been accessed.
+					access_buffer(resource.buffer, begin, byte_len, resource.usage, loc);	
+				}
+				
+				//It still need to be offset correctly. We offset by begin.
+				p = &resource.persistent_mapped_data[begin];
+			
 			}
 			else {
 				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, byte_len, resource.usage, loc);
@@ -2252,10 +2387,10 @@ begin_buffer_write :: proc(resource : ^Resource, begin : int = 0, length : Maybe
 		
 		case .dynamic_write, .dynamic_read_write:
 			if cpu_state.gl_version >= .opengl_4_4 {
-				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, byte_len, resource.usage, loc);
+				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, byte_len, resource.usage, loc); //TODO this is the same as below
 			}
 			else {
-				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, byte_len, resource.usage, loc);
+				p = map_buffer_range(resource.buffer, resource.buffer_type, begin, byte_len, resource.usage, loc); //TODO same as above
 			}
 		
 		case .static_write, .static_read_write:
@@ -2270,9 +2405,9 @@ begin_buffer_write :: proc(resource : ^Resource, begin : int = 0, length : Maybe
 		case:
 			panic("Cannot write to a this buffer", loc);
 	}
-
+	
 	assert(p != nil, "No mapped data", loc);
-	raw : runtime.Raw_Slice = {data = p, len = resource.bytes_count}
+	raw : runtime.Raw_Slice = {data = p, len = byte_len}
 
 	return transmute([]u8)raw;
 }

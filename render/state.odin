@@ -12,7 +12,13 @@ import "gl"
 
 state : State;
 
+enable_preformence_warnings :: proc (warnings : bool) {
+	state.pref_warn = warnings;
+}
+
 State :: struct {
+
+	pref_warn : bool,
 	
 	//Input stuff
 	button_down 	: [Mouse_code]bool,

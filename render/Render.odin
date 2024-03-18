@@ -74,7 +74,7 @@ glfw_error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstrin
 }
 
 init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [Attribute_location]Attribute_info, shader_defines : map[string]string, 
-			window_desc : Maybe(Window_desc) = nil, required_gl_verion : Maybe(GL_version) = nil, render_context := context, loc := #caller_location) -> ^Window {
+			window_desc : Maybe(Window_desc) = nil, required_gl_verion : Maybe(GL_version) = nil, render_context := context, pref_warn := true, loc := #caller_location) -> ^Window {
 	
 	using gl;
 
@@ -96,9 +96,12 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 	}
 
 	state.is_init = true;
+	enable_preformence_warnings(pref_warn);
 
     // Set GLFW error callback
     glfw.SetErrorCallback(glfw_error_callback);
+
+	//SHOULD THIS BE A THING? glfw.WindowHint(glfw.REFRESH_RATE, glfw.DONT_CARE);
 
 	if required_verion, ok := required_gl_verion.?; ok {
 		if required_verion != nil {

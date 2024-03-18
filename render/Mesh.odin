@@ -79,7 +79,7 @@ destroy_mesh :: proc (mesh : Mesh_ptr) {
 		case ^Mesh_single:
 			destroy_mesh_single(v);
 		case ^Mesh_buffered:
-			panic("TODO"); 
+			destroy_mesh_buffered(v);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -118,7 +118,7 @@ draw_mesh :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, loc := #calle
 			draw_mesh_single(v, model_matrix, nil, loc);
 		case ^Mesh_buffered:
 			i := mesh_buffered_next_draw_source(v);
-			draw_mesh_buffered(v, model_matrix, i, nil, loc);
+			draw_mesh_buffered(v, model_matrix, i, loc = loc);
 		case ^Mesh_shared:
 			panic("TODO"); 
 	}
@@ -370,7 +370,70 @@ Mesh_buffered :: struct {
 	using desc : Mesh_desc,
 
 	backing : [dynamic]Backing_mesh,
-	current : int,
+	current_read : int,		//This is the mesh/buffers we are currently drawing from
+	current_write : int,	//This is the mesh/buffers we are currently reading from
+}
+
+@(require_results)
+//Passing 1 in buffering is allowed but not recommended, if this is a behavior you want use a Mesh_single.
+make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, loc := #caller_location) -> (mesh :Mesh_buffered) {
+	assert(buffering >= 1, "must have at least 1 buffer", loc);
+	assert(usage != .static_use, "A buffered mesh cannot be static", loc);
+
+	mesh.desc = Mesh_desc {	
+		vertex_count 	= vertex_size,
+		index_count 	= index_size,
+
+		data_type 		= data_type,
+		usage 			= usage,
+		indices_type 	= index_type,
+	};
+	
+	for i in 0..<buffering {
+		vertex_data_queue : queue.Queue(^Upload_data); //just always upload
+		index_data_queue  : queue.Queue(^Upload_data); //just always upload
+		queue.init(&vertex_data_queue);
+		queue.init(&index_data_queue);
+		b := Backing_mesh {
+			mesh = make_mesh_single_empty(vertex_size, data_type, index_size, index_type, usage),
+			vertex_data_queue = vertex_data_queue,
+			index_data_queue = index_data_queue, 
+		};
+
+		append(&mesh.backing, b);
+	}
+	mesh.current_read = 0;
+	mesh.current_write = 0;
+
+	return;
+}
+
+destroy_mesh_buffered :: proc (mesh : ^Mesh_buffered) {
+	
+	for &b in mesh.backing {
+		gl.discard_fence(&b.transfer_fence);
+		destroy_mesh_single(&b.mesh);
+		for queue.len(b.vertex_data_queue) != 0 {
+			d := queue.pop_front(&b.vertex_data_queue);
+			d.ref_cnt -= 1;
+			if d.ref_cnt == 0 {
+				delete(d.data);
+				free(d);
+			}
+		}
+		for queue.len(b.index_data_queue) != 0 {
+			d := queue.pop_front(&b.index_data_queue);
+			d.ref_cnt -= 1;
+			if d.ref_cnt == 0 {
+				delete(d.data);
+				free(d);
+			}
+		}
+		queue.destroy(&b.vertex_data_queue);
+		queue.destroy(&b.index_data_queue);
+	}
+
+	delete(mesh.backing);
 }
 
 upload_vertex_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_vertex : int, data : []$T, loc := #caller_location) {
@@ -385,11 +448,8 @@ upload_vertex_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_verte
 		queue.append(&b.vertex_data_queue, d);
 	}
 
-	//The current is used for drawing
-	//The current-1 is the one that is furthest away from being draw.
-	//Begin the upload to that
-	i := (mesh.current-1) %% len(mesh.backing);
-	upload_buffered_data(mesh, i);	//this will upload and placing a flag.
+	//Begin the upload
+	upload_buffered_data(mesh, mesh.current_write, loc = loc);	//this will upload and placing a flag.
 }
 
 upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : Indicies, loc := #caller_location) {
@@ -412,79 +472,81 @@ upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index 
 		queue.append(&b.index_data_queue, d);
 	}
 
-	//The current is used for drawing
-	//The current-1 is the one that is furthest away from being draw.
-	//Begin the upload to that
-	i := (mesh.current-1) %% len(mesh.backing);
-	upload_buffered_data(mesh, i);	//this will upload and placing a flag.
+	//Begin the upload
+	upload_buffered_data(mesh, mesh.current_write, loc = loc);	//this will upload and placing a flag.
 }
 
-mesh_buffered_next_draw_source :: proc (using mesh_buffer : ^Mesh_buffered) -> int {
+//TODO make a resize_mesh_bufferd
 
-	//if the one in front is ready to draw from and something is pending on the current
-	//current += 1;
-	if gl.is_fence_ready(backing[current].transfer_fence) {
-		current = (current-1) %% len(backing);
+@(require_results)
+//This will swap buffers, upload data and return the buffer index that should be used to draw with.
+mesh_buffered_next_draw_source :: proc (using mesh_buffer : ^Mesh_buffered, loc := #caller_location) -> int {
+	
+	if len(backing) == 1 {
+		return 0; //We don't need to upload and we don't need to sync
+	}
+ 
+	//Move upload forward
+	next_write := (current_write+1) %% len(backing);
+	if gl.is_fence_ready(backing[next_write].read_fence) {
+		current_write = next_write;
+		//fmt.printf("Next write is ready, moving to %i\n", next_write);
+		
+		//upload data and move to next if free
+		upload_buffered_data(mesh_buffer, current_write, loc = loc);
+		assert(queue.len(mesh_buffer.backing[current_write].index_data_queue) == 0, "Data was not cleared?");
+		assert(queue.len(mesh_buffer.backing[current_write].vertex_data_queue) == 0, "Data was not cleared?");
+		
+		//next_write = (next_write+1) %% len(backing);
+		//if current_write == current_read || next_write == current_read {
+		//	break;
+		//}
+	}
+	
+	//Move read/draw forward
+	next_read := (current_read+1) %% len(backing);
+	if gl.is_fence_ready(backing[next_read].transfer_fence) {
+		current_read = next_read;
+		//fmt.printf("Next read is ready, moving to %i\n", next_read);
+
+		//next_read = (next_read+1) %% len(backing);
+		//if current_read == current_write || next_read == current_write {
+		//	break;
+		//}
 	}
 
-	//Move forward, begin upload on the old current (so current-1)
-	i := (current-1) %% len(backing);
-	upload_buffered_data(mesh_buffer, i);
+	//fmt.printf("\n");
 
-	return current;
+	return current_read;
 }
 
+//make sure that the draw_range and draw_source fits each other.
+//The server side (GPU) might not have the newest update of the draw_source yet.
 draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[4,4]f32, draw_source : int, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
-
-	draw_mesh_single(&mesh_buffer.backing[draw_source].mesh, model_matrix, draw_range, loc);
-
-	//place read flag. (if not placed, aka stream_use???)
-
-	//Complications
-		//If draw_range is set to non-nil, then we might draw from invalid memory. since that user specifies in terms of the newly uploaded data.
-		//if that is the case, then they should also specify what mesh(buffer) they want to draw from.
-		//That way we can make it work if the user is nice to us.
-		//get_ready_draw_source will return the mesh source that is ready to draw with.
-		//This also means that we can ensure that we draw with the same buffer for the entire frame
-		//If that is the case then we must not move the current in the draw_mesh_buffered, because that will make the old one begin uploading
-		//BUT get_ready_draw_source can move the current forward, so it basicly just splitting the functions in 2 parts.
 	
-}
-
-
-
-
-/*
-
-	//Find free mesh
-	to_update : Backing_mesh;
-	index : int = -1;
-	for m, i in mesh.backing {
-		if gl.is_fence_ready(m.mesh.read_fence) {
-			//There is nothing currently drawing from this.
-			//So we can update it.
-			to_update = m;
-			index = i;
-			break;
+	mesh := &mesh_buffer.backing[draw_source];
+	
+	if len(mesh_buffer.backing) != 1 {
+		when ODIN_DEBUG {
+			if !gl.is_fence_ready(mesh.transfer_fence) {
+				if state.pref_warn { log.warnf("Preformence warning: waiting for mesh transfer. Caller location : %v", loc); };
+				for !gl.is_fence_ready(mesh.transfer_fence) {}; //keep waiting
+			}
+		}
+		else {
+			for !gl.is_fence_ready(mesh.transfer_fence) {}; //keep waiting
 		}
 	}
 
-	if index == -1 {
-		//There is no mesh that is currently not used for drawing.
-	}
-
-	//update mesh
-	upload_vertex_data_single(&to_update.mesh, start_vertex, data, loc);
+	draw_mesh_single(mesh, model_matrix, draw_range, loc);
 	
-	//TODO what about the other meshes?
-
-	//move to front, this also updates the backing mesh in the array.
-	//ordered_remove(&mesh.backing, index);
-	//inject_at_elem(&mesh.backing, 0, to_update);
-*/
-
-
+	if len(mesh_buffer.backing) != 1 {
+		//TODO if we are streaming the flag will be placed twice.
+		gl.discard_fence(&mesh.read_fence);
+		mesh.read_fence = gl.place_fence();
+	}
+}
 
 
 
@@ -662,10 +724,9 @@ upload_mesh_resource_bytes :: proc(usage : Usage, resource : ^gl.Resource, data 
 			gl.buffer_upload_sub_data(resource, byte_size * start, data);
 		case .stream_use:
 			dst : []u8 = gl.begin_buffer_write(resource, byte_size * start, len(data));
-			assert(len(dst) == len(data), "length of buffer and length of data does not match", loc);
+			fmt.assertf(len(dst) == len(data), "length of buffer and length of data does not match. dst : %i, data : %i", len(dst), len(data), loc = loc);
 			mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst)); //TODO this mapping and unmapping is not nice when we upload multiple time a frame... in the mesh share for example.
 			gl.end_buffer_writes(resource);
-			panic("raw_data(dst) is not offset");
 	}
 }
 
@@ -684,62 +745,70 @@ Backing_mesh :: struct {
 
 @(private)
 //Used internally
-upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int) {
+upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller_location) {
 
 	backing := &mesh.backing[index];
+	
+	if queue.len(backing.index_data_queue) != 0 || queue.len(backing.vertex_data_queue) != 0 {
 
-	//Upload vertex data
-	{
-		byte_size := reflect.size_of_typeid(mesh.data_type);
-		for queue.len(backing.vertex_data_queue) != 0 {
-			
-			data := queue.pop_front(&backing.vertex_data_queue);
+		if !gl.is_fence_ready(backing.read_fence) {
+			if state.pref_warn { log.warnf("Preformence warning: waiting for mesh drawing %i before uploading new data, caller location : %v", index, loc); };
+			for !gl.is_fence_ready(backing.read_fence) {};
+		}
 
-			//Then upload
-			upload_mesh_resource_bytes(mesh.usage, &backing.mesh.vertex_data, data.data, byte_size, data.start_index);
+		//Upload vertex data
+		{
+			byte_size := reflect.size_of_typeid(mesh.data_type);
+			for queue.len(backing.vertex_data_queue) != 0 {
+				
+				data := queue.pop_front(&backing.vertex_data_queue);
 
-			data.ref_cnt -= 1;
+				//Then upload
+				upload_mesh_resource_bytes(mesh.usage, &backing.mesh.vertex_data, data.data, byte_size, data.start_index);
 
-			if data.ref_cnt == 0 {
-				delete(data.data);
-				free(data);
+				data.ref_cnt -= 1;
+
+				if data.ref_cnt == 0 {
+					delete(data.data);
+					free(data);
+				}
 			}
 		}
-	}
 
-	//Upload index data
-	{
-		byte_size : int = 0;
-		switch mesh.indices_type {
-			case .no_index_buffer:
-				byte_size = 0;
-			case .unsigned_short:
-				byte_size = size_of(u16);
-			case .unsigned_int:
-				byte_size = size_of(u32);
-		}
-		for queue.len(backing.index_data_queue) != 0 {
-			
-			data := queue.pop_front(&backing.index_data_queue);
+		//Upload index data
+		{
+			byte_size : int = 0;
+			switch mesh.indices_type {
+				case .no_index_buffer:
+					byte_size = 0;
+				case .unsigned_short:
+					byte_size = size_of(u16);
+				case .unsigned_int:
+					byte_size = size_of(u32);
+			}
+			for queue.len(backing.index_data_queue) != 0 {
+				
+				data := queue.pop_front(&backing.index_data_queue);
 
-			//Then upload
-			indicies, ok := &backing.mesh.indices_buf.(gl.Resource);
-			assert(ok);
-			assert(byte_size != 0);
-			upload_mesh_resource_bytes(mesh.usage, indicies, data.data, byte_size, data.start_index);
+				//Then upload
+				indicies, ok := &backing.mesh.indices_buf.(gl.Resource);
+				assert(ok);
+				assert(byte_size != 0);
+				upload_mesh_resource_bytes(mesh.usage, indicies, data.data, byte_size, data.start_index);
 
-			data.ref_cnt -= 1;
+				data.ref_cnt -= 1;
 
-			if data.ref_cnt == 0 {
-				delete(data.data);
-				free(data);
+				if data.ref_cnt == 0 {
+					delete(data.data);
+					free(data);
+				}
 			}
 		}
-	}
 
-	//Place a flag
-	gl.discard_fence(&backing.transfer_fence);
-	backing.transfer_fence = gl.place_fence();
+		//Place a flag
+		gl.discard_fence(&backing.transfer_fence);
+		backing.transfer_fence = gl.place_fence();
+	}
 }
 
 
