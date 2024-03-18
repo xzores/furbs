@@ -41,16 +41,8 @@ Texg_id :: distinct u32; //generic for all textures
 Rbo_id :: distinct u32;
 Buffer_id :: distinct i32; //used for generic buffers, like VBO's and EBO's
 
-when RENDER_DEBUG {
-	Fence :: struct {
-		sync : gl.GLsync,
-		access_map : map[Buffer_id][dynamic]^Buffer_access,
-	}
-}
-else {
-	Fence :: struct {
-		sync : gl.GLsync,
-	}
+Fence :: struct {
+	sync : gl.GLsync,
 }
 
 MAX_COLOR_ATTACH :: 8; //If we use opengl 3.0 we can only have 4 color attachements here.
@@ -1000,20 +992,20 @@ destroy_state :: proc (state : GL_states_comb) {
 }
 
 debug_callback : gl.debug_proc_t : proc "c" (source: gl.GLenum, type: gl.GLenum, id: gl.GLuint, severity: gl.GLenum, length: gl.GLsizei, message: cstring, user_param : rawptr) {
-	context = runtime.default_context();
+	context = _gl_context;
     // Print or handle the debug message here
 
-	if severity == .DEBUG_SEVERITY_LOW {
-    	log.debugf("From %v, OpenGL Debug Message: %.*s", source, length, message);
-	}
-	else if severity == .DEBUG_SEVERITY_MEDIUM {
-		log.infof("From %v, OpenGL Debug Message: %.*s", source, length, message);
-	}
-	else if severity == .DEBUG_SEVERITY_HIGH {
-		log.warnf("From %v, OpenGL Debug Message: %.*s", source, length, message);
-	}
-	else {
-		panic("Unhandled severity");
+	#partial switch severity {
+		case .DEBUG_SEVERITY_NOTIFICATION:
+			log.debugf("From %v, OpenGL Debug Message: %.*s", source, length, message);
+	 	case .DEBUG_SEVERITY_LOW:
+    		log.infof("From %v, OpenGL Debug Message: %.*s", source, length, message);
+		case .DEBUG_SEVERITY_MEDIUM:
+			log.warnf("From %v, OpenGL Debug Message: %.*s", source, length, message);
+		case .DEBUG_SEVERITY_HIGH:
+			log.errorf("From %v, OpenGL Debug Message: %.*s", source, length, message);
+		case:
+			fmt.panicf("Unhandled severity : %v", severity);
 	}
 }
 
@@ -1062,7 +1054,7 @@ init :: proc(gl_context := context) {
 			gl.Enable(.DEBUG_OUTPUT_SYNCHRONOUS);
 
 			// Set up debug callback function
-			//gl.DebugMessageCallback(debug_callback, nil);
+			gl.DebugMessageCallback(debug_callback, nil);
 
 			// Optionally, specify debug message control
 			//gl.DebugMessageControl(.DONT_CARE, .DONT_CARE, .DONT_CARE, 0, nil, true);
@@ -1146,6 +1138,7 @@ destroy :: proc(loc := #caller_location) -> (leaks : int) {
 
 	return;
 }
+
 
 /////////// recording ///////////
 
@@ -2076,26 +2069,7 @@ place_fence :: proc (loc := #caller_location) -> Fence {
 		panic("failed to create sync object");
 	}
 
-	when RENDER_DEBUG {	
-		//add all current access to the sync object, when the sync object gets synced we can remove them from the global list.
-		access_map := make(map[Buffer_id][dynamic]^Buffer_access);
-		
-		for buffer, accessed_list in debug_state.accessed_buffers {
-
-			new_access_list := make([dynamic]^Buffer_access);
-
-			for access in accessed_list {
-				append(&new_access_list, access);
-			}
-
-			access_map[buffer] = new_access_list;
-		}
-		
-		return Fence{fence_id, access_map};
-	}
-	else {
-		return Fence{fence_id};
-	}
+	return Fence{fence_id};
 }
 
 //non-blocking, return if the fence is ready to be synced. Returns true if sync_fence will be non-blocking.
@@ -2118,7 +2092,6 @@ sync_fence :: proc (fence : ^Fence) {
 	waitResult : gl.GLenum;
 	
 	for true {
-		
 		waitResult = gl.ClientWaitSync(fence.sync, auto_cast gl.SYNC_FLUSH_COMMANDS_BIT, 1000000000); // 1 second timeout
 		
         if waitResult == auto_cast gl.ALREADY_SIGNALED || waitResult == auto_cast gl.CONDITION_SATISFIED {
@@ -2139,104 +2112,18 @@ sync_fence :: proc (fence : ^Fence) {
 }
 
 discard_fence :: proc(fence : ^Fence, loc := #caller_location){
-
+	
 	when RENDER_DEBUG {
-		
-		for buffer, list in fence.access_map {
-			
-			for access in list {
-				index, found := slice.linear_search(debug_state.accessed_buffers[buffer][:], access)
-				assert(found, "access not found", loc); //TODO many fences can have the same access, how do we handle?
-				unordered_remove(&debug_state.accessed_buffers[buffer], index);
-				free(access);
-			}
-
-			delete(list);
-			if len(debug_state.accessed_buffers[buffer]) == 0 {
-				delete(debug_state.accessed_buffers[buffer]);
-				delete_key(&debug_state.accessed_buffers, buffer);
-			}
-
-			delete_key(&fence.access_map, buffer);
-		}
-		
-		assert(len(fence.access_map) == 0);
-		delete(fence.access_map);
 		delete_key(&debug_state.syncs, fence.sync);
 	}
 
-	gl.DeleteSync(fence.sync);
-
+	if fence.sync != nil {
+		gl.DeleteSync(fence.sync);
+	}
 	fence^ = {};
 }
 
-//Used for debuging, it makes sures that you don't access a part of the buffer that has not been fenced.
-access_buffer :: proc (buffer : Buffer_id, offset, length : int, usage : Resource_usage, loc := #caller_location) {
-	
-	when RENDER_DEBUG {	
-
-		collides_with_offset_length :: proc (a, b : [2]int) -> bool {
-			
-			if a.x == b.x {
-				return true;
-			}
-			else if a.x < b.x {
-				if a.x + a.y > b.x {
-					return true;
-				}
-			}
-			else {	//a.x > b.x
-				if b.x + b.y > a.x {
-					return true;
-				}
-			}
-
-			return false;
-		}
-		
-		is_accessing : bool = false;
-		
-		switch usage {
-			case .stream_read, .dynamic_read, .static_read:
-				is_accessing = true;
-
-			case .stream_write, .dynamic_write, .static_write:
-				is_accessing = true;
-
-			case .stream_read_write, .dynamic_read_write, .static_read_write:
-				is_accessing = true;
-
-			case .stream_host_only, .dynamic_host_only, .static_host_only:
-				panic("Cannot map a host only buffer", loc);
-		}
-		
-		//if we are accessing now, check if something is currently using from the buffer.
-		if is_accessing && buffer in debug_state.accessed_buffers {
-			for access in debug_state.accessed_buffers[buffer] {
-				if collides_with_offset_length({offset, length}, access.offset_length) {
-					//this buffer has been accessed
-					fmt.panicf("You are already accessing this buffer from %v\ncreate a sync point before accessing again\n", access.location, loc = loc);
-				}
-			}
-		}
-
-		assert(is_accessing == true);
-
-		//Place a note that this is currently accessed.
-		if is_accessing {
-			buf_ac := new(Buffer_access);
-			buf_ac^ = Buffer_access{loc, {offset, length}};
-			if debug_state.accessed_buffers[buffer] == nil {
-				debug_state.accessed_buffers[buffer] = make([dynamic]^Buffer_access, loc = loc);
-			}
-			append(&debug_state.accessed_buffers[buffer], buf_ac);
-		}
-	}
-}
-
 map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type,  #any_int offset, length : int, usage : Resource_usage, loc := #caller_location) -> (p : rawptr) {
-
-	access_buffer(buffer, offset, length, usage, loc);
 
 	if cpu_state.gl_version >= .opengl_4_5 {
 		_, map_flags := translate_resource_usage_4_4(usage);
@@ -2261,7 +2148,7 @@ map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type,  #any_i
 unmap_buffer :: proc (buffer : Buffer_id, buffer_type : Buffer_type, loc := #caller_location) {
 
 	if cpu_state.gl_version >= .opengl_4_5 {
-		gl.UnmapNamedBuffer(auto_cast buffer, loc);
+		gl.UnmapNamedBuffer(auto_cast buffer);
 	}
 	else {
 		bind_buffer(buffer_type, buffer);
@@ -2370,11 +2257,6 @@ begin_buffer_write :: proc(resource : ^Resource, begin : int = 0, length : Maybe
 					p_p := map_buffer_range(resource.buffer, resource.buffer_type, 0, resource.bytes_count, resource.usage, loc);
 					raw : runtime.Raw_Slice = {data = p_p, len = byte_len};
 					resource.persistent_mapped_data = transmute([]u8)raw;
-				}
-				else {
-					//if it has been mapped before use that mapping.
-					//Note that it is been accessed.
-					access_buffer(resource.buffer, begin, byte_len, resource.usage, loc);	
 				}
 				
 				//It still need to be offset correctly. We offset by begin.

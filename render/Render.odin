@@ -347,7 +347,7 @@ end_frame :: proc(loc := #caller_location) {
 	_make_context_current(nil);	
 	_swap_buffers(loc, state.owner_context);
 	glfw.PollEvents();
-
+	
 	end_inputs();
 }
 

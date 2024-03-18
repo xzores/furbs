@@ -410,8 +410,7 @@ make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : t
 
 destroy_mesh_buffered :: proc (mesh : ^Mesh_buffered) {
 	
-	for &b in mesh.backing {
-		gl.discard_fence(&b.transfer_fence);
+	for &b in &mesh.backing {
 		destroy_mesh_single(&b.mesh);
 		for queue.len(b.vertex_data_queue) != 0 {
 			d := queue.pop_front(&b.vertex_data_queue);
@@ -431,6 +430,7 @@ destroy_mesh_buffered :: proc (mesh : ^Mesh_buffered) {
 		}
 		queue.destroy(&b.vertex_data_queue);
 		queue.destroy(&b.index_data_queue);
+		gl.discard_fence(&b.transfer_fence);
 	}
 
 	delete(mesh.backing);
@@ -538,11 +538,10 @@ draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[
 			for !gl.is_fence_ready(mesh.transfer_fence) {}; //keep waiting
 		}
 	}
-
+	
 	draw_mesh_single(mesh, model_matrix, draw_range, loc);
 	
-	if len(mesh_buffer.backing) != 1 {
-		//TODO if we are streaming the flag will be placed twice.
+	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use{
 		gl.discard_fence(&mesh.read_fence);
 		mesh.read_fence = gl.place_fence();
 	}
@@ -747,7 +746,7 @@ Backing_mesh :: struct {
 //Used internally
 upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller_location) {
 
-	backing := &mesh.backing[index];
+	backing : ^Backing_mesh = &mesh.backing[index];
 	
 	if queue.len(backing.index_data_queue) != 0 || queue.len(backing.vertex_data_queue) != 0 {
 
@@ -804,7 +803,7 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 				}
 			}
 		}
-
+		
 		//Place a flag
 		gl.discard_fence(&backing.transfer_fence);
 		backing.transfer_fence = gl.place_fence();
