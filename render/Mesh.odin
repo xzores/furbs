@@ -53,6 +53,14 @@ Usage :: enum {
 	stream_use	= auto_cast gl.Resource_usage.stream_write,		//Will use persistent mapped buffer and fallback to unsyncronized mapped buffers.
 }
 
+Instance_usage :: enum {
+	dynamic_upload = auto_cast gl.Resource_usage.dynamic_write,	//Will use BufferSubData for updates
+	stream_upload	= auto_cast gl.Resource_usage.stream_write,		//Will use persistent mapped buffer and fallback to unsyncronized mapped buffers.
+
+	dynamic_copy = auto_cast gl.Resource_usage.dynamic_host_only,	//Will use BufferSubData for updates
+	stream_copy	= auto_cast gl.Resource_usage.stream_host_only,		//Will use persistent mapped buffer and fallback to unsyncronized mapped buffers.
+}
+
 Indicies :: union {
 	[]u16,
 	[]u32,
@@ -124,25 +132,45 @@ draw_mesh :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, loc := #calle
 	}
 }
 
+draw_mesh_instanced :: proc (mesh : Mesh_ptr, #any_int instance_cnt : int, loc := #caller_location) {
+	switch v in mesh {
+		case ^Mesh_single:
+			draw_mesh_single_instanced(v, instance_cnt, nil, loc);
+		case ^Mesh_buffered:
+			panic("TODO"); 
+		case ^Mesh_shared:
+			panic("TODO"); 
+	}
+}
 
 ////////////////////////////// Single mesh //////////////////////////////
+
+Instance_data_desc :: struct {
+	data_type : typeid,
+	data_points : int,
+	usage : Instance_usage,
+}
+
+Instance_data :: struct {
+	data : gl.Resource,
+	using desc : Instance_data_desc,
+}
 
 Mesh_single :: struct {
 	
 	using desc 		: Mesh_desc,
-
-	//TODO bouding_distance for culling??
 	
-	vao : Vao_id,						//The VAO
-	vertex_data : gl.Resource,			//Vertex data is required
-	indices_buf : Maybe(gl.Resource),	//Using indicies is optional
-	read_fence : gl.Fence, 				//Only used when streaming. When fence is signaled then we are done reading.
+	vao : Vao_id,							//The VAO
+	vertex_data : gl.Resource,				//Vertex data is required
+	indices_buf : Maybe(gl.Resource),		//Using indicies is optional //TODO maybe rename "buf" to "data"
+	instance_data : Maybe(Instance_data),	//Using instace data is optional
+	read_fence : gl.Fence, 					//Only used when streaming. When fence is signaled then we are done reading.
 }
 
 //Index_data may be nil if there should be no incidies. 
 @(require_results)
-make_mesh_single :: proc (vertex_data : []$T, index_data : Indicies, usage : Usage, loc := #caller_location) -> (mesh : Mesh_single) {
-
+make_mesh_single :: proc (vertex_data : []$T, index_data : Indicies, usage : Usage, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
+	
 	mesh.vertex_count = len(vertex_data);
 	mesh.data_type = T;
 	mesh.usage = usage;
@@ -167,14 +195,14 @@ make_mesh_single :: proc (vertex_data : []$T, index_data : Indicies, usage : Usa
 			mesh_index_buf_data = nil;
 	}
 	
-	setup_mesh_single(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, loc);
+	setup_mesh_single(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, instance, loc);
 
 	return;
 }
 
 //Makes a mesh_single without data
 @(require_results)
-make_mesh_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, loc := #caller_location) -> (mesh : Mesh_single) {
+make_mesh_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
 
 	if index_type != .no_index_buffer {
 		assert(index_size != 0, "index size must not be 0, if index_type is not no_index_buffer", loc);
@@ -190,7 +218,7 @@ make_mesh_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, 
 	mesh.index_count = index_size;
 	mesh.indices_type = index_type;
 	
-	setup_mesh_single(&mesh, nil, nil, loc);
+	setup_mesh_single(&mesh, nil, nil, instance, loc);
 
 	return;
 }
@@ -294,17 +322,61 @@ upload_index_data_single :: proc(mesh : ^Mesh_single, #any_int start_index : int
 	}
 }
 
+upload_instance_data_single :: proc(mesha : ^Mesh_single, #any_int start_index : int, data : []$T, loc := #caller_location) {
+	assert(start_index >= 0, "start_index cannot be negative", loc);
+
+	if instance_data, ok := &mesha.instance_data.?; ok {
+		assert(T == instance_data.data_type, "The data type you are trying to upload does not match the meshes data type", loc);
+		byte_size := reflect.size_of_typeid(instance_data.data_type);
+		fmt.assertf(instance_data.data.bytes_count == instance_data.data_points * byte_size, "internal error : %v, %v", instance_data.data.bytes_count, instance_data.data_points * byte_size, loc);
+		assert(instance_data.data.bytes_count >= (len(data) + start_index) * byte_size, "data out of bounds", loc);
+		
+		//TODO needed?
+		/*
+		when ODIN_DEBUG {
+			if (instance_data.usage == .stream_upload ||  instance_data.usage == .stream_copy)  && !gl.is_fence_ready(mesh.read_fence) {
+				log.warnf("Preformence warning: upload_instance_data_single sync is not ready\n");
+			}
+		}
+		
+		if instance_data.usage == .stream_upload || instance_data.usage == .stream_upload {
+			gl.sync_fence(&mesh.read_fence);
+		}
+		*/
+
+		byte_data := slice.reinterpret([]u8, data);
+
+		//Then upload
+		switch instance_data.usage {				
+			case .dynamic_upload, .dynamic_copy:
+				gl.buffer_upload_sub_data(&instance_data.data, byte_size * start_index, byte_data);
+			case .stream_upload, .stream_copy:
+				gl.buffer_upload_sub_data(&instance_data.data, byte_size * start_index, byte_data);
+				/* TODO!
+				dst : []u8 = gl.begin_buffer_write(resource, byte_size * start_index, len(data));
+				fmt.assertf(len(dst) == len(data), "length of buffer and length of data does not match. dst : %i, data : %i", len(dst), len(data), loc = loc);
+				mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst)); //TODO this mapping and unmapping is not nice when we upload multiple time a frame... in the mesh share for example.
+				gl.end_buffer_writes(resource);
+				*/
+		}
+	} else { 
+		panic("This mesh is not instanced");
+	}
+}
+
+//Internal use only
+@(private)
+remake_resource :: proc (old_res : gl.Resource, new_size : int) -> gl.Resource {
+	new_desc := old_res.desc;
+	new_desc.bytes_count = new_size;
+	new_res := gl.make_resource_desc(new_desc, nil);
+	gl.copy_buffer_sub_data(old_res.buffer, new_res.buffer, 0, 0, math.min(new_res.bytes_count, old_res.bytes_count));
+	gl.destroy_resource(old_res);
+	return new_res;
+}
+
 //TODO test
 resize_mesh_single :: proc(mesh : ^Mesh_single, new_vert_size, new_index_size : int, loc := #caller_location) {
-
-	remake_resource :: proc (old_res : gl.Resource, new_size : int) -> gl.Resource {
-		new_desc := old_res.desc;
-		new_desc.bytes_count = new_size;
-		new_res := gl.make_resource_desc(new_desc, nil);
-		gl.copy_buffer_sub_data(old_res.buffer, new_res.buffer, 0, 0, math.min(new_res.bytes_count, old_res.bytes_count));
-		gl.destroy_resource(old_res);
-		return new_res;
-	}
 
 	mesh.vertex_data = remake_resource(mesh.vertex_data, new_vert_size);
 
@@ -324,9 +396,19 @@ resize_mesh_single :: proc(mesh : ^Mesh_single, new_vert_size, new_index_size : 
 	panic("TODO this will not work for streaming buffers");
 }
 
+resize_mesh_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, loc := #caller_location) {
+	if instance, ok := &mesh.instance_data.?; ok {
+		instance.data = remake_resource(instance.data, instance_size);
+	}
+	else {
+		panic("This mesh is not instanced");
+	}
+}
+
 draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
-	
+	assert(mesh.instance_data == nil, "This is an instanced mesh, use the draw_*_instanced function.", loc)
+
 	vertex_count := mesh.vertex_count;
 	index_count := mesh.index_count;
 	if r, ok := draw_range.?; ok {
@@ -342,10 +424,47 @@ draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, dr
 	
 	switch mesh.indices_type {
 		case .no_index_buffer:
-			gl.draw_arrays(mesh.vao, .triangles, 0, vertex_count);
+			gl.draw_arrays(mesh.vao, .triangles, 0, vertex_count); //TODO triangles should be an option
 		case .unsigned_short, .unsigned_int:
 			if i_buf, ok := mesh.indices_buf.?; ok {
-				gl.draw_elements(mesh.vao, .triangles, index_count, mesh.indices_type, i_buf.buffer);
+				gl.draw_elements(mesh.vao, .triangles, index_count, mesh.indices_type, i_buf.buffer);//TODO triangles should be an option
+			}
+			else {
+				panic("The mesh does not have a index buffer", loc);
+			}
+	}
+
+	if mesh.usage == .stream_use {
+		gl.discard_fence(&mesh.read_fence);
+		mesh.read_fence = gl.place_fence();
+	}
+}
+
+draw_mesh_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt : i32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
+	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
+	assert(mesh.instance_data != nil, "This is an not an instanced mesh", loc);
+
+	vertex_count := mesh.vertex_count;
+	index_count := mesh.index_count;
+	if r, ok := draw_range.?; ok {
+		vertex_count = r.y - r.x;
+		index_count = r.y - r.x;
+	}
+
+
+	model_matrix : matrix[4,4]f32 = 1;
+	set_uniform(state.bound_shader, .model_mat, model_matrix);
+	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
+	mvp := state.prj_view_mat * model_matrix;
+	set_uniform(state.bound_shader, .mvp, mvp);
+	set_uniform(state.bound_shader, .inv_mvp, linalg.matrix4_inverse(mvp));
+	
+	switch mesh.indices_type {
+		case .no_index_buffer:
+			gl.draw_arrays_instanced(mesh.vao, .triangles, 0, vertex_count, instance_cnt); //TODO triangles should be an option
+		case .unsigned_short, .unsigned_int:
+			if i_buf, ok := mesh.indices_buf.?; ok {
+				gl.draw_elements_instanced(mesh.vao, .triangles, index_count, mesh.indices_type, i_buf.buffer, instance_cnt); //TODO triangles should be an option
 			}
 			else {
 				panic("The mesh does not have a index buffer", loc);
@@ -360,11 +479,8 @@ draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, dr
 
 
 
-
-
-
-
 ////////////////////////////// Buffered mesh //////////////////////////////
+
 
 Mesh_buffered :: struct {
 	using desc : Mesh_desc,
@@ -447,9 +563,6 @@ upload_vertex_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_verte
 	for &b in mesh.backing {
 		queue.append(&b.vertex_data_queue, d);
 	}
-
-	//Begin the upload
-	upload_buffered_data(mesh, mesh.current_write, loc = loc);	//this will upload and placing a flag.
 }
 
 upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : Indicies, loc := #caller_location) {
@@ -471,18 +584,20 @@ upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index 
 	for &b in mesh.backing {
 		queue.append(&b.index_data_queue, d);
 	}
-
-	//Begin the upload
-	upload_buffered_data(mesh, mesh.current_write, loc = loc);	//this will upload and placing a flag.
 }
 
 //TODO make a resize_mesh_bufferd
+resize_mesh_bufferd :: proc (mesh_buffer : ^Mesh_buffered, new_vertex_size : int, new_index_size : int) {
+	mesh_buffer.vertex_count = new_vertex_size;
+	mesh_buffer.index_count = new_index_size;
+}
 
 @(require_results)
 //This will swap buffers, upload data and return the buffer index that should be used to draw with.
 mesh_buffered_next_draw_source :: proc (using mesh_buffer : ^Mesh_buffered, loc := #caller_location) -> int {
 	
 	if len(backing) == 1 {
+		upload_buffered_data(mesh_buffer, 0);
 		return 0; //We don't need to upload and we don't need to sync
 	}
  
@@ -541,43 +656,106 @@ draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[
 	
 	draw_mesh_single(mesh, model_matrix, draw_range, loc);
 	
-	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use{
+	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use {
 		gl.discard_fence(&mesh.read_fence);
 		mesh.read_fence = gl.place_fence();
 	}
 }
 
-
-
-
 ////////////////////////////// Instaced mesh //////////////////////////////
 
 
+//TODO make an instancecd mesh. This needs to be done before shared mesh so that we know how the shared mesh should handle it.
+//Try and see if we can do it without adding extra data to the mesh_singled and mesh_buffered.
+//if not then it must be a maybe.
+
+//We don't want to keep the instance data on the VAO, we keep it seperate
+
+//bindVao
+
+//bindBuffer				//bind the instance data buffer
+//vertexAtribbPointer		//Setup the data
+//enableVertexAttribArray	//Enable that attrib
+
+//disableVertexAttribArray //Then we just call this???
+//glVertexAttribPointer(null) //This is unassociate it
 
 
 
 
+@(require_results)
+make_instance_data :: proc (data_type : typeid, #any_int instance_count : int, usage : Usage, loc := #caller_location) -> Instance_data {
+	assert(usage != .static_use, "usage cannot be static", loc);
 
+	instance : Instance_data = {
+		data = gl.make_resource(instance_count * reflect.size_of_typeid(data_type), .array_buffer, cast(gl.Resource_usage)usage, nil),
+	}
+	
+	return instance;
+}
 
+upload_instance_data :: proc (instance : ^Instance_data, data : []$T, #any_int start : int) {
+	assert(instance.data_type == T, "Data type does not match", loc);
+	
+	switch usage {
+		case .static_use:
+			panic("Cannot upload to a static mesh");
+		case .dynamic_use:
+			gl.buffer_upload_sub_data(resource, byte_size * start, data);
+		case .stream_use:
+			dst : []u8 = gl.begin_buffer_write(resource, byte_size * start, len(data));
+			fmt.assertf(len(dst) == len(data), "length of buffer and length of data does not match. dst : %i, data : %i", len(dst), len(data), loc = loc);
+			mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst)); //TODO this mapping and unmapping is not nice when we upload multiple time a frame... in the mesh share for example.
+			gl.end_buffer_writes(resource);
+	}
+}
 
+draw_mesh_buffered_instanced :: proc (mesh : ^Mesh_buffered, instance_data : Instance_data, #any_int instance_cnt : int, loc := #caller_location) {
+	/*assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
+	
+	mesh := &mesh_buffer.backing[draw_source];
+	
+	if len(mesh_buffer.backing) != 1 {
+		when ODIN_DEBUG {
+			if !gl.is_fence_ready(mesh.transfer_fence) {
+				if state.pref_warn { log.warnf("Preformence warning: waiting for mesh transfer. Caller location : %v", loc); };
+				for !gl.is_fence_ready(mesh.transfer_fence) {}; //keep waiting
+			}
+		}
+		else {
+			for !gl.is_fence_ready(mesh.transfer_fence) {}; //keep waiting
+		}
+	}
+	
+	draw_mesh_single_instanced(mesh, instance_data, instance_cnt, loc);
+	
+	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use{
+		gl.discard_fence(&mesh.read_fence);
+		mesh.read_fence = gl.place_fence();
+	}*/
+	panic("TODO");
+}
 
-
+draw_mesh_shared_instanced :: proc (mesh : ^Mesh_shared, instance_data : Instance_data, loc := #caller_location) {
+	panic("TODO");
+}
 
 
 
 ////////////////////////////// Shared mesh //////////////////////////////
 
+Shared_mesh_buffer :: struct {
+	using _ : Mesh_buffered,
+}
+
 //This is an implementation for a mesh, this will point to a mesh share (^Shared_mesh_buffer).
 //Used internally
 Mesh_shared :: struct {
-	//TODO share : ^Shared_mesh_buffer,
+	share : ^Shared_mesh_buffer,
 
 	verts_range : [2]int,
 	index_range : [2]int,
-
-	//fence : gl.Fence, //Only used when streaming.
 }
-
 
 
 
@@ -668,7 +846,7 @@ get_attribute_info_from_typeid :: proc (t : typeid, loc := #caller_location) -> 
 //Used internally for setup up a resource for a mesh
 //Nil may be passed for init_vertex_data and init_index_data. 
 //If they are not nil, then the len must match that of mesh.vertex_cnt and mesh.index_count respectively.
-setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_index_data : []u8, loc := #caller_location) {
+setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_index_data : []u8, instance : Maybe(Instance_data_desc), loc := #caller_location) {
 
 	assert(mesh.vao == 0, "This mesh is not clean... what are you doing?");
 
@@ -683,9 +861,11 @@ setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_in
 
 	mesh.vao = gl.gen_vertex_array();
 
+	//The vertex data
 	mesh.vertex_data = gl.make_resource_desc(desc, init_vertex_data, loc);
-	gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, loc);
+	gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, 0, loc);
 
+	//The indicies
 	switch mesh.indices_type {
 
 		case .no_index_buffer:
@@ -708,7 +888,21 @@ setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_in
 				buffer_type = .element_array_buffer,
 				bytes_count = mesh.index_count * s,
 			}
-			mesh.indices_buf = gl.make_resource_desc(index_desc, init_index_data, loc);
+			indices_buf := gl.make_resource_desc(index_desc, init_index_data, loc);
+
+			gl.associate_index_buffer_with_vao(mesh.vao, indices_buf.buffer);
+			mesh.indices_buf = indices_buf;
+	}
+
+	//The optional instance data
+	if inst, ok := instance.?; ok {
+		
+		instanced_attrib_info := get_attribute_info_from_typeid(inst.data_type, loc);
+		defer delete(instanced_attrib_info);
+
+		instance_data := Instance_data{data = gl.make_resource(inst.data_points * reflect.size_of_typeid(inst.data_type), .array_buffer, cast(gl.Resource_usage)inst.usage, nil), desc = inst};
+		gl.associate_buffer_with_vao(mesh.vao, instance_data.data.buffer, instanced_attrib_info, 1, loc);
+		mesh.instance_data = instance_data;
 	}
 
 }
@@ -747,6 +941,13 @@ Backing_mesh :: struct {
 upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller_location) {
 
 	backing : ^Backing_mesh = &mesh.backing[index];
+
+	if mesh.vertex_count != backing.vertex_count || mesh.index_count != backing.index_count{
+		//We must first be very sure that we are not transfering as resizing will copy from the old buffer.
+		gl.sync_fence(&backing.transfer_fence);
+		//Resize the submesh
+		resize_mesh_single(backing, mesh.vertex_count, mesh.index_count);
+	}
 	
 	if queue.len(backing.index_data_queue) != 0 || queue.len(backing.vertex_data_queue) != 0 {
 
@@ -813,6 +1014,28 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 
 
 
+//NOTES on transform feedback
+//Transform feedback only allows us to draw POINTS, LINES, TRIANGLES. We can also only use glDrawArrays and glDrawArrays instanced.
+//We cannot use a EBO
+//We will use interleaved outputs.
+
+
+//Setup
+//TransformFeedbackVarayings //This must be called before linking or re-calling linking.
+
+
+//Render loop
+//bindBufferBase
+//BeginTransformFeedback
+//DrawArrays
+//EndtransformsFeedback
+
+//somthing else
+//pauseTransformFeedback
+//resumeTransformFeedback
+
+
+//gl.Enable(gl.Rasterizer_discard) //This will ignore the fragments shader so we only use the vertex shader for transform feedback.
 
 
 /*

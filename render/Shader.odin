@@ -639,7 +639,7 @@ load_shader_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 		
 		value := attrib_names[a_name];
 		shader.attribute_locations[value] = attrib;
-		if attrib.location != cast(Attribute_id)value {
+		if attrib.location != cast(Attribute_id)value && !(a_name in whitelisted_attrib_names) {
 			free(shader);
 			gl.unload_shader_program(shader_id);
 			if l, ok := loaded.?; ok {

@@ -458,7 +458,7 @@ make_mesh_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int
 }
 
 @(require_results)
-generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
+generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
 
 	vertices := make([dynamic]Default_vertex);
 	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);

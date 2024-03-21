@@ -295,7 +295,7 @@ enable_vsync :: proc(enable : bool, loc := #caller_location) {
 	assert(state.bound_window == nil || state.bound_window.(^Window).glfw_window == state.owner_context, "enable_vsync must only be called when the owner_context is active", loc);
 	state.vsync = enable;
 	if enable {
-		glfw.SwapInterval(-1);
+		glfw.SwapInterval(1);
 	}
 	else {
 		glfw.SwapInterval(0);

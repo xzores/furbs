@@ -321,6 +321,7 @@ begin_frame :: proc() {
 			glfw.SetWindowMonitor(w.glfw_window, w.target_monitor, r.x, r.y, r.z, r.w, w.target_refresh); //TODO should we allow setting a refresh rate?
 			w.is_fullscreen = !w.is_fullscreen;
 		}
+		enable_vsync(state.vsync);
 		state.main_window.width, state.main_window.height = get_screen_size(state.main_window);
 	}
 

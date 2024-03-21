@@ -1891,7 +1891,7 @@ delete_vertex_array :: proc (vao : Vao_id) {
 }
 
 //TODO this assumes only one buffer per VAO
-associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes : []Attribute_info_ex, loc := #caller_location) {
+associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes : []Attribute_info_ex, #any_int divisor : u32 = 0, loc := #caller_location) {
 
 	bind_vertex_array(auto_cast vao);
 	bind_buffer(.array_buffer, auto_cast buffer);
@@ -1900,11 +1900,22 @@ associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes 
 		//log.infof("setting up VertexAttribPointer : %v, %v, %v, %v, %v, %v\n", attrib.location, get_attribute_type_dimensions(attrib.attribute_type), get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
 		gl.VertexAttribPointer(auto_cast attrib.location, auto_cast get_attribute_type_dimensions(attrib.attribute_type), auto_cast get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
 		gl.EnableVertexAttribArray(auto_cast attrib.location);
+		if divisor != 0 {
+			gl.VertexAttribDivisor(auto_cast attrib.location, divisor);
+		}
 		//VertexAttribPointer      :: proc "c" (index: u32, size: i32, type: u32, normalized: bool, stride: i32, pointer: uintptr)
 	}
 
 	unbind_buffer(.array_buffer);
-	unbind_vertex_array();
+	bind_vertex_array(0);
+}
+
+associate_index_buffer_with_vao :: proc(vao : Vao_id, buffer : Buffer_id) {
+
+	bind_vertex_array(auto_cast vao);
+	bind_buffer(.element_array_buffer, auto_cast buffer);
+	bind_vertex_array(0);
+	bind_buffer(.element_array_buffer, 0);
 }
 
 draw_arrays :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32) {
@@ -1917,11 +1928,21 @@ draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int count : i32
 	assert(index_type != .no_index_buffer, "What are you trying to do -.-");
 	
 	bind_vertex_array(auto_cast vao);
-	bind_buffer(.element_array_buffer, index_buf);
-
     gl.DrawElements(auto_cast primitive, count, auto_cast index_type, nil);
+   	unbind_vertex_array();
+}
+
+draw_arrays_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count, instance_count : i32) {
+	bind_vertex_array(auto_cast vao);
+    gl.DrawArraysInstanced(auto_cast primitive, first, count, instance_count);
+   	unbind_vertex_array();
+}
+
+draw_elements_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int count : i32, index_type : Index_buffer_type, index_buf : Buffer_id, instance_count : i32) {
+	assert(index_type != .no_index_buffer, "What are you trying to do -.-");
 	
-	bind_buffer(.element_array_buffer, 0);
+	bind_vertex_array(auto_cast vao);
+    gl.DrawElementsInstanced(auto_cast primitive, count, auto_cast index_type, nil, instance_count);
    	unbind_vertex_array();
 }
 
@@ -2160,7 +2181,7 @@ unmap_buffer :: proc (buffer : Buffer_id, buffer_type : Buffer_type, loc := #cal
 /////////// Resource stuff ///////////
 
 @(require_results)
-make_resource_parameterized :: proc(bytes_count : int, buffer_type : Buffer_type, resource_usage : Resource_usage, data : []u8, loc :=#caller_location) -> Resource {
+make_resource :: proc(bytes_count : int, buffer_type : Buffer_type, resource_usage : Resource_usage, data : []u8, loc :=#caller_location) -> Resource {
 	
 	resource_desc : Resource_desc = {
 		resource_usage,
@@ -2191,8 +2212,6 @@ make_resource_desc :: proc(desc : Resource_desc, data : []u8, loc := #caller_loc
 
 	return resource;
 }
-
-make_resource :: proc {make_resource_parameterized, make_resource_desc};
 
 destroy_resource :: proc(resource : Resource) {
 
