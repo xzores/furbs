@@ -66,6 +66,9 @@ Indicies :: union {
 	[]u32,
 }
 
+
+
+
 ////////////////////////////// Common mesh interface //////////////////////////////
 
 //A mesh_single, mesh_buffered and mesh_shared server at a high level the same purpose.
@@ -82,7 +85,6 @@ Mesh_ptr :: union {
 
 //Destroys a mesh_single, mesh_buffered and mesh_shared
 destroy_mesh :: proc (mesh : Mesh_ptr) {
-
 	switch v in mesh {
 		case ^Mesh_single:
 			destroy_mesh_single(v);
@@ -101,7 +103,7 @@ upload_vertex_data :: proc (mesh : Mesh_ptr, #any_int start_vertex : int, data :
 		case ^Mesh_buffered:
 			upload_vertex_data_buffered(v, start_vertex, data, loc);
 		case ^Mesh_shared:
-			panic("TODO"); 
+			panic("TODO");
 	}
 }
 
@@ -112,6 +114,18 @@ upload_index_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data : In
 			upload_index_data_single(v, start_index, data, loc);
 		case ^Mesh_buffered:
 			upload_index_data_buffered(v, start_index, data, loc);
+		case ^Mesh_shared:
+			panic("TODO");
+	}
+}
+
+//Upload instance data to a mesh_single, mesh_buffered and mesh_shared
+upload_instance_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data : []$T, loc := #caller_location) {
+	switch v in mesh {
+		case ^Mesh_single:
+			upload_instance_data_single(v, start_index, data, loc);
+		case ^Mesh_buffered:
+			upload_instance_data_buffered(v, start_index, data, loc);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -128,7 +142,7 @@ draw_mesh :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, loc := #calle
 			i := mesh_buffered_next_draw_source(v);
 			draw_mesh_buffered(v, model_matrix, i, loc = loc);
 		case ^Mesh_shared:
-			panic("TODO"); 
+			panic("TODO");
 	}
 }
 
@@ -137,11 +151,16 @@ draw_mesh_instanced :: proc (mesh : Mesh_ptr, #any_int instance_cnt : int, loc :
 		case ^Mesh_single:
 			draw_mesh_single_instanced(v, instance_cnt, nil, loc);
 		case ^Mesh_buffered:
-			panic("TODO"); 
+			i := mesh_buffered_next_draw_source(v);
+			draw_mesh_buffered_instanced(v, instance_cnt, i, nil, loc);
 		case ^Mesh_shared:
-			panic("TODO"); 
+			panic("TODO");
 	}
 }
+
+
+
+
 
 ////////////////////////////// Single mesh //////////////////////////////
 
@@ -232,6 +251,11 @@ destroy_mesh_single :: proc (mesh : ^Mesh_single) {
 		gl.destroy_resource(ib);
 	}
 	gl.delete_vertex_array(mesh.vao);
+
+	if inst, ok := mesh.instance_data.?; ok {
+		gl.destroy_resource(inst.data);
+	}
+
 }
 
 //TODO it seems like a bad idea that upload_vertex_data_single uses persistent mapped buffers.
@@ -322,6 +346,7 @@ upload_index_data_single :: proc(mesh : ^Mesh_single, #any_int start_index : int
 	}
 }
 
+//TODO upload consistent!?!??! so we dont overwrite things many times.
 upload_instance_data_single :: proc(mesha : ^Mesh_single, #any_int start_index : int, data : []$T, loc := #caller_location) {
 	assert(start_index >= 0, "start_index cannot be negative", loc);
 
@@ -479,8 +504,18 @@ draw_mesh_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt :
 
 
 
-////////////////////////////// Buffered mesh //////////////////////////////
 
+
+
+
+
+
+
+
+
+
+
+////////////////////////////// Buffered mesh //////////////////////////////
 
 Mesh_buffered :: struct {
 	using desc : Mesh_desc,
@@ -492,7 +527,8 @@ Mesh_buffered :: struct {
 
 @(require_results)
 //Passing 1 in buffering is allowed but not recommended, if this is a behavior you want use a Mesh_single.
-make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, loc := #caller_location) -> (mesh :Mesh_buffered) {
+make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type,
+								 usage : Usage, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh :Mesh_buffered) {
 	assert(buffering >= 1, "must have at least 1 buffer", loc);
 	assert(usage != .static_use, "A buffered mesh cannot be static", loc);
 
@@ -506,14 +542,17 @@ make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : t
 	};
 	
 	for i in 0..<buffering {
-		vertex_data_queue : queue.Queue(^Upload_data); //just always upload
-		index_data_queue  : queue.Queue(^Upload_data); //just always upload
+		vertex_data_queue 	: queue.Queue(^Upload_data); //just always upload
+		index_data_queue  	: queue.Queue(^Upload_data); //just always upload
+		instance_data_queue : queue.Queue(^Upload_data); //just always upload
 		queue.init(&vertex_data_queue);
 		queue.init(&index_data_queue);
+		queue.init(&instance_data_queue);
 		b := Backing_mesh {
-			mesh = make_mesh_single_empty(vertex_size, data_type, index_size, index_type, usage),
+			mesh = make_mesh_single_empty(vertex_size, data_type, index_size, index_type, usage, instance),
 			vertex_data_queue = vertex_data_queue,
-			index_data_queue = index_data_queue, 
+			index_data_queue = index_data_queue,
+			instance_data_queue = instance_data_queue,
 		};
 
 		append(&mesh.backing, b);
@@ -544,8 +583,17 @@ destroy_mesh_buffered :: proc (mesh : ^Mesh_buffered) {
 				free(d);
 			}
 		}
+		for queue.len(b.instance_data_queue) != 0 {
+			d := queue.pop_front(&b.instance_data_queue);
+			d.ref_cnt -= 1;
+			if d.ref_cnt == 0 {
+				delete(d.data);
+				free(d);
+			}
+		}
 		queue.destroy(&b.vertex_data_queue);
 		queue.destroy(&b.index_data_queue);
+		queue.destroy(&b.instance_data_queue);
 		gl.discard_fence(&b.transfer_fence);
 	}
 
@@ -586,7 +634,19 @@ upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index 
 	}
 }
 
-//TODO make a resize_mesh_bufferd
+upload_instance_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : []$T, loc := #caller_location) {
+	
+	//Append data to all vertex_data_queue in all the backing
+	d := new(Upload_data);
+	d.ref_cnt = len(mesh.backing);
+	d.data = slice.clone(slice.reinterpret([]u8, data));
+	d.start_index = start_index;
+	
+	for &b in mesh.backing {
+		queue.append(&b.instance_data_queue, d);
+	}
+}
+
 resize_mesh_bufferd :: proc (mesh_buffer : ^Mesh_buffered, new_vertex_size : int, new_index_size : int) {
 	mesh_buffer.vertex_count = new_vertex_size;
 	mesh_buffer.index_count = new_index_size;
@@ -662,56 +722,8 @@ draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[
 	}
 }
 
-////////////////////////////// Instaced mesh //////////////////////////////
-
-
-//TODO make an instancecd mesh. This needs to be done before shared mesh so that we know how the shared mesh should handle it.
-//Try and see if we can do it without adding extra data to the mesh_singled and mesh_buffered.
-//if not then it must be a maybe.
-
-//We don't want to keep the instance data on the VAO, we keep it seperate
-
-//bindVao
-
-//bindBuffer				//bind the instance data buffer
-//vertexAtribbPointer		//Setup the data
-//enableVertexAttribArray	//Enable that attrib
-
-//disableVertexAttribArray //Then we just call this???
-//glVertexAttribPointer(null) //This is unassociate it
-
-
-
-
-@(require_results)
-make_instance_data :: proc (data_type : typeid, #any_int instance_count : int, usage : Usage, loc := #caller_location) -> Instance_data {
-	assert(usage != .static_use, "usage cannot be static", loc);
-
-	instance : Instance_data = {
-		data = gl.make_resource(instance_count * reflect.size_of_typeid(data_type), .array_buffer, cast(gl.Resource_usage)usage, nil),
-	}
-	
-	return instance;
-}
-
-upload_instance_data :: proc (instance : ^Instance_data, data : []$T, #any_int start : int) {
-	assert(instance.data_type == T, "Data type does not match", loc);
-	
-	switch usage {
-		case .static_use:
-			panic("Cannot upload to a static mesh");
-		case .dynamic_use:
-			gl.buffer_upload_sub_data(resource, byte_size * start, data);
-		case .stream_use:
-			dst : []u8 = gl.begin_buffer_write(resource, byte_size * start, len(data));
-			fmt.assertf(len(dst) == len(data), "length of buffer and length of data does not match. dst : %i, data : %i", len(dst), len(data), loc = loc);
-			mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst)); //TODO this mapping and unmapping is not nice when we upload multiple time a frame... in the mesh share for example.
-			gl.end_buffer_writes(resource);
-	}
-}
-
-draw_mesh_buffered_instanced :: proc (mesh : ^Mesh_buffered, instance_data : Instance_data, #any_int instance_cnt : int, loc := #caller_location) {
-	/*assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
+draw_mesh_buffered_instanced :: proc (mesh_buffer : ^Mesh_buffered, #any_int instance_cnt : int, draw_source : int, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
+	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	
 	mesh := &mesh_buffer.backing[draw_source];
 	
@@ -727,18 +739,23 @@ draw_mesh_buffered_instanced :: proc (mesh : ^Mesh_buffered, instance_data : Ins
 		}
 	}
 	
-	draw_mesh_single_instanced(mesh, instance_data, instance_cnt, loc);
+	draw_mesh_single_instanced(mesh, instance_cnt, draw_range, loc);
 	
-	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use{
+	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use {
 		gl.discard_fence(&mesh.read_fence);
 		mesh.read_fence = gl.place_fence();
-	}*/
-	panic("TODO");
+	}
 }
 
-draw_mesh_shared_instanced :: proc (mesh : ^Mesh_shared, instance_data : Instance_data, loc := #caller_location) {
-	panic("TODO");
-}
+
+
+
+
+
+
+
+
+
 
 
 
@@ -756,6 +773,37 @@ Mesh_shared :: struct {
 	verts_range : [2]int,
 	index_range : [2]int,
 }
+
+draw_mesh_shared_instanced :: proc (mesh : ^Mesh_shared, instance_data : Instance_data, loc := #caller_location) {
+	panic("TODO");
+}
+
+
+
+
+
+
+
+
+
+
+////////////////////////////// Mesh batching //////////////////////////////
+
+//A mesh batch is a a collection of meshes that can be drawn with a single drawcall
+//These are only good for static meshes, or meshes that rarely move.
+//If the meshes are small there might a an advantage to mesh batching even if they move alot.
+//A mesh batch transforms the verticies in memeory, not in the shader, this means that the CPU will spend time moving the meshes.
+//This also means that draw them is as simple as drawing everything in a single drawcall, this can give high speedups for certian applications.
+
+//TODO mesh batching
+
+
+
+
+
+
+
+
 
 
 
@@ -923,6 +971,20 @@ upload_mesh_resource_bytes :: proc(usage : Usage, resource : ^gl.Resource, data 
 	}
 }
 
+@(private)
+//used internally
+upload_mesh_resource_instance_bytes :: proc(usage : Instance_usage, resource : ^gl.Resource, data : []u8, byte_size, start : int, loc := #caller_location) {
+	switch usage {
+		case .dynamic_copy, .dynamic_upload:
+			gl.buffer_upload_sub_data(resource, byte_size * start, data);
+		case .stream_copy, .stream_upload:
+			dst : []u8 = gl.begin_buffer_write(resource, byte_size * start, len(data));
+			fmt.assertf(len(dst) == len(data), "length of buffer and length of data does not match. dst : %i, data : %i", len(dst), len(data), loc = loc);
+			mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst)); //TODO this mapping and unmapping is not nice when we upload multiple time a frame... in the mesh share for example.
+			gl.end_buffer_writes(resource);
+	}
+}
+
 //Used internally
 Upload_data :: struct {ref_cnt : int, data : []u8, start_index : int};
 
@@ -934,6 +996,7 @@ Backing_mesh :: struct {
 	
 	vertex_data_queue 		: queue.Queue(^Upload_data), //just always upload
 	index_data_queue 		: queue.Queue(^Upload_data), //just always upload
+	instance_data_queue 	: queue.Queue(^Upload_data), //just always upload
 };
 
 @(private)
@@ -949,7 +1012,7 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 		resize_mesh_single(backing, mesh.vertex_count, mesh.index_count);
 	}
 	
-	if queue.len(backing.index_data_queue) != 0 || queue.len(backing.vertex_data_queue) != 0 {
+	if queue.len(backing.index_data_queue) != 0 || queue.len(backing.vertex_data_queue) != 0 || queue.len(backing.instance_data_queue) != 0 {
 
 		if !gl.is_fence_ready(backing.read_fence) {
 			if state.pref_warn { log.warnf("Preformence warning: waiting for mesh drawing %i before uploading new data, caller location : %v", index, loc); };
@@ -1004,14 +1067,31 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 				}
 			}
 		}
+
+		//Upload instance data
+		if inst, ok := backing.instance_data.?; ok {
+			byte_size := reflect.size_of_typeid(inst.data_type);
+			for queue.len(backing.instance_data_queue) != 0 {
+				
+				data := queue.pop_front(&backing.instance_data_queue);
+				
+				//Then upload
+				upload_mesh_resource_instance_bytes(inst.usage, &inst.data, data.data, byte_size, data.start_index);
+
+				data.ref_cnt -= 1;
+
+				if data.ref_cnt == 0 {
+					delete(data.data);
+					free(data);
+				}
+			}
+		}
 		
 		//Place a flag
 		gl.discard_fence(&backing.transfer_fence);
 		backing.transfer_fence = gl.place_fence();
 	}
 }
-
-
 
 
 //NOTES on transform feedback
@@ -1034,276 +1114,5 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 //pauseTransformFeedback
 //resumeTransformFeedback
 
-
 //gl.Enable(gl.Rasterizer_discard) //This will ignore the fragments shader so we only use the vertex shader for transform feedback.
 
-
-/*
-
-	//A mesh share or Shared_mesh_buffer is a datastructure that holds multiple meshes inside the same backing buffer.
-	//This is great for preformence because you don't swap buffer all the time. It also allow drawing multiple meshes in the same drawcall.
-	//A share mesh allow you to do:
-		//Double/triple and auto buffering
-		//Multidraw
-
-	//You can create a mesh from a mesh share by calling make_mesh_share.
-	//Note: this will fraqment a lot if you do a lot of make_shared_mesh with different sized meshes and destroy them to allocate new ones multiple times. Be aware.
-
-	Reserve_behavior :: enum {
-		skinny, 	//Don't reserve more then needed always shrink when available.
-		moderate, 	//Reserve 2x the needed at resize and shrink when available and low usage.
-		thick,		//Reserve 2x needed and don't shrink.
-	}
-
-	//A shared mesh can hold multiple backing meshes. This means you can upload while drawing, this is called buffering.
-	//Buffering can drasticly increase preformence if uploading happens freqenctly.
-	//Single buffering, is the same as no buffering. This is only recommened if you setup your meshes in the begining and then don't update them.
-	//Double is good if there is a few frames or more between each time you upload or create a new mesh from the share.
-	//Trible is good if you need to upload more or less every frame.
-	//Auto will create a new buffer if writing to a buffer will cause a halt in the Graphics pipeline.
-		//This means, auto will start with a single buffer and then add a new if there is no space to write to, there is no limited to the amount of buffers.
-		//This is usefull if you need to write every frame or don't know/care how many buffers you need.
-	//Note, if you don't really know what to use, double buffering is a nice compromise.
-	//Note: If you require the data to be shown the same frame, you must use single buffering. For other buffering the new data will be shown a few frames later.
-	Buffering :: enum {
-		single,		//Upload is immediate
-		double,		//Takes a minimum of 1 frames before content is seen, TODO we should make it so it does not
-		triple,		//Takes a minimum of 2 frames before content is seen, TODO we should make it so it does not
-		auto,		//We should not do this, because it requires us to store all the data CPU side. //No garenties are made //Only available when usage is .stream_use
-	}
-
-	Shared_mesh_buffer :: struct {
-		using desc 		: Mesh_desc,
-
-		backing_meshs 	: Buffered_mesh,
-
-		reserve : Reserve_behavior,
-		
-		free_vertex_ranges 		: [dynamic][2]int, //This is ordered. lowest to highest.
-		free_indicies_ranges 	: [dynamic][2]int, //This is ordered. lowest to highest.
-	}
-
-	//Internal use only
-	@(private)
-	add_backing_mesh_for_share :: proc (share : ^Shared_mesh_buffer, vertex_size, index_size : int) {
-		new_backing := make_mesh_empty(vertex_size, share.data_type, index_size, share.indices_type, share.usage);
-		
-		append(&share.backing_meshs, Backing_mesh{
-			mesh = new_backing,
-			//vertex_data_queue	= nil, //Nil until something is appended?? i guess
-			//index_data_queue	= nil, //Nil until something is appended?? i guess	
-		});
-	}
-
-	//Internal use only
-	@(private)
-	expand_mesh_share :: proc (share : ^Shared_mesh_buffer, loc := #caller_location) {
-		share.vertex_count *= 2;
-		share.index_count *= 2;
-		log.debugf("Expanded mesh, new size : %v, %v", share.vertex_count, share.index_count);
-	}
-
-	//Internal use only, called by destroy_mesh.
-	@(private)
-	free_mesh_from_share :: proc(share : ^Shared_mesh_buffer) {
-		panic("TODO");
-	}
-
-	//Internal use only
-	@(private)
-	upload_vertex_data_to_share :: proc (share : ^Shared_mesh_buffer, start : int, data : []$Default_vertex) {
-		//Somehow this need to upload to all the backing meshes at some point.
-		
-		//append this to be uploaded to all the buffers.
-		switch share.buffering {
-			case 1:
-				//resize the buffer if needed
-				//upload and wait, this is basicly just upload, the wait in implicit
-				upload_vertex_data();
-			case:
-				//check flag of next, if it is done go to that, if not do nothing.
-		}
-	}
-
-	//Internal use only
-	@(private)
-	update_mesh_share :: proc (share : ^Shared_mesh_buffer) {
-
-		//this is a check that should run every drawcall? NO everyframe because, you do want wierd behavior when drawing shadow maps and such.
-		//So yeah, also if we don't call draw it should still upload to all buffers, and clear the queue of data upstream.
-		//This means we must have a list of Shared_mesh_buffers that we can call update on ONCE every frame.
-
-		uploads := &share.backing_meshs[share.current_backing];
-
-		//upload
-		for queue.len(uploads.vertex_data_queue) != 0 {
-			d := queue.pop_front(&uploads.vertex_data_queue);
-			upload_vertex_data(&uploads.mesh, d.start_index, d.data);
-			d.ref_cnt -= 1;
-			if d.ref_cnt == 0 {
-				delete(d.data);
-				free(d);
-			}
-		}
-
-		//if buffering != .single, then place flag
-		if share.buffering != 1 {
-			//What happens when usage is stream
-			something = gl.place_fence();
-		}
-		//move to the next buffer, new drawcall will use this buffer
-		
-		//Then if the next buffer is advaliable, move to that and begin uploading the same data to the next buffer.
-		//Then when the next buffer is advaliable, move to that and begin uploading (for triple this is back to start).
-		//So what we want is to kinda append missing uploaded data to each mesh.
-	}
-
-	@(require_results)
-	make_mesh_share :: proc ($data_type : typeid, index_type : Index_buffer_type, usage : Usage, buffering : Buffering,
-									reserve : Reserve_behavior = .moderate, #any_int init_vertex_size := 100, loc := #caller_location) -> (share : ^Shared_mesh_buffer) {
-		
-		share = new(Shared_mesh_buffer);
-
-		assert(usage != .static_use, "usage may not be static", loc);
-
-		index_size := init_vertex_size;
-
-		if index_type == .no_index_buffer {
-			index_size = 0;
-		}
-		else {
-			append(&share.free_indicies_ranges, [2]int{0, init_vertex_size});
-		}
-		append(&share.free_vertex_ranges, [2]int{0, init_vertex_size});
-
-		share.backing_mesh = make_mesh_empty(init_vertex_size, data_type, index_size, index_type, usage);
-		share.reserve = reserve;
-		share.buffering = buffering;
-
-		switch buffering {
-			case .single:
-				add_backing_mesh_for_share(&share, init_vertex_size, init_vertex_size);
-			case .double:
-				add_backing_mesh_for_share(&share, init_vertex_size, init_vertex_size);
-				add_backing_mesh_for_share(&share, init_vertex_size, init_vertex_size);
-			case .triple:
-				add_backing_mesh_for_share(&share, init_vertex_size, init_vertex_size);
-				add_backing_mesh_for_share(&share, init_vertex_size, init_vertex_size);
-				add_backing_mesh_for_share(&share, init_vertex_size, init_vertex_size);
-			case .auto:
-				add_backing_mesh_for_share(&share, init_vertex_size, init_vertex_size);
-				//More is added later when needed
-		}
-		
-		append(&state.mesh_shares, share); //They will be updated once a frame, so they must be a in a list in the state.
-	}
-
-	@(require_results)
-	make_shared_mesh :: proc(share : ^Shared_mesh_buffer, vert_size, index_size : int, loc := #caller_location) -> (mesh : Mesh) {
-		
-		if share.indices_type == .no_index_buffer {
-			assert(index_size == 0, "The share does not use an index buffer so index_size must be 0", loc);
-		}
-		
-		@(require_results)
-		find_placement :: proc(ranges : ^[dynamic][2]int, req_size : int) -> (cur_range : ^[2]int, index : int) {
-			cur_length : int = max(int);
-			for &r, i in ranges {
-				length := r.y - r.x;
-				if length >= req_size && length < cur_length {
-					//this is the smallest length found that fills the requirement
-					cur_range = &r;
-					index = i;
-					if length == req_size {
-						break;//if we have found a perfect match, we don't need to search anymore.
-					}
-				}
-			}
-			return;
-		}
-		
-		@(require_results)
-		reserve_range :: proc (share : ^Shared_mesh_buffer, ranges : ^[dynamic][2]int, req_size : int, loc := #caller_location) -> (fetched : [2]int) {
-
-			range : ^[2]int = nil;
-			range_index : int;
-			for range == nil {
-				//resize
-				expand_mesh_share(share, loc = loc); //TODO, we expand both indiceis and verticeis.
-				//See if there is space now, otherwise expand again.
-				range, range_index = find_placement(ranges, req_size);
-			}
-			//Consume the range
-			//If the range matches exactly then we can remove the range.
-			if (range.y - range.x) == req_size {
-				fetched = range^;
-				ordered_remove(ranges, range_index);
-			}
-			else {
-				//Just move the front of the range forward by the req_size
-				fetched = [2]int{range.x, range.x + req_size};
-				range.x += req_size;
-			}
-
-			return;
-		}
-		
-		vert_range := reserve_range(share, &share.free_vertex_ranges, vert_size);
-		
-		index_range : [2]int = {0,0};
-		if share.indices_type != .no_index_buffer {
-			index_range = reserve_range(share, &share.free_indicies_ranges, index_size);
-		}
-		
-		impl : Mesh_shared = Mesh_shared {
-			share		= share,
-			verts_range = vert_range,
-			index_range = index_range,
-		};
-
-		mesh = Mesh{
-			vertex_count 	= vert_size,
-			index_count 	= index_size,
-
-			data_type		= share.data_type,
-			usage 			= share.usage,
-			indices_type 	= share.indices_type,
-			
-			impl 			= impl,
-		};
-
-		return;
-	}
-
-	/*
-	draw_mesh_multi :: proc (share : ^Shared_mesh_buffer, mesh : ^Mesh, model_matrix : matrix[4,4]f32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
-
-	}
-	*/
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-////////////////////////////// Mesh batching //////////////////////////////
-
-//A mesh batch is a a collection of meshes that can be drawn with a single drawcall
-//These are only good for static meshes, or meshes that rarely move.
-//If the meshes are small there might a an advantage to mesh batching even if they move alot.
-//A mesh batch transforms the verticies in memeory, not in the shader, this means that the CPU will spend time moving the meshes.
-//This also means that draw them is as simple as drawing everything in a single drawcall, this can give high speedups for certian applications.
-
-//TODO mesh batching
