@@ -5,41 +5,138 @@ import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 
+@(private)
+_generate_char :: proc () -> (verts : []Default_vertex, indices : Indices) {
+	
+	//TODO make triangle strips.
+
+	return nil, nil;
+}
 
 @(private)
-_ensure_shapes_loaded :: proc () {
-	panic("TODO load shapes");
+_ensure_shapes_loaded :: proc (loc := #caller_location) {
+
+	if !state.shapes_init {
+		state.shapes_init = true;
+		
+		use_index_buffer := true; //We can change later if we want.
+		//TODO We likely want triangle strips.
+		
+		vertex_data : []Default_vertex;
+		index_data : Indices;
+		
+		i : int = 0;
+
+		{
+			cubev, cubei := generate_cube({1,1,1}, {0,0,0}, use_index_buffer);
+			state.shape_cube = [2]int{i, i + len_indices(cubei)}; i += len_indices(cubei);
+
+			cirv, ciri := generate_circle(1, {0,0,0}, 20, use_index_buffer);
+			state.shape_circle = [2]int{i, i + len_indices(ciri)}; i += len_indices(ciri);
+
+			qv, qi := generate_quad({1,1,1}, {0,0,0}, use_index_buffer);
+			state.shape_quad = [2]int{i, i + len_indices(qi)}; i += len_indices(qi);
+
+			charv, chari := _generate_char();
+			state.shape_char = [2]int{i, i + len_indices(chari)}; i += len_indices(chari);
+
+			cyv, cyi := generate_cylinder({0,0,0}, 1, 1, 20, 20, use_index_buffer);
+			state.shape_cylinder = [2]int{i, i + len_indices(cyi)}; i += len_indices(cyi);
+
+			sv, si := generate_sphere({0,0,0}, 1, 20, 20, use_index_buffer);
+			state.shape_sphere = [2]int{i, i + len_indices(si)}; i += len_indices(si);
+
+			conv, coni := generate_cone({0,0,0}, 1, 1, 20, use_index_buffer);
+			state.shape_cone = [2]int{i, i + len_indices(coni)}; i += len_indices(coni);
+
+			arrv, arri := generate_arrow({1,0,0}, 0.6, 0.4, 0.25, 0.5, 20, use_index_buffer);
+			state.shape_arrow = [2]int{i, i + len_indices(arri)}; i += len_indices(arri);
+
+			defer {
+				delete(cubev); delete_indices(cubei);
+				delete(cirv); delete_indices(ciri);
+				delete(qv); delete_indices(qi);
+				delete(cyv); delete_indices(cyi);
+				delete(sv); delete_indices(si);
+				delete(conv); delete_indices(coni);
+				delete(arrv); delete_indices(arri);
+			};
+
+			D :: Mesh_combine_data(Default_vertex);
+			vertex_data, index_data = combine_mesh_data_multi(Default_vertex, D{1, cubev, cubei}, D{1, cirv, ciri}, D{1, qv, qi},
+				D{1, cyv, cyi}, D{1, sv, si}, D{1, conv, coni}, D{1, arrv, arri});
+			assert(vertex_data != nil);
+			fmt.printf("len_indices(index_data) : %v\n", len_indices(index_data));
+			assert(len(vertex_data) <= auto_cast max(u16));
+			assert(len_indices(index_data) <= auto_cast max(u16));
+		}
+
+		state.shapes = make_mesh_single(vertex_data, index_data, .static_use);
+		delete(vertex_data);
+		delete_indices(index_data);
+	}
 }
 
-draw_quad :: proc() {
-
+@(private)
+destroy_shapes :: proc() {
+	destroy_mesh(&state.shapes); state.shapes = {};
+	state.shapes_init = false;
+	state.shape_cube 		= {};
+	state.shape_circle 		= {};
+	state.shape_quad 		= {};
+	state.shape_char		= {};
+	state.shape_cylinder	= {};
+	state.shape_sphere		= {};
+	state.shape_cone		= {};
+	state.shape_arrow		= {};
 }
 
-draw_circle :: proc() {
-	
+draw_quad :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_quad);
 }
 
-draw_cube :: proc() {
-
+draw_char :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_char); 
+	panic("TODO, make triangle strips");
 }
 
-draw_cylinder :: proc() {
-
+draw_circle :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_circle);
 }
 
-draw_sphere :: proc() {
-
+draw_cube :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_cube);
 }
 
-draw_arrow :: proc() {
-	
+draw_cylinder :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_cylinder);
+}
+
+draw_sphere :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_sphere);
+}
+
+draw_cone :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_cone);
+}
+
+draw_arrow :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_arrow);
 }
 
 //TODO move to state
 arrow_forward 	: Mesh_single;
 arrow_up 		: Mesh_single;
 arrow_right 	: Mesh_single;
-arrow_init : bool
+arrow_init 		: bool;
 
 shapes_pipeline : Pipeline;
 
@@ -89,7 +186,7 @@ draw_coordinate_overlay :: proc(target : Render_target, camera : Camera3D, offse
 	set_uniform(pipeline.shader, .color_diffuse, [4]f32{1,0,0,1});
 	draw_mesh_single(&arrow_right, mat);
 	end_pipeline(pipeline);
-} 
+}
 
 
 

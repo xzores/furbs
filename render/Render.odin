@@ -211,8 +211,7 @@ destroy :: proc (loc := #caller_location) {
 	state.mouse_pos 		= {};
 	state.mouse_delta 		= {};
 	state.scroll_delta 		= {};
-
-
+	
 	//Destroy shaders defines
 	for e, v in state.shader_defines {
 		delete_key(&state.shader_defines, e);
@@ -222,6 +221,7 @@ destroy :: proc (loc := #caller_location) {
 
 	delete(state.shader_defines); state.shader_defines = {};
 
+	destroy_shapes();
 	destroy_shaders();
 	
 	//Check that all sub windows have been destroyed.
@@ -259,18 +259,31 @@ destroy :: proc (loc := #caller_location) {
 	queue.destroy(&state.button_input_events);
 	queue.destroy(&state.button_release_input_events);
 	queue.destroy(&state.scroll_input_event);
+
+	state.key_input_events 				= {};
+	state.key_release_input_events 		= {};
+	state.char_input_buffer 			= {};
+	state.char_input 					= {};
+	state.button_input_events 			= {};
+	state.button_release_input_events	= {};
+	state.scroll_input_event 			= {};
 	
+	state.current_context 	= nil;
+	state.vsync 			= false;
+	state.window_in_focus	= nil;
+	state.render_context 	= {};
+
 	glfw.Terminate();
 
 	//TODO make this so it prints the field that are not mem zero.
-	if mem.check_zero_ptr(&state, size_of(State)) {
+	if !mem.check_zero_ptr(&state, size_of(State)) {
 		for field in reflect.struct_fields_zipped(State) {
 			
 			ptr : uintptr = cast(uintptr)&state + field.offset;
 			val := any{data = auto_cast ptr, id = field.type.id};
-			fmt.assertf(mem.check_zero_ptr(val.data, reflect.size_of_typeid(val.id)), "State must be reset before closing (internal error). The field %s is : %#v", field.name, val);
+			fmt.assertf(mem.check_zero_ptr(val.data, reflect.size_of_typeid(val.id)), "\033[31mState must be reset before closing (internal error). The field %s is : %#v\n\033[0m", field.name, val);
 		}
-		fmt.panicf("state is not zero : %v", state);
+		panic("state is not zero");
 	}
 
 	//state.render_context = {};

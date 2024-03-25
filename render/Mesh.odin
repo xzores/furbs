@@ -40,6 +40,8 @@ Mesh_desc :: struct {
 	vertex_count 	: int,
 	index_count 	: int,
 
+	primitive : gl.Primitive,
+
 	data_type : typeid,
 	usage : Usage,
 	indices_type : Index_buffer_type,
@@ -61,13 +63,32 @@ Instance_usage :: enum {
 	stream_copy	= auto_cast gl.Resource_usage.stream_host_only,		//Will use persistent mapped buffer and fallback to unsyncronized mapped buffers.
 }
 
-Indicies :: union {
+Indices :: union {
 	[]u16,
 	[]u32,
 }
 
+delete_indices :: proc (indices : Indices) {
+	switch ind in indices {
+		case nil:
+		case []u16:
+			delete(ind); 
+		case []u32:
+			delete(ind); 
+	}
+}
 
-
+len_indices  :: proc (indices : Indices) -> int {
+	switch ind in indices {
+		case nil:
+			return 0;
+		case []u16:
+			return len(ind);
+		case []u32:
+			return len(ind);
+	}
+	unreachable();
+}
 
 ////////////////////////////// Common mesh interface //////////////////////////////
 
@@ -108,7 +129,7 @@ upload_vertex_data :: proc (mesh : Mesh_ptr, #any_int start_vertex : int, data :
 }
 
 //Upload to a mesh_single, mesh_buffered and mesh_shared
-upload_index_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data : Indicies, loc := #caller_location) {
+upload_index_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data : Indices, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
 			upload_index_data_single(v, start_index, data, loc);
@@ -188,10 +209,11 @@ Mesh_single :: struct {
 
 //Index_data may be nil if there should be no incidies. 
 @(require_results)
-make_mesh_single :: proc (vertex_data : []$T, index_data : Indicies, usage : Usage, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
+make_mesh_single :: proc (vertex_data : []$T, index_data : Indices, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
 	
 	mesh.vertex_count = len(vertex_data);
 	mesh.data_type = T;
+	mesh.primitive = primitive;
 	mesh.usage = usage;
 	
 	mesh_index_buf_data : []u8;
@@ -221,7 +243,7 @@ make_mesh_single :: proc (vertex_data : []$T, index_data : Indicies, usage : Usa
 
 //Makes a mesh_single without data
 @(require_results)
-make_mesh_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
+make_mesh_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
 
 	if index_type != .no_index_buffer {
 		assert(index_size != 0, "index size must not be 0, if index_type is not no_index_buffer", loc);
@@ -232,6 +254,7 @@ make_mesh_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, 
 
 	mesh.vertex_count = vertex_size;
 	mesh.data_type = data_type;
+	mesh.primitive = primitive;
 	mesh.usage = usage;
 	
 	mesh.index_count = index_size;
@@ -294,10 +317,10 @@ upload_vertex_data_single :: proc(mesh : ^Mesh_single, #any_int start_vertex : i
 	upload_mesh_resource_bytes(mesh.usage, &mesh.vertex_data, byte_data, byte_size, start_vertex);
 }
 
-upload_index_data_single :: proc(mesh : ^Mesh_single, #any_int start_index : int, data : Indicies, loc := #caller_location) {
+upload_index_data_single :: proc(mesh : ^Mesh_single, #any_int start_index : int, data : Indices, loc := #caller_location) {
 
 	assert(start_index >= 0, "start_vertex cannot be negative", loc);
-	//TODO similar for Indicies assert(T == mesh.data_type, "The data type you are trying to upload does not match the meshes data type", loc);
+	//TODO similar for Indices assert(T == mesh.data_type, "The data type you are trying to upload does not match the meshes data type", loc);
 	assert(mesh.indices_type != .no_index_buffer, "this mesh has no index buffer", loc);
 
 	when ODIN_DEBUG {
@@ -433,14 +456,17 @@ resize_mesh_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, lo
 draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	assert(mesh.instance_data == nil, "This is an instanced mesh, use the draw_*_instanced function.", loc)
+	assert(mesh.primitive != nil);
 
+	start : int = 0;
 	vertex_count := mesh.vertex_count;
 	index_count := mesh.index_count;
 	if r, ok := draw_range.?; ok {
+		start = r.x;
 		vertex_count = r.y - r.x;
 		index_count = r.y - r.x;
 	}
-
+	
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
 	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
 	mvp := state.prj_view_mat * model_matrix;
@@ -449,10 +475,10 @@ draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, dr
 	
 	switch mesh.indices_type {
 		case .no_index_buffer:
-			gl.draw_arrays(mesh.vao, .triangles, 0, vertex_count); //TODO triangles should be an option
+			gl.draw_arrays(mesh.vao, mesh.primitive, start, vertex_count); //TODO triangles should be an option
 		case .unsigned_short, .unsigned_int:
 			if i_buf, ok := mesh.indices_buf.?; ok {
-				gl.draw_elements(mesh.vao, .triangles, index_count, mesh.indices_type, i_buf.buffer);//TODO triangles should be an option
+				gl.draw_elements(mesh.vao, mesh.primitive, start, index_count, mesh.indices_type, i_buf.buffer);//TODO triangles should be an option
 			}
 			else {
 				panic("The mesh does not have a index buffer", loc);
@@ -468,14 +494,16 @@ draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, dr
 draw_mesh_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt : i32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	assert(mesh.instance_data != nil, "This is an not an instanced mesh", loc);
+	assert(mesh.primitive != nil);
 
+	start : int = 0;
 	vertex_count := mesh.vertex_count;
 	index_count := mesh.index_count;
 	if r, ok := draw_range.?; ok {
+		start = r.x;
 		vertex_count = r.y - r.x;
 		index_count = r.y - r.x;
 	}
-
 
 	model_matrix : matrix[4,4]f32 = 1;
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
@@ -486,22 +514,21 @@ draw_mesh_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt :
 	
 	switch mesh.indices_type {
 		case .no_index_buffer:
-			gl.draw_arrays_instanced(mesh.vao, .triangles, 0, vertex_count, instance_cnt); //TODO triangles should be an option
+			gl.draw_arrays_instanced(mesh.vao, mesh.primitive, 0, vertex_count, instance_cnt); //TODO triangles should be an option
 		case .unsigned_short, .unsigned_int:
 			if i_buf, ok := mesh.indices_buf.?; ok {
-				gl.draw_elements_instanced(mesh.vao, .triangles, index_count, mesh.indices_type, i_buf.buffer, instance_cnt); //TODO triangles should be an option
+				gl.draw_elements_instanced(mesh.vao, mesh.primitive, start, index_count, mesh.indices_type, i_buf.buffer, instance_cnt); //TODO triangles should be an option
 			}
 			else {
 				panic("The mesh does not have a index buffer", loc);
 			}
 	}
-
+	
 	if mesh.usage == .stream_use {
 		gl.discard_fence(&mesh.read_fence);
 		mesh.read_fence = gl.place_fence();
 	}
 }
-
 
 
 
@@ -528,13 +555,16 @@ Mesh_buffered :: struct {
 @(require_results)
 //Passing 1 in buffering is allowed but not recommended, if this is a behavior you want use a Mesh_single.
 make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type,
-								 usage : Usage, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh :Mesh_buffered) {
+								 usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh :Mesh_buffered) {
+	
 	assert(buffering >= 1, "must have at least 1 buffer", loc);
 	assert(usage != .static_use, "A buffered mesh cannot be static", loc);
 
-	mesh.desc = Mesh_desc {	
+	mesh.desc = Mesh_desc {
 		vertex_count 	= vertex_size,
 		index_count 	= index_size,
+
+		primitive = primitive,
 
 		data_type 		= data_type,
 		usage 			= usage,
@@ -549,7 +579,7 @@ make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : t
 		queue.init(&index_data_queue);
 		queue.init(&instance_data_queue);
 		b := Backing_mesh {
-			mesh = make_mesh_single_empty(vertex_size, data_type, index_size, index_type, usage, instance),
+			mesh = make_mesh_single_empty(vertex_size, data_type, index_size, index_type, usage, primitive, instance),
 			vertex_data_queue = vertex_data_queue,
 			index_data_queue = index_data_queue,
 			instance_data_queue = instance_data_queue,
@@ -613,7 +643,7 @@ upload_vertex_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_verte
 	}
 }
 
-upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : Indicies, loc := #caller_location) {
+upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : Indices, loc := #caller_location) {
 	
 	//Append data to all vertex_data_queue in all the backing
 	d := new(Upload_data);
@@ -910,7 +940,7 @@ setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_in
 	mesh.vao = gl.gen_vertex_array();
 
 	//The vertex data
-	mesh.vertex_data = gl.make_resource_desc(desc, init_vertex_data, loc);
+	mesh.vertex_data = gl.make_resource_desc(desc, init_vertex_data);
 	gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, 0, loc);
 
 	//The indicies
@@ -936,7 +966,7 @@ setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_in
 				buffer_type = .element_array_buffer,
 				bytes_count = mesh.index_count * s,
 			}
-			indices_buf := gl.make_resource_desc(index_desc, init_index_data, loc);
+			indices_buf := gl.make_resource_desc(index_desc, init_index_data);
 
 			gl.associate_index_buffer_with_vao(mesh.vao, indices_buf.buffer);
 			mesh.indices_buf = indices_buf;

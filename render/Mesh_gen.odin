@@ -20,7 +20,7 @@ import glgl "gl/OpenGL"
 
 //converts a index buffer and an vertex array into a vertex arrray without an index buffer
 //Used internally
-convert_to_non_indexed :: proc (verts : []$T, indices : Indicies) -> (new_verts : []T){
+convert_to_non_indexed :: proc (verts : []$T, indices : Indices, loc := #caller_location) -> (new_verts : []T){
 
 	vert_index : int = 0;
 	
@@ -38,16 +38,22 @@ convert_to_non_indexed :: proc (verts : []$T, indices : Indicies) -> (new_verts 
 				vert_index += 1;
 			}
 		case:
-			panic("??");
+			panic("??", loc);
 	}
 
 	return;
 }
 
-//Combine the mesh data from 2 different meshes.
-combine_mesh_data :: proc(transform1 : matrix[4,4]f32, verts : []$T, indices : Indicies, transform2 : matrix[4,4]f32, verts2 : []T, indices2 : Indicies, loc := #caller_location) -> (new_verts : []T, new_indicies : Indicies) {
+//This will convert mesh data to mesh data that can be drawn with triangle stips. This can optimize the rendering on the GPU.
+//This will only help if you mesh is placed in a format where indicies often occurs multiple times in a row.
+convert_to_triangle_strips_indexed :: proc (verts : []$T, indices : Indices, loc := #caller_location) -> (new_indices : Indices) {
+	
+}
 
-	new_verts = make([]T, len(verts) + len(verts2));
+//Combine the mesh data from 2 different meshes.
+combine_mesh_data :: proc(transform1 : matrix[4,4]f32, verts : []$T, indices : Indices, transform2 : matrix[4,4]f32, verts2 : []T, indices2 : Indices, loc := #caller_location) -> (new_verts : []T, new_indices : Indices) {
+
+	new_verts = make([]T, len(verts) + len(verts2), loc = loc);
 
 	for v, i in verts {
 		v := v;
@@ -64,7 +70,7 @@ combine_mesh_data :: proc(transform1 : matrix[4,4]f32, verts : []$T, indices : I
 	switch indexes in indices {
 		case nil:
 			assert(indices2 == nil, "indices is nil, but indices2 is not, they must be the same", loc);
-			new_indicies = nil;
+			new_indices = nil;
 		case []u16:
 			if indexes2, ok := indices2.([]u16); ok {
 				new_index := make([]u16, len(indexes) + len(indexes2));
@@ -74,7 +80,7 @@ combine_mesh_data :: proc(transform1 : matrix[4,4]f32, verts : []$T, indices : I
 				for index, i in indexes2 {
 					new_index[len(indexes) + i] = index + auto_cast len(verts);
 				}
-				new_indicies = new_index;
+				new_indices = new_index;
 			}
 			else {
 				panic("The first mesh has unsigned short while the other is not.", loc);
@@ -88,7 +94,7 @@ combine_mesh_data :: proc(transform1 : matrix[4,4]f32, verts : []$T, indices : I
 				for index, i in indexes2 {
 					new_index[len(indexes) + i] = index + auto_cast len(verts);
 				}
-				new_indicies = new_index;
+				new_indices = new_index;
 			}
 			else {
 				panic("The first mesh has unsigned int while the other is not.", loc);
@@ -98,8 +104,37 @@ combine_mesh_data :: proc(transform1 : matrix[4,4]f32, verts : []$T, indices : I
 	return;
 }
 
+Mesh_combine_data :: struct(T: typeid) { transform : matrix[4,4]f32, verts : []T, indices : Indices}
+
+combine_mesh_data_multi :: proc ($T : typeid, mesh_datas : ..Mesh_combine_data(T), loc := #caller_location) -> (res_verts : []T, res_indices : Indices) {
+	
+	//fmt.assertf(mesh_datas[0].indices == nil, "mesh_datas[0].indices is : %v, %v\n", mesh_datas[0].indices, mesh_datas[0].indices);
+	
+	switch ind in mesh_datas[0].indices {
+		case nil:
+		case []u16:
+			res_indices = make([]u16,0);
+		case []u32:
+			res_indices = make([]u32,0);
+	}
+	
+	for m in mesh_datas {
+		new_verts, new_indices := combine_mesh_data(1, res_verts, res_indices, m.transform, m.verts, m.indices, loc = loc);
+		if res_verts != nil {
+			delete(res_verts);
+		}
+		delete_indices(res_indices);
+		res_verts = new_verts; 
+		res_indices = new_indices;
+	}
+
+	return;
+}
+
+//////////////// Mesh generation ////////////////
+
 @(require_results)
-generate_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, alloc := context.allocator) -> (verts : []Default_vertex, indices : []u16) {
+generate_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, alloc := context.allocator) -> (verts : []Default_vertex, indices : Indices) {
 
 	context.allocator = alloc;
 
@@ -142,20 +177,16 @@ make_mesh_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) 
 
 	vert, index := generate_quad(size, offset, use_index_buffer);
 
-	if index == nil {
-		res = make_mesh_single(vert, nil, .static_use);
-	}
-	else {
-		res = make_mesh_single(vert, index, .static_use);
-		delete(index);
-	}
+	res = make_mesh_single(vert, index, .static_use);
+	
+	delete_indices(index);
 	delete(vert);
 	
 	return;
 }
 
 @(require_results)
-generate_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
+generate_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices) {
 	
 	vertices := make([dynamic]Default_vertex);
 	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
@@ -193,14 +224,15 @@ generate_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_inde
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, len(vertices));
-		indices = make([]u16, len(temp_indices));
+		_indices := make([]u16, len(temp_indices));
 		
 		for v, i in vertices {
 			verts[i] = v; 	//convert from 2D to 3D
 		}
 		for ii, i in temp_indices {
-			indices[i] = ii;
+			_indices[i] = ii;
 		}
+		indices = _indices;
 	}
 	else {
 		non_indexed := convert_to_non_indexed(vertices[:], temp_indices[:]);
@@ -216,13 +248,9 @@ make_mesh_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_ind
 
 	vert, index := generate_circle(diameter, offset, sectors, use_index_buffer);
 
-	if index == nil {
-		res = make_mesh_single(vert, nil, .static_use);
-	}
-	else {
-		res = make_mesh_single(vert, index, .static_use);
-		delete(index);
-	}
+	res = make_mesh_single(vert, index, .static_use);
+	
+	delete_indices(index);
 	delete(vert);
 
 	return;
@@ -230,7 +258,7 @@ make_mesh_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_ind
 
 //
 @(require_results)
-generate_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
+generate_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices) {
 
 	corners : [24]Default_vertex = {
 		//XP
@@ -275,12 +303,12 @@ generate_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, l
 		0, 2, 3,
 	}
 
-	indices = make([]u16, 36);
+	_indices := make([]u16, 36);
 
 	index : int = 0;
 	for i in 0..<6 {
 		for o in odering {
-			indices[index] = o + 4 * cast(u16)i;
+			_indices[index] = o + 4 * cast(u16)i;
 			index += 1;
 		}
 	}
@@ -291,11 +319,13 @@ generate_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, l
 	}
 
 	if !use_index_buffer {
-		new_verts := convert_to_non_indexed(verts, indices);
+		new_verts := convert_to_non_indexed(verts, _indices);
 		delete(verts);
-		delete(indices);
+		delete(_indices);
 		verts = new_verts;
 		indices = nil;
+	}else {
+		indices = _indices;
 	}
 
 	return;
@@ -307,20 +337,16 @@ make_mesh_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) 
 	
 	vert, index := generate_cube(size, offset, use_index_buffer);
 
-	if index == nil {
-		res = make_mesh_single(vert, nil, .static_use);
-	}
-	else {
-		res = make_mesh_single(vert, index, .static_use);
-		delete(index);
-	}
+	res = make_mesh_single(vert, index, .static_use);
+	
+	delete_indices(index);
 	delete(vert);
 
 	return;
 }
 
 @(require_results)
-generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
+generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices) {
 
 	vertices := make([dynamic]Default_vertex);
 	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
@@ -422,14 +448,15 @@ generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int,
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, len(vertices)); 
-		indices = make([]u16, len(temp_indices));
+		_indices := make([]u16, len(temp_indices));
 
 		for v, i in vertices {
 			verts[i] = v;
 		}
 		for ii, i in temp_indices {
-			indices[i] = ii;
+			_indices[i] = ii;
 		}
+		indices = _indices;
 	}
 	else {
 		verts = convert_to_non_indexed(vertices[:], temp_indices[:]);
@@ -445,20 +472,15 @@ make_mesh_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int
 	
 	vert, index := generate_cylinder(offset, height, diameter, stacks, sectors, use_index_buffer);
 
-	if index == nil {
-		res = make_mesh_single(vert, nil, .static_use);
-	}
-	else {
-		res = make_mesh_single(vert, index, .static_use);
-		delete(index);
-	}
+	res = make_mesh_single(vert, index, .static_use);
+	
+	delete_indices(index);
 	delete(vert);
-
 	return;
 }
 
 @(require_results)
-generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (verts : []Default_vertex, indices : []u16) {
+generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices) {
 
 	vertices := make([dynamic]Default_vertex);
 	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
@@ -503,14 +525,15 @@ generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : 
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, len(vertices)); 
-		indices = make([]u16, len(temp_indices));
+		_indices := make([]u16, len(temp_indices));
 
 		for v, i in vertices {
 			verts[i] = v;
 		}
 		for ii, i in temp_indices {
-			indices[i] = ii;
+			_indices[i] = ii;
 		}
+		indices = _indices;
 	}
 	else {
 		verts = convert_to_non_indexed(vertices[:], temp_indices[:]);
@@ -525,20 +548,16 @@ make_mesh_sphere :: proc(offset : [3]f32, diameter : f32, stacks : int, sectors 
 	
 	vert, index := generate_sphere(offset, diameter, stacks, sectors, use_index_buffer);
 	
-	if index == nil {
-		res = make_mesh_single(vert, nil, .static_use);
-	}
-	else {
-		res = make_mesh_single(vert, index, .static_use);
-		delete(index);
-	}
+	res = make_mesh_single(vert, index, .static_use);
+	
+	delete_indices(index);
 	delete(vert);
 
 	return;
 }
 
 @(require_results)
-generate_cone :: proc (offset : [3]f32, height, diameter : f32, sectors : int, use_index_buffer : bool) -> (verts : []Default_vertex, indices : []u16) {
+generate_cone :: proc (offset : [3]f32, height, diameter : f32, sectors : int, use_index_buffer : bool) -> (verts : []Default_vertex, indices : Indices) {
 
 	vertices := make([dynamic]Default_vertex);
 	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
@@ -584,18 +603,21 @@ generate_cone :: proc (offset : [3]f32, height, diameter : f32, sectors : int, u
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, len(vertices));
-		indices = make([]u16, len(temp_indices));
+		_indices := make([]u16, len(temp_indices));
 		
 		for v, i in vertices {
 			verts[i] = v; 	//convert from 2D to 3D
 		}
 		for ii, i in temp_indices {
-			indices[i] = ii;
+			_indices[i] = ii;
 		}
+		indices = _indices;
+		assert(indices != nil);
 	}
 	else {
 		non_indexed := convert_to_non_indexed(vertices[:], temp_indices[:]);
 		verts = non_indexed;
+		indices = nil;
 	}
 	
 	return;
@@ -606,28 +628,24 @@ make_mesh_cone :: proc(offset : [3]f32, height, diameter : f32, sectors : int, u
 	
 	vert, index := generate_cone(offset, height, diameter, sectors, use_index_buffer);
 	
-	if index == nil {
-		res = make_mesh_single(vert, nil, .static_use);
-	}
-	else {
-		res = make_mesh_single(vert, index, .static_use);
-		delete(index);
-	}
+	res = make_mesh_single(vert, index, .static_use);
+	
+	delete_indices(index);
 	delete(vert);
 
 	return;
 }
 
 //direction will be normalized
-generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cyl, diameter_cone : f32, sectors : int, use_index_buffer : bool, up : [3]f32 = {0,1,0}) -> (verts : []Default_vertex, indices : []u16) {
+generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cyl, diameter_cone : f32, sectors : int, use_index_buffer : bool, up : [3]f32 = {0,1,0}) -> (verts : []Default_vertex, indices : Indices) {
 	using linalg;
 
 	vert_cone, index_cone := generate_cone({0,heigth_cone/2,0}, heigth_cone, diameter_cone, sectors, use_index_buffer);
 	defer delete(vert_cone);
-	defer delete(index_cone);
+	defer delete_indices(index_cone);
 	vert_cylinder, index_cylinder := generate_cylinder({0,0,0}, height_cyl, diameter_cyl, 1, sectors, use_index_buffer);
 	defer delete(vert_cylinder);
-	defer delete(index_cylinder);
+	defer delete_indices(index_cylinder);
 	
 	arb := up;
 	if math.abs(linalg.dot(arb, direction)) >= 0.9999 {
@@ -652,19 +670,20 @@ generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 	t2 = r_mat * t2;
 
 	_verts, _indices := combine_mesh_data(t1, vert_cone, index_cone, t2, vert_cylinder, index_cylinder);
-	verts = _verts;
-	ok : bool;
-	indices, ok = _indices.([]u16);
-	assert(ok, "internal error");
-	
+
 	if use_index_buffer {
-		//Do nothing
+		assert(index_cone != nil);
+		assert(index_cylinder != nil);
+		assert(_indices != nil);
+
+		ok : bool;
+		verts = _verts;
+		indices, ok = _indices.([]u16);
+		assert(ok, "internal error");
 	}
 	else {
-		non_indexed := convert_to_non_indexed(verts, indices);
-		delete(verts);
-		delete(indices);
-		verts = non_indexed;
+		verts = _verts;
+		indices = nil;
 	}
 
 	return;
@@ -675,13 +694,9 @@ make_mesh_arrow :: proc(direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 
 	vert, index := generate_arrow(direction, height_cyl, heigth_cone, diameter_cyl, diameter_cone, sectors, use_index_buffer);
 
-	if index == nil {
-		res = make_mesh_single(vert, nil, .static_use);
-	}
-	else {
-		res = make_mesh_single(vert, index, .static_use);
-		delete(index);
-	}
+	res = make_mesh_single(vert, index, .static_use);
+	
+	delete_indices(index);
 	delete(vert);
 
 	return;

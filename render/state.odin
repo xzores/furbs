@@ -17,8 +17,6 @@ enable_preformence_warnings :: proc (warnings : bool) {
 }
 
 State :: struct {
-
-	pref_warn : bool,
 	
 	//Input stuff
 	button_down 	: [Mouse_code]bool,
@@ -47,7 +45,21 @@ State :: struct {
 
 	//Render init variable
 	is_init : bool,
+	pref_warn : bool,
 	
+	//Shapes stuff
+	shapes : Mesh_single,
+	shapes_init : bool,
+	
+	shape_cube : [2]int,
+	shape_circle : [2]int,
+	shape_quad : [2]int,
+	shape_char : [2]int,
+	shape_cylinder : [2]int,
+	shape_sphere : [2]int,
+	shape_cone : [2]int,
+	shape_arrow : [2]int,
+
 	//Window stuff
 	owner_context : glfw.WindowHandle,
 	current_context : glfw.WindowHandle,

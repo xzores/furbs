@@ -1049,7 +1049,7 @@ init :: proc(gl_context := context) {
 		
 		if cpu_state.gl_version >= .opengl_4_3 {
 			// Enable debug messages
-			log.infof("Enable debug messages");
+			log.infof("Enable opengl debug messages");
 			gl.Enable(.DEBUG_OUTPUT);
 			gl.Enable(.DEBUG_OUTPUT_SYNCHRONOUS);
 
@@ -1924,11 +1924,22 @@ draw_arrays :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count 
    	unbind_vertex_array();
 }
 
-draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int count : i32, index_type : Index_buffer_type, index_buf : Buffer_id) {
+draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32, index_type : Index_buffer_type, index_buf : Buffer_id) {
 	assert(index_type != .no_index_buffer, "What are you trying to do -.-");
+	assert(first >= 0, "first must be more then zero")
 	
+	index_size : i32 = 0;
+	switch index_type {
+		case .no_index_buffer:
+			index_size = 0;
+		case .unsigned_short:
+			index_size = 2;
+		case .unsigned_int:
+			index_size = 4;
+	}
+
 	bind_vertex_array(auto_cast vao);
-    gl.DrawElements(auto_cast primitive, count, auto_cast index_type, nil);
+    gl.DrawElements(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size));
    	unbind_vertex_array();
 }
 
@@ -1938,11 +1949,21 @@ draw_arrays_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int fir
    	unbind_vertex_array();
 }
 
-draw_elements_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int count : i32, index_type : Index_buffer_type, index_buf : Buffer_id, instance_count : i32) {
+draw_elements_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32, index_type : Index_buffer_type, index_buf : Buffer_id, instance_count : i32) {
 	assert(index_type != .no_index_buffer, "What are you trying to do -.-");
 	
+	index_size : i32 = 0;
+	switch index_type {
+		case .no_index_buffer:
+			index_size = 0;
+		case .unsigned_short:
+			index_size = 2;
+		case .unsigned_int:
+			index_size = 4;
+	}
+
 	bind_vertex_array(auto_cast vao);
-    gl.DrawElementsInstanced(auto_cast primitive, count, auto_cast index_type, nil, instance_count);
+    gl.DrawElementsInstanced(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size), instance_count);
    	unbind_vertex_array();
 }
 
