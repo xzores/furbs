@@ -57,6 +57,8 @@ is_trivial_copied :: proc(t : typeid) -> bool {
             return false;
         case Type_Info_Bit_Set:
             return false; //IDK IS it?
+		case Type_Info_Bit_Field:
+            return false; //IDK IS it?
         case Type_Info_Simd_Vector:
             return false; //IDK IS it?
         case Type_Info_Type_Id:
