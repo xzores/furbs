@@ -21,8 +21,9 @@ import utils "../../utils"
 
 _ :: gl.GLenum;
 
-RENDER_DEBUG	:: #config(DEBUG_RENDER, ODIN_DEBUG)
-RECORD_DEBUG 	:: #config(DEBUG_RECORD, ODIN_DEBUG)
+RENDER_DEBUG	:: #config(RENDER_DEBUG, ODIN_DEBUG);
+RECORD_DEBUG 	:: #config(RECORD_DEBUG, ODIN_DEBUG);
+UNBIND_DEBUG 	:: #config(UNBIND_DEBUG, false);
 
 /////////// Opengl handles ///////////
 Shader_program_id :: distinct u32;
@@ -256,8 +257,8 @@ Cull_method :: enum u32 {
 }
 
 Polygon_mode :: enum u32 {
-	points 			= gl.POINTS,
-	lines 			= gl.LINES,
+	point 			= gl.POINT,
+	line 			= gl.LINE,
 	fill 			= gl.FILL,
 }
 
@@ -1270,8 +1271,8 @@ when RECORD_DEBUG {
 		
 		b := strings.builder_make_len_cap(0, 125);
 		
-		call_time_mil_sec : f64 = time.duration_milliseconds(time.since(time_being));
-		strings.write_string(&b, fmt.tprintf("%.3f : gl%s(", call_time_mil_sec, loc.procedure));
+		call_time_mil_sec : f64 = time.duration_seconds(time.since(time_being));
+		strings.write_string(&b, fmt.tprintf("%.7f : gl%s(", call_time_mil_sec, loc.procedure));
 		
 		for arg, i in args {
 			
@@ -1768,7 +1769,8 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 }
 
 unload_shader_program :: proc(shader : Shader_program_id) {
-
+	assert(cpu_state.bound_shader != shader);
+	
 	if cpu_state.bound_shader == 0 {
 		if gpu_state.bound_shader == shader {
 			gl.UseProgram(0);
@@ -1785,18 +1787,28 @@ unload_shader_program :: proc(shader : Shader_program_id) {
 
 bind_shader_program :: proc(id : Shader_program_id) {
 	
+	cpu_state.bound_shader = id;
+
 	if gpu_state.bound_shader == id {
 		return;
 	}
+
+	gpu_state.bound_shader = id;
 	
 	gl.UseProgram(auto_cast id);
 	
-	cpu_state.bound_shader = id;
-	gpu_state.bound_shader = id;
 }
 
 unbind_shader_program :: proc() {
-	cpu_state.bound_shader = 0;
+	
+	when UNBIND_DEBUG {
+		cpu_state.bound_shader = 0;
+		gpu_state.bound_shader = 0;
+		gl.UseProgram(0);
+	}
+	else {
+		cpu_state.bound_shader = 0;
+	}
 }
 
 /////////// Vertex array stuff ///////////
@@ -1838,18 +1850,28 @@ gen_vertex_array :: proc(loc := #caller_location) -> Vao_id {
 
 bind_vertex_array :: proc (vao : Vao_id) {
 	
+	cpu_state.bound_vao = vao;
+
 	if gpu_state.bound_vao == vao {
 		return
 	}
+	
+	gpu_state.bound_vao = vao;
 
 	gl.BindVertexArray(auto_cast vao);
 
-	cpu_state.bound_vao = vao;
-	gpu_state.bound_vao = vao;
 }
 
 unbind_vertex_array :: proc () {
-	cpu_state.bound_vao = 0;
+
+	when UNBIND_DEBUG {
+		cpu_state.bound_vao = 0;
+		gpu_state.bound_vao = 0;
+		gl.BindVertexArray(0);
+	}
+	else {
+		cpu_state.bound_vao = 0;
+	}
 }
 
 delete_vertex_arrays :: proc (vaos : []Vao_id) {
@@ -1924,14 +1946,19 @@ draw_arrays :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count 
    	unbind_vertex_array();
 }
 
-draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32, index_type : Index_buffer_type, index_buf : Buffer_id) {
-	assert(index_type != .no_index_buffer, "What are you trying to do -.-");
-	assert(first >= 0, "first must be more then zero")
-	
+draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32, index_type : Index_buffer_type, index_buf : Buffer_id, loc := #caller_location) {
+	when ODIN_DEBUG {
+		assert(index_type != .no_index_buffer, "What are you trying to do -.-", loc);
+		assert(vao != 0, "vao may not be 0");
+		assert(first >= 0, "first must be more then zero", loc);
+		assert(count > 0, "count must be larger then 0", loc);
+		assert(index_buf != 0, "index_buf is required", loc);
+	}
+
 	index_size : i32 = 0;
 	switch index_type {
 		case .no_index_buffer:
-			index_size = 0;
+			panic("Draw elements require indices", loc);
 		case .unsigned_short:
 			index_size = 2;
 		case .unsigned_int:
@@ -1939,7 +1966,10 @@ draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, coun
 	}
 
 	bind_vertex_array(auto_cast vao);
+	bind_buffer(.element_array_buffer, index_buf);
+	assert(cpu_state.bound_buffer[.element_array_buffer] != 0, "there must be a bound index buffer");
     gl.DrawElements(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size));
+	unbind_buffer(.element_array_buffer);
    	unbind_vertex_array();
 }
 
@@ -1963,7 +1993,9 @@ draw_elements_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int f
 	}
 
 	bind_vertex_array(auto_cast vao);
+	bind_buffer(.element_array_buffer, index_buf);
     gl.DrawElementsInstanced(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size), instance_count);
+	unbind_buffer(.element_array_buffer);
    	unbind_vertex_array();
 }
 
@@ -2039,18 +2071,28 @@ delete_buffer :: proc(location : Buffer_type, buffer : Buffer_id) {
 
 bind_buffer :: proc(location : Buffer_type, buffer : Buffer_id) {
 	
+	cpu_state.bound_buffer[location] = buffer;
+
 	if gpu_state.bound_buffer[location] == buffer {
 		return
 	}
 
+	gpu_state.bound_buffer[location] = buffer;
+
 	gl.BindBuffer(auto_cast location, auto_cast buffer);
 
-	cpu_state.bound_buffer[location] = buffer;
-	gpu_state.bound_buffer[location] = buffer;
 }
 
 unbind_buffer :: proc(location : Buffer_type) {
-	cpu_state.bound_buffer[location] = 0;
+
+	when UNBIND_DEBUG {
+		cpu_state.bound_buffer[location] = 0;
+		gpu_state.bound_buffer[location] = 0;
+		gl.BindBuffer(auto_cast location, 0);
+	}
+	else {
+		cpu_state.bound_buffer[location] = 0;
+	}
 }
 
 buffer_sub_data :: proc (buffer : Buffer_id, buffer_type : Buffer_type, #any_int offset_bytes : int, data : []u8) {
@@ -2190,11 +2232,11 @@ map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type,  #any_i
 unmap_buffer :: proc (buffer : Buffer_id, buffer_type : Buffer_type, loc := #caller_location) {
 
 	if cpu_state.gl_version >= .opengl_4_5 {
-		gl.UnmapNamedBuffer(auto_cast buffer);
+		gl.UnmapNamedBuffer(auto_cast buffer, loc);
 	}
 	else {
 		bind_buffer(buffer_type, buffer);
-		gl.UnmapBuffer(auto_cast buffer_type);
+		gl.UnmapBuffer(auto_cast buffer_type, loc);
 		unbind_buffer(buffer_type);
 	}
 }
@@ -2234,7 +2276,7 @@ make_resource_desc :: proc(desc : Resource_desc, data : []u8, loc := #caller_loc
 	return resource;
 }
 
-destroy_resource :: proc(resource : Resource) {
+destroy_resource :: proc(resource : Resource, loc := #caller_location) {
 
 	needs_unmapping : bool;
 
@@ -2251,7 +2293,7 @@ destroy_resource :: proc(resource : Resource) {
 	}
 	
 	if needs_unmapping {
-		unmap_buffer(resource.buffer, resource.buffer_type);
+		unmap_buffer(resource.buffer, resource.buffer_type, loc);
 	}
 
 	delete_buffer(resource.buffer_type, resource.buffer);
@@ -2514,67 +2556,103 @@ delete_frame_buffer :: proc(fbo : Fbo_id, loc := #caller_location) {
 
 bind_frame_buffer :: proc(fbo : Fbo_id, loc := #caller_location) {
 	
+	cpu_state.bound_target = fbo;
+
 	if gpu_state.bound_target == fbo {
 		return;
 	}
+	
+	gpu_state.bound_target = fbo;
 
 	gl.BindFramebuffer(.FRAMEBUFFER, auto_cast fbo);
 	
-	cpu_state.bound_target = fbo;
-	gpu_state.bound_target = fbo;
 }
 
 unbind_frame_buffer  :: proc() {
 	
-	cpu_state.bound_target = 0;
+	when UNBIND_DEBUG {
+		cpu_state.bound_target = 0;
+		gpu_state.bound_target = 0;
+		gl.BindFramebuffer(.FRAMEBUFFER, 0);
+	}
+	else {
+		cpu_state.bound_target = 0;
+	}
 }
 
 bind_frame_buffer_read :: proc(fbo : Fbo_id, loc := #caller_location) {
 	
+	cpu_state.bound_read_fbo = fbo;
+
 	if gpu_state.bound_read_fbo == fbo {
 		return;
 	}
+
+	gpu_state.bound_read_fbo = fbo;
 	
 	gl.BindFramebuffer(.READ_FRAMEBUFFER, auto_cast fbo);
-	
-	cpu_state.bound_read_fbo = fbo;
-	gpu_state.bound_read_fbo = fbo;
 }
 
 unbind_frame_buffer_read  :: proc() {
-	cpu_state.bound_read_fbo = 0;
+
+	when UNBIND_DEBUG {
+		cpu_state.bound_read_fbo = 0;
+		gpu_state.bound_read_fbo = 0;
+		gl.BindFramebuffer(.READ_FRAMEBUFFER, 0);
+	}
+	else {
+		cpu_state.bound_read_fbo = 0;
+	}
 }
 
 bind_frame_buffer_draw :: proc(fbo : Fbo_id, loc := #caller_location) {
+	
+	cpu_state.bound_draw_fbo = fbo;
 	
 	if gpu_state.bound_draw_fbo == fbo {
 		return;
 	}
 
+	gpu_state.bound_draw_fbo = fbo;
+
 	gl.BindFramebuffer(.DRAW_FRAMEBUFFER, auto_cast fbo);
 	
-	cpu_state.bound_draw_fbo = fbo;
-	gpu_state.bound_draw_fbo = fbo;
 }
 
 unbind_frame_buffer_draw  :: proc() {
-	cpu_state.bound_draw_fbo = 0;
+
+	when UNBIND_DEBUG {
+		cpu_state.bound_draw_fbo = 0;
+		gpu_state.bound_draw_fbo = 0;
+		gl.BindFramebuffer(.DRAW_FRAMEBUFFER, 0);
+	}
+	else {
+		cpu_state.bound_draw_fbo = 0;
+	}
 }
 
 bind_render_buffer :: proc(rbo : Rbo_id, loc := #caller_location) {
 	
+	cpu_state.bound_rbo = rbo;
+
 	if gpu_state.bound_rbo == rbo {
 		return;
 	}
 
-	gl.BindRenderbuffer(.RENDERBUFFER, auto_cast rbo);
-	
-	cpu_state.bound_rbo = rbo;
 	gpu_state.bound_rbo = rbo;
+	
+	gl.BindRenderbuffer(.RENDERBUFFER, auto_cast rbo);
 }
 
 unbind_render_buffer :: proc() {	
-	cpu_state.bound_rbo = 0;
+	when UNBIND_DEBUG {
+		cpu_state.bound_rbo = 0;
+		gpu_state.bound_rbo = 0;
+		gl.BindRenderbuffer(.RENDERBUFFER, 0);
+	}
+	else {
+		cpu_state.bound_rbo = 0;
+	}
 }
 
 associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_buffers : []Rbo_id, width, height, samples_hint : i32,
@@ -2683,6 +2761,20 @@ associate_depth_render_buffer_with_frame_buffer :: proc(fbo : Fbo_id, render_buf
 	return;
 }
 
+associate_depth_texture_with_frame_buffer :: proc(fbo : Fbo_id, texture : Tex2d_id, loc := #caller_location) {
+
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.NamedFramebufferTexture(auto_cast fbo, .DEPTH_ATTACHMENT, auto_cast texture, 0);
+	}
+	else {
+		bind_frame_buffer(fbo);
+		bind_texture_2D(texture);
+		gl.FramebufferTexture(.FRAMEBUFFER, .DEPTH_ATTACHMENT, auto_cast texture, 0);
+		unbind_texture_2D();
+		bind_frame_buffer(0);
+	}
+}
+
 associate_color_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex2d_id, start_index : int = 0, loc := #caller_location) {
 
 	assert(len(textures) + start_index <= MAX_COLOR_ATTACH, "you can only have up to 8 color attachments", loc);
@@ -2712,36 +2804,6 @@ associate_color_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex
 	return;
 }
 
-associate_depth_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex2d_id, start_index : int = 0, loc := #caller_location) -> (samples : i32) {
-
-	assert(len(textures) + start_index <= MAX_COLOR_ATTACH, "you can only have up to 8 color attachments", loc);
-
-	if cpu_state.gl_version >= .opengl_4_5 {
-		
-		// Create a multisampled renderbuffer object for color attachment
-		for i in 0 ..< len(textures) {
-			gl.NamedFramebufferTexture(auto_cast fbo, .DEPTH_ATTACHMENT, auto_cast textures[i], 0);
-		}
-	}
-	else {
-		
-		//TODO move the generation out of this function so we can reuse more code. Have the function be like "attach_frame_buffer_render_attachmetns".
-		bind_frame_buffer(fbo);
-		
-		// Create a (non-)multisampled renderbuffer object for color attachment
-		for i in 0 ..< len(textures) {
-
-			bind_texture_2D(textures[i]);
-			gl.FramebufferTexture(.FRAMEBUFFER, .DEPTH_ATTACHMENT, auto_cast textures[i], 0);
-		}
-		
-		unbind_texture_2D();
-		bind_frame_buffer(0);
-	}
-	
-	return;
-}
-
 //TODO make this return an error instead of crashing
 @(require_results)
 validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid : bool) {
@@ -2764,7 +2826,7 @@ validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid 
 		TODO move the the associate functions
 		for ca, i in color_attachements {
 			if attachment, ok := ca.?; ok {
-
+				
 				attachment_type : gl.GLenum;
 				attachemnt_id_enum : gl.GLenum = auto_cast (cast(u32)gl.GLenum.COLOR_ATTACHMENT0 + auto_cast i);
 				gl.GetFramebufferAttachmentParameteriv(.FRAMEBUFFER, attachemfvt_id_enum, .FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, auto_cast &attachment_type);
@@ -2790,7 +2852,29 @@ validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid 
 	return true;
 }
 
-blit_fbo_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
+blit_fbo_color_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
+	
+	interpolation : gl.GLenum = .NEAREST;
+
+	if use_linear_interpolation {
+		interpolation = .LINEAR;
+	}
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.BlitNamedFramebuffer(auto_cast fbo, 0, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation);
+	}
+	else {
+		bind_frame_buffer_read(fbo);
+		bind_frame_buffer_draw(0);
+		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); //TODO options for .COLOR_BUFFER_BIT, .NEAREST
+		bind_frame_buffer_draw(0);
+		bind_frame_buffer_read(0);
+	}
+}
+
+/*
+Does not work
+blit_fbo_depth_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
 	
 	interpolation : gl.GLenum = .NEAREST;
 
@@ -2799,16 +2883,17 @@ blit_fbo_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, ds
 	}
 
 	if cpu_state.gl_version >= .opengl_4_5 {
-		gl.BlitNamedFramebuffer(auto_cast fbo, 0, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation);
+		gl.BlitNamedFramebuffer(auto_cast fbo, 0, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .DEPTH_BUFFER_BIT, interpolation);
 	}
 	else {
 		bind_frame_buffer_read(fbo);
 		bind_frame_buffer_draw(0);
-		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); //TODO options for .COLOR_BUFFER_BIT, .NEAREST
-		unbind_frame_buffer_draw();
-		unbind_frame_buffer_read();
+		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .DEPTH_BUFFER_BIT, interpolation); //TODO options for .COLOR_BUFFER_BIT, .NEAREST
+		bind_frame_buffer_draw(0);
+		bind_frame_buffer_read(0);
 	}
 }
+*/
 
 //////////////////////////////////////////// Textures ////////////////////////////////////////////
 
@@ -2887,18 +2972,29 @@ delete_texture_1D :: proc (texture : Tex1d_id, loc := #caller_location) {
 
 bind_texture_1D :: proc(tex : Tex1d_id, loc := #caller_location) {
 	
+	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
+	
 	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
 		return;
 	}
+	
+	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 
 	gl.BindTexture(.TEXTURE_1D, auto_cast tex);
 	
-	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
-	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 }
 
 unbind_texture_1D  :: proc() {
-	cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	assert(cpu_state.texture_slot == gpu_state.texture_slot);
+
+	when UNBIND_DEBUG {
+		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+		gpu_state.bound_texture[cpu_state.texture_slot] = 0;
+		gl.BindTexture(.TEXTURE_1D, 0);
+	}
+	else {
+		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	}
 }
 
 write_texure_data_1D :: proc (tex : Tex1d_id, level, offset : i32, width : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
@@ -3092,18 +3188,29 @@ delete_texture_2D :: proc (texture : Tex2d_id, loc := #caller_location) {
 
 bind_texture_2D :: proc(tex : Tex2d_id, loc := #caller_location) {
 	
+	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
+	
 	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
 		return;
 	}
+	
+	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 
 	gl.BindTexture(.TEXTURE_2D, auto_cast tex);
 	
-	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
-	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 }
 
 unbind_texture_2D  :: proc() {
-	cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	assert(cpu_state.texture_slot == gpu_state.texture_slot);
+	
+	when UNBIND_DEBUG {
+		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+		gpu_state.bound_texture[cpu_state.texture_slot] = 0;
+		gl.BindTexture(.TEXTURE_2D, 0);
+	}
+	else {
+		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	}
 }
 
 write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, width, height : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
@@ -3152,7 +3259,12 @@ setup_texure_2D :: proc (tex : Tex2d_id, mipmaps : bool, width, height : gl.GLsi
 	}
 	else {
 		bind_texture_2D(tex);
-		gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, .RGBA, .UNSIGNED_BYTE, nil);
+		#partial switch format {
+			case .depth_component16, .depth_component24, .depth_component32:
+				gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, .DEPTH_COMPONENT, .UNSIGNED_BYTE, nil);
+			case:
+				gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, .RGBA, .UNSIGNED_BYTE, nil);
+		}
 		unbind_texture_2D();
 	}
 }
@@ -3225,22 +3337,19 @@ filtermode_texture_2D :: proc(tex_id : Tex2d_id, mode : Filtermode, using_mipmap
 
 active_texture :: proc(slot : i32) {
 	
+	cpu_state.texture_slot = slot;
+	
 	if gpu_state.texture_slot == slot {
 		return;
 	}
+	
+	gpu_state.texture_slot = slot;
 
 	gl.ActiveTexture(auto_cast (gl.TEXTURE0 + slot));
 
-	cpu_state.texture_slot = slot;
-	gpu_state.texture_slot = slot;
 }
 
 active_bind_texture_2D :: proc (tex : Tex2d_id, slot : i32) {
-	
-	if gpu_state.bound_texture[slot] == cast(Texg_id)tex {
-		return;
-	}
-
 	active_texture(slot);
 	bind_texture_2D(tex);
 }
@@ -3309,18 +3418,28 @@ delete_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 
 bind_texture_3D :: proc(tex : Tex3d_id, loc := #caller_location) {
 	
+	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
+	
 	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
 		return;
 	}
+	
+	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 
 	gl.BindTexture(.TEXTURE_3D, auto_cast tex);
-	
-	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
-	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 }
 
 unbind_texture_3D  :: proc() {
-	cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	assert(cpu_state.texture_slot == gpu_state.texture_slot);
+	
+	when UNBIND_DEBUG {
+		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+		gpu_state.bound_texture[cpu_state.texture_slot] = 0;
+		gl.BindTexture(.TEXTURE_3D, 0);
+	}
+	else {
+		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	}
 }
 
 write_texure_data_3D :: proc (tex : Tex3d_id, level, xoffset, yoffset, zoffset : i32, width, height, depth : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {

@@ -198,7 +198,7 @@ make_texture_2D_desc :: proc(using desc : Texture_desc, width, height : i32, upl
 		fmt.assertf(len(data) == length, "Data is not in the correct format, len is %i, while it should have been %i", len(data), length, loc = loc);
 		gl.write_texure_data_2D(id, 0, 0, 0, width, height, upload_format, data, loc);
 	}
-
+	
 	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
 		gl.generate_mip_maps_2D(id);
 	}
@@ -243,11 +243,9 @@ flip_texture_2D :: proc(data : []byte, width, height, channels : int) {
 	}
 }
 
-//TODO add to state
-white_texture : Texture2D;
 get_white_texture :: proc() -> Texture2D {
-
-	if white_texture.id == 0 {
+	
+	if state.white_texture.id == 0 {
 		
 		desc := Texture_desc{
 			.repeat,
@@ -256,10 +254,10 @@ get_white_texture :: proc() -> Texture2D {
 			.uncompressed_RGBA8,
 		};
 
-		white_texture = make_texture_2D_desc(desc, 1, 1, .uncompressed_RGBA8, {255, 255, 255, 255});
+		state.white_texture = make_texture_2D_desc(desc, 1, 1, .uncompressed_RGBA8, {255, 255, 255, 255});
 	}
 
-	return white_texture;
+	return state.white_texture;
 }
 
 /////////////////////////////////// Texture 3D ///////////////////////////////////

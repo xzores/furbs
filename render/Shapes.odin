@@ -8,19 +8,77 @@ import "core:math/linalg/glsl"
 @(private)
 _generate_char :: proc () -> (verts : []Default_vertex, indices : Indices) {
 	
-	//TODO make triangle strips.
+	char_verts : [4]Default_vertex = {
+        Default_vertex{
+                position = {
+                        -0.5,
+                        -0.5,
+                        0,
+				},
+                texcoord = {0,0},
+                normal = 0,
+        },
+        Default_vertex{
+                position = {
+                        0.5,
+                        -0.5,
+                        0,
+				},
+                texcoord = {1,0},
+                normal = 0,
+        },
+        Default_vertex{
+                position = {
+                        -0.5,
+                        0.5,
+                        0,
+				},
+                texcoord = {0,1},
+                normal = 0,
+        },
+        Default_vertex{
+                position = {
+                        0.5,
+                        0.5,
+                        0,
+				},
+                texcoord = {1,1},
+                normal = 0,
+        },
+	};
 
-	return nil, nil;
+	char_index : [6]u16 = {
+		0,
+		1,
+		2,
+		2,
+		1,
+		3,
+	}
+
+	verts 		= make([]Default_vertex, len(char_verts));
+	indices		= make([]u16, len(char_index));
+
+	for v, ii in char_verts {
+		verts[ii] = v;
+	}
+
+	for i, ii in char_index {
+		indices.([]u16)[ii] = i;
+	}
+
+	return;
 }
 
+
+//TODO delete draw char
 @(private)
 _ensure_shapes_loaded :: proc (loc := #caller_location) {
 
 	if !state.shapes_init {
 		state.shapes_init = true;
 		
-		use_index_buffer := true; //We can change later if we want.
-		//TODO We likely want triangle strips.
+		use_index_buffer := true; //We can change later if we want. but don't.
 		
 		vertex_data : []Default_vertex;
 		index_data : Indices;
@@ -36,9 +94,6 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 
 			qv, qi := generate_quad({1,1,1}, {0,0,0}, use_index_buffer);
 			state.shape_quad = [2]int{i, i + len_indices(qi)}; i += len_indices(qi);
-
-			charv, chari := _generate_char();
-			state.shape_char = [2]int{i, i + len_indices(chari)}; i += len_indices(chari);
 
 			cyv, cyi := generate_cylinder({0,0,0}, 1, 1, 20, 20, use_index_buffer);
 			state.shape_cylinder = [2]int{i, i + len_indices(cyi)}; i += len_indices(cyi);
@@ -66,7 +121,7 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 			vertex_data, index_data = combine_mesh_data_multi(Default_vertex, D{1, cubev, cubei}, D{1, cirv, ciri}, D{1, qv, qi},
 				D{1, cyv, cyi}, D{1, sv, si}, D{1, conv, coni}, D{1, arrv, arri});
 			assert(vertex_data != nil);
-			fmt.printf("len_indices(index_data) : %v\n", len_indices(index_data));
+			//fmt.printf("len_indices(index_data) : %v\n", len_indices(index_data));
 			assert(len(vertex_data) <= auto_cast max(u16));
 			assert(len_indices(index_data) <= auto_cast max(u16));
 		}
@@ -98,8 +153,7 @@ draw_quad :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
 
 draw_char :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_char); 
-	panic("TODO, make triangle strips");
+	draw_mesh_single(&state.shapes, model_matrix, state.shape_char);
 }
 
 draw_circle :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
@@ -132,6 +186,7 @@ draw_arrow :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
 	draw_mesh_single(&state.shapes, model_matrix, state.shape_arrow);
 }
 
+/*
 //TODO move to state
 arrow_forward 	: Mesh_single;
 arrow_up 		: Mesh_single;
@@ -151,7 +206,7 @@ draw_coordinate_overlay :: proc(target : Render_target, camera : Camera3D, offse
 		arrow_forward 	= make_mesh_arrow({0,0,1}, 0.35, 0.15, 0.05, 0.15, 20, true);
 		arrow_up 		= make_mesh_arrow({0,1,0}, 0.35, 0.15, 0.05, 0.15, 20, true);
 		arrow_right 	= make_mesh_arrow({1,0,0}, 0.35, 0.15, 0.05, 0.15, 20, true);
-		shapes_pipeline = make_pipeline(target, get_default_shader(), .no_blend, true, true, .fill, .back_cull);
+		shapes_pipeline = make_pipeline(get_default_shader(), .no_blend, true, true, .fill, .back_cull);
 		arrow_init = true;
 	}
 	
@@ -168,7 +223,7 @@ draw_coordinate_overlay :: proc(target : Render_target, camera : Camera3D, offse
 		near 			= -camera.far - 1,
 	};
 
-	begin_pipeline(pipeline, overlay_camera, nil);
+	begin_pipeline(pipeline, overlay_camera);
 	
 	view, prj := get_camera_3D_prj_view(camera, 1);
 	mat := (prj * view * linalg.matrix4_translate_f32(camera.position + f) * linalg.matrix4_scale_f32({scale, scale, scale}));
@@ -187,24 +242,7 @@ draw_coordinate_overlay :: proc(target : Render_target, camera : Camera3D, offse
 	draw_mesh_single(&arrow_right, mat);
 	end_pipeline(pipeline);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+*/
 
 
 

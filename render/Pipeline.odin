@@ -8,7 +8,6 @@ import "vendor:glfw"
 import "gl"
 
 Pipeline_desc :: struct {
-	render_target : Render_target,
 	shader : ^Shader,
 	blend_mode : Blend_mode,
 	depth_write : bool,
@@ -23,18 +22,17 @@ Pipeline :: struct {
 	//TODO
 }
 
-make_pipeline :: proc(render_target : Render_target,
-									shader : ^Shader,
-									blend_mode : Blend_mode = .blend,
-									depth_write : bool = true,
-									depth_test : bool = true,
-									polygon_mode : Polygon_mode = .fill,
-									culling : Cull_method = .no_cull,
-									depth_clamp : Maybe([2]f64) = nil,
-									loc := #caller_location) -> (pipeline : Pipeline) {
+@(require_results)
+make_pipeline :: proc(	shader : ^Shader,
+						blend_mode : Blend_mode = .blend,
+						depth_write : bool = true,
+						depth_test : bool = true,
+						polygon_mode : Polygon_mode = .fill,
+						culling : Cull_method = .no_cull,
+						depth_clamp : Maybe([2]f64) = nil,
+						loc := #caller_location) -> (pipeline : Pipeline) {
 	
 	desc : Pipeline_desc = {
-		render_target = render_target,
 		shader = shader,
 		blend_mode = blend_mode,
 		depth_write = depth_write,
@@ -47,59 +45,28 @@ make_pipeline :: proc(render_target : Render_target,
 	return make_pipeline_desc(desc, loc);
 }
 
+@(require_results)
 make_pipeline_desc :: proc(desc : Pipeline_desc, loc := #caller_location) -> (pipeline : Pipeline) {
 
 	return {desc};
 }
 
+destroy_pipeline :: proc (pipeline : Pipeline, loc := #caller_location) {
+	//Currently it does nothing, might do something in the future.
+}
+
 //TODO flags: clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}
-begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, clear_method : Maybe([4]f32) = [4]f32{0,0,0,0}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}) {
+begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_location) {
+	assert(state.current_pipeline == {}, "There must not be a bound target before calling begin_pipeline (remember to call end_pipeline).", loc);
+	assert(state.current_target != {}, "There must be a bound target before calling begin_pipeline (call begin_target before begin_pipeline).", loc);
+	assert(state.target_pixel_width != 0, "target_pixel_width is 0", loc);
+	assert(state.target_pixel_height != 0, "target_pixel_height is 0", loc);
+
 	using gl;
-
-	if window, ok := pipeline.render_target.(^Window); ok {
-		if window.glfw_window == state.owner_context {
-			state.target_pixel_width, state.target_pixel_height = cast(f32)window.width, cast(f32)window.height;
-			gl.bind_frame_buffer(0);
-		}
-		else {
-			state.target_pixel_width, state.target_pixel_height = cast(f32)window.framebuffer.width, cast(f32)window.framebuffer.height;
-			gl.bind_frame_buffer(window.framebuffer.id);
-		}
-	}
-	else if fbo, ok := pipeline.render_target.(^Frame_buffer); ok {
-		state.target_pixel_width, state.target_pixel_height = cast(f32)fbo.width, cast(f32)fbo.height;
-		gl.bind_frame_buffer(fbo.id);
-	}
-	else {
-		panic("TODO");
-	}
 	
-	if clear_color, ok := clear_method.?; ok {
-		gl.clear(clear_color, falgs);
-	}
-
-	bind_camera(camera); //must be here so we can flip the camera y-axis when desired.
-
-	/* This was unneeded....
-	if _, ok := pipeline.render_target.(^Frame_buffer); ok {
-		if flip_if_fbo { //Because of opengl texcoords, it is ussually desired to flip the texture, we instead flip the camera.
-			inverse := matrix[4,4]f32{  //TODO WHY DO WE FLIP THE X-axis? and not the Y-axis? Is is something to do the the camera being 3D? does it work for 2D cameras?
-			1,0,0,0,
-			0,1,0,0,
-			0,0,1,0,
-			0,0,0,1,
-			};
-
-			state.view_mat = state.view_mat * inverse;
-			state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);
-			state.prj_mat = state.prj_mat * inverse;
-			state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
-		}
-	}
-	*/
-	
+	bind_camera(camera);
 	bind_shader(pipeline.shader);
-
+	
 	gl.set_viewport(0, 0, state.target_pixel_width, state.target_pixel_height);
 	gl.set_blend_mode(pipeline.blend_mode);
 	gl.set_depth_write(pipeline.depth_write);
@@ -116,15 +83,75 @@ begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, clear_method : May
 	
 	set_uniform(pipeline.shader, .prj_mat, state.prj_mat);
 	set_uniform(pipeline.shader, .inv_prj_mat, state.inv_prj_mat);
+	
 	set_uniform(pipeline.shader, .view_mat, state.view_mat);
 	set_uniform(pipeline.shader, .inv_view_mat, state.inv_view_mat);
+
+	set_uniform(pipeline.shader, .view_prj_mat, state.view_prj_mat);
+	set_uniform(pipeline.shader, .inv_view_prj_mat, state.inv_view_prj_mat);
+
+	set_uniform(pipeline.shader, .time, 		state.time_elapsed);
+	set_uniform(pipeline.shader, .delta_time, 	state.delta_time);
+
+	state.current_pipeline = pipeline;
 }
 
-end_pipeline :: proc (pipeline : Pipeline) {
+end_pipeline :: proc (loc := #caller_location) {
+	assert(state.current_pipeline != {}, "There must be a bound target before calling end_pipeline (use begin_pipeline).", loc);
+
+	using gl;
+	
+	unbind_shader(state.current_pipeline.shader);
+
+	state.camera = {};
+	state.current_pipeline = {};
+}
+
+
+
+
+////// TARGET //////
+
+begin_target :: proc (render_target : Render_target, clear_method : Maybe([4]f32) = [4]f32{0,0,0,0}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
+	assert(state.current_target == {}, "There must not be a bound target before calling begin_target (remember to call end_target).", loc);
+	
 	using gl;
 
-	unbind_shader(pipeline.shader);
+	if window, ok := render_target.(^Window); ok {
+		if window.glfw_window == state.owner_context {
+			state.target_pixel_width, state.target_pixel_height = cast(f32)window.width, cast(f32)window.height;
+			gl.bind_frame_buffer(0);
+		}
+		else {
+			state.target_pixel_width, state.target_pixel_height = cast(f32)window.framebuffer.width, cast(f32)window.framebuffer.height;
+			gl.bind_frame_buffer(window.framebuffer.id);
+		}
+	}
+	else if fbo, ok := render_target.(^Frame_buffer); ok {
+		state.target_pixel_width, state.target_pixel_height = cast(f32)fbo.width, cast(f32)fbo.height;
+		gl.bind_frame_buffer(fbo.id);
+	}
+	else {
+		panic("!?!?!?");
+	}
+	
+	assert(state.target_pixel_width != 0, "target_pixel_width is 0, internal error");
+	assert(state.target_pixel_height != 0, "target_pixel_height is 0, internal error");
+
+	if clear_color, ok := clear_method.?; ok {
+		gl.clear(clear_color, falgs);
+	}
+
+	state.current_target = render_target;
+}
+
+end_target :: proc (loc := #caller_location) {
+	assert(state.current_target != {}, "There must be a bound target before calling end_target (use begin_target).", loc);
+	assert(state.current_pipeline == {}, "end_pipeline has not been called before end_target", loc);
 
 	state.target_pixel_width, state.target_pixel_height = 0, 0;
-	state.camera = {};
+
+	gl.unbind_frame_buffer();
+	state.current_target = {};
 }
+

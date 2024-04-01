@@ -26,6 +26,13 @@ Default_vertex :: struct {
 	normal 		: [3]f32,
 }
 
+Default_instance_data :: struct {
+	instance_position 	: [3]f32,
+	instance_scale 		: [3]f32,
+	instance_texcoord 	: [4]f32,
+}
+
+
 //These are removed to other locations
 	//Occlusion culling should be handled somehow? 											- 
 
@@ -376,7 +383,7 @@ upload_instance_data_single :: proc(mesha : ^Mesh_single, #any_int start_index :
 	if instance_data, ok := &mesha.instance_data.?; ok {
 		assert(T == instance_data.data_type, "The data type you are trying to upload does not match the meshes data type", loc);
 		byte_size := reflect.size_of_typeid(instance_data.data_type);
-		fmt.assertf(instance_data.data.bytes_count == instance_data.data_points * byte_size, "internal error : %v, %v", instance_data.data.bytes_count, instance_data.data_points * byte_size, loc);
+		fmt.assertf(instance_data.data.bytes_count == instance_data.data_points * byte_size, "internal error : %v, %v", instance_data.data.bytes_count, instance_data.data_points * byte_size, loc = loc);
 		assert(instance_data.data.bytes_count >= (len(data) + start_index) * byte_size, "data out of bounds", loc);
 		
 		//TODO needed?
@@ -399,13 +406,11 @@ upload_instance_data_single :: proc(mesha : ^Mesh_single, #any_int start_index :
 			case .dynamic_upload, .dynamic_copy:
 				gl.buffer_upload_sub_data(&instance_data.data, byte_size * start_index, byte_data);
 			case .stream_upload, .stream_copy:
-				gl.buffer_upload_sub_data(&instance_data.data, byte_size * start_index, byte_data);
-				/* TODO!
-				dst : []u8 = gl.begin_buffer_write(resource, byte_size * start_index, len(data));
+				/*dst : []u8 = gl.begin_buffer_write(resource, byte_size * start_index, len(data));
 				fmt.assertf(len(dst) == len(data), "length of buffer and length of data does not match. dst : %i, data : %i", len(dst), len(data), loc = loc);
 				mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst)); //TODO this mapping and unmapping is not nice when we upload multiple time a frame... in the mesh share for example.
-				gl.end_buffer_writes(resource);
-				*/
+				gl.end_buffer_writes(resource);*/
+				panic("TODO");
 		}
 	} else { 
 		panic("This mesh is not instanced");
@@ -426,8 +431,12 @@ remake_resource :: proc (old_res : gl.Resource, new_size : int) -> gl.Resource {
 //TODO test
 resize_mesh_single :: proc(mesh : ^Mesh_single, new_vert_size, new_index_size : int, loc := #caller_location) {
 
-	mesh.vertex_data = remake_resource(mesh.vertex_data, new_vert_size);
+	attrib_info := get_attribute_info_from_typeid(mesh.data_type, loc);
+	defer delete(attrib_info);
 
+	mesh.vertex_data = remake_resource(mesh.vertex_data, new_vert_size);
+	gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, 0, loc);
+	
 	switch mesh.indices_type {
 		case .no_index_buffer:
 			assert(new_index_size == 0, "if there is no index buffer then new_index_size must be 0", loc);
@@ -435,18 +444,30 @@ resize_mesh_single :: proc(mesh : ^Mesh_single, new_vert_size, new_index_size : 
 			i, ok := mesh.indices_buf.(gl.Resource);
 			assert(ok, "internal error");
 			mesh.indices_buf = remake_resource(i, new_index_size);
+			gl.associate_index_buffer_with_vao(mesh.vao, i.buffer);
 		case .unsigned_int:
 			i, ok := mesh.indices_buf.(gl.Resource);
 			assert(ok, "internal error");
 			mesh.indices_buf = remake_resource(i, new_index_size);
+			gl.associate_index_buffer_with_vao(mesh.vao, i.buffer);
 	}
 
-	panic("TODO this will not work for streaming buffers");
+	if true {
+		panic("TODO this will not work for streaming buffers");
+	}
 }
 
 resize_mesh_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, loc := #caller_location) {
+	
 	if instance, ok := &mesh.instance_data.?; ok {
-		instance.data = remake_resource(instance.data, instance_size);
+
+		instanced_attrib_info := get_attribute_info_from_typeid(instance.data_type, loc);
+		defer delete(instanced_attrib_info);
+
+		instance.data = remake_resource(instance.data, instance_size * reflect.size_of_typeid(instance.data_type));
+		gl.associate_buffer_with_vao(mesh.vao, instance.data.buffer, instanced_attrib_info, 1, loc);
+		
+		instance.data_points = instance_size;
 	}
 	else {
 		panic("This mesh is not instanced");
@@ -469,7 +490,7 @@ draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, dr
 	
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
 	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
-	mvp := state.prj_view_mat * model_matrix;
+	mvp := state.prj_mat * state.view_mat * model_matrix;
 	set_uniform(state.bound_shader, .mvp, mvp);
 	set_uniform(state.bound_shader, .inv_mvp, linalg.matrix4_inverse(mvp));
 	
@@ -508,7 +529,7 @@ draw_mesh_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt :
 	model_matrix : matrix[4,4]f32 = 1;
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
 	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
-	mvp := state.prj_view_mat * model_matrix;
+	mvp := state.view_prj_mat * model_matrix;
 	set_uniform(state.bound_shader, .mvp, mvp);
 	set_uniform(state.bound_shader, .inv_mvp, linalg.matrix4_inverse(mvp));
 	

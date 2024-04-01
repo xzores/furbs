@@ -6,6 +6,7 @@ import "base:runtime"
 import "vendor:glfw"
 import fs "vendor:fontstash"
 
+import "core:time"
 import "gl"
 
 //This contains high-level state, go to wrappers to see the opengl client side state.
@@ -17,6 +18,14 @@ enable_preformence_warnings :: proc (warnings : bool) {
 }
 
 State :: struct {
+	
+	//Time stuff
+	
+	time_start : time.Time,
+	time_last : time.Time,
+
+	delta_time : f32,
+	time_elapsed : f32,
 	
 	//Input stuff
 	button_down 	: [Mouse_code]bool,
@@ -75,13 +84,26 @@ State :: struct {
 
 	target_pixel_width, target_pixel_height : f32,
 
+	// Render target stuff
+	current_pipeline : Pipeline,
+	current_target : Render_target,
+
 	//Text stuff
 	font_context : fs.FontContext,
-	font_texture : Texture2D,
 	
+	char_mesh : Mesh_single,
+	font_texture : Texture2D,
+
+	default_fonts : Fonts,
+	
+	//Textures stuff
+	white_texture : Texture2D,
+
 	//Shader stuff
 	is_init_shader : bool,
 	default_shader : ^Shader,
+	default_text_shader : ^Shader,
+	default_instance_shader : ^Shader,
 	shader_defines : map[string]string,
 
 	loaded_shaders : [dynamic]^Shader,
@@ -94,8 +116,8 @@ State :: struct {
 		inv_prj_mat 	: matrix[4,4]f32,
 		view_mat 		: matrix[4,4]f32,
 		inv_view_mat	: matrix[4,4]f32,
-		prj_view_mat 	: matrix[4,4]f32,
-		inv_prj_view_mat: matrix[4,4]f32,
+		view_prj_mat 	: matrix[4,4]f32,
+		inv_view_prj_mat: matrix[4,4]f32,
 	},
 
 	render_context : runtime.Context,	

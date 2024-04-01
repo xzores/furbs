@@ -9,6 +9,9 @@ import "core:reflect"
 import "core:log"
 import "core:container/queue"
 
+import "core:os"
+import "core:time"
+
 import "vendor:glfw"
 import fs "vendor:fontstash"
 
@@ -82,7 +85,9 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 
 	fmt.assertf(mem.check_zero_ptr(&state, size_of(state)), "it looks like the state is not cleared correctly, did you forget to close the last state correctly, or did you already call init_render?\nThe state : %v", state, loc = loc);
 	state.render_context = render_context;
-	
+	state.time_start = time.now();
+	state.time_last = time.now();
+
 	// Initialize GLFW
     if !glfw.Init() {
 		panic("Could not init glfw\n");
@@ -186,8 +191,8 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 	*/
 
 	init_shaders();
-	//fs.Init(&state.font_context, 1, 1, .BOTTOMLEFT);	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
-
+	init_text();
+	
 	return window;
 }
 
@@ -221,6 +226,14 @@ destroy :: proc (loc := #caller_location) {
 
 	delete(state.shader_defines); state.shader_defines = {};
 
+	if state.white_texture != {} {
+		destroy_texture_2D(&state.white_texture);
+		state.white_texture = {};
+	}
+
+	//font context
+	destroy_text();
+
 	destroy_shapes();
 	destroy_shaders();
 	
@@ -232,10 +245,6 @@ destroy :: proc (loc := #caller_location) {
 	//Destoy active windows
 	delete(state.active_windows);
 	state.active_windows = {};
-
-	//font context
-	fs.Destroy(&state.font_context);
-	state.font_context = {};
 
 	//destroy gl
 	log.infof("Destroying gl_wrappers");
@@ -272,25 +281,36 @@ destroy :: proc (loc := #caller_location) {
 	state.vsync 			= false;
 	state.window_in_focus	= nil;
 	state.render_context 	= {};
+	
+	state.time_start 	= {};
+	state.time_last 	= {};
+	state.delta_time 	= {};
+	state.time_elapsed 	= {};
 
 	glfw.Terminate();
-
-	//TODO make this so it prints the field that are not mem zero.
+	
 	if !mem.check_zero_ptr(&state, size_of(State)) {
 		for field in reflect.struct_fields_zipped(State) {
-			
 			ptr : uintptr = cast(uintptr)&state + field.offset;
-			val := any{data = auto_cast ptr, id = field.type.id};
+			val := any{data = cast(rawptr)ptr, id = field.type.id};
+
+			if !mem.check_zero_ptr(val.data, reflect.size_of_typeid(val.id)) {
+				fmt.printf("field.name, val : %v\n", field.name);
+			}
+			
 			fmt.assertf(mem.check_zero_ptr(val.data, reflect.size_of_typeid(val.id)), "\033[31mState must be reset before closing (internal error). The field %s is : %#v\n\033[0m", field.name, val);
 		}
 		panic("state is not zero");
 	}
-
-	//state.render_context = {};
 }
 
 begin_frame :: proc() {
 	
+	now := time.now();
+	state.time_elapsed = cast(f32)time.duration_seconds(time.diff(state.time_start, now));
+	state.delta_time = cast(f32)time.duration_seconds(time.diff(state.time_last, now));
+	state.time_last = now;
+
 	begin_inputs();
 	
 	for w in state.active_windows {
@@ -337,7 +357,21 @@ begin_frame :: proc() {
 		enable_vsync(state.vsync);
 		state.main_window.width, state.main_window.height = get_screen_size(state.main_window);
 	}
+	
+	if true {
+	 	for shader in state.loaded_shaders {
+			if load, ok := shader.loaded.?; ok {
+				
+				file, err := os.stat(load.path);
+				defer os.file_info_delete(file);
+				
+				if time.duration_seconds(time.diff(file.modification_time, load.time_stamp)) <= 0 {
+					reload_shader(shader);
+				}
 
+			}
+		}
+	}
 }
 
 end_frame :: proc(loc := #caller_location) {
@@ -353,7 +387,7 @@ end_frame :: proc(loc := #caller_location) {
 		dst_width, dst_height : i32;
 
 		dst_width, dst_height = get_screen_size(w);
-		gl.blit_fbo_to_screen(w.context_framebuffer.id, 0, 0, w.framebuffer.width, w.framebuffer.height, 0, 0, dst_width, dst_height, true);
+		gl.blit_fbo_color_to_screen(w.context_framebuffer.id, 0, 0, w.framebuffer.width, w.framebuffer.height, 0, 0, dst_width, dst_height, true);
 
 		_swap_buffers(loc, w.glfw_window);
 	}

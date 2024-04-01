@@ -149,12 +149,9 @@ init_frame_buffer_textures :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, w
 
 	//setup depth buffer
 	{
-		fmt.printf("TODO textures, not renderbuffers\n");
-		depth_buf := gl.gen_render_buffer();
-		depth_samples := gl.associate_depth_render_buffer_with_frame_buffer(fbo.id, depth_buf, width, height, 1, auto_cast depth_format)
-		fmt.assertf(fbo.samples == depth_samples, "inconsistent FBO samples %v, %v", fbo.samples, depth_samples); 
-
-		fbo.depth_attachment = Depth_render_buffer{depth_buf, width, height, depth_samples, depth_format};
+		depth_texture := make_texture_2D(mipmaps, .clamp_to_border, filtermode, auto_cast depth_format, width, height, .no_upload, nil);
+		fbo.depth_attachment = depth_texture;
+		gl.associate_depth_texture_with_frame_buffer(fbo.id, depth_texture.id);
 	}
 	
 	assert(gl.validate_frame_buffer(fbo.id) == true, "Framebuffer is not complete!", loc);
@@ -173,14 +170,13 @@ destroy_frame_buffer :: proc(fbo : Frame_buffer) {
 		}
 	}
 
-	if fbo.depth_attachment == nil {
-		//do nothing
-	}
-	else if attachment, ok := fbo.depth_attachment.(Depth_render_buffer); ok {
-		gl.delete_render_buffer(attachment.id);
-	}
-	else {
-		panic("TODO");
+	switch &attachment in fbo.depth_attachment {
+		case nil:
+			//do nothing
+		case Depth_render_buffer:
+			gl.delete_render_buffer(attachment.id);
+		case Texture2D:
+			destroy_texture_2D(&attachment);
 	}
 
 	gl.delete_frame_buffer(fbo.id);

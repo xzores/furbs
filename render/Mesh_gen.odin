@@ -46,8 +46,18 @@ convert_to_non_indexed :: proc (verts : []$T, indices : Indices, loc := #caller_
 
 //This will convert mesh data to mesh data that can be drawn with triangle stips. This can optimize the rendering on the GPU.
 //This will only help if you mesh is placed in a format where indicies often occurs multiple times in a row.
+//TODO do we want this? I think not.
 convert_to_triangle_strips_indexed :: proc (verts : []$T, indices : Indices, loc := #caller_location) -> (new_indices : Indices) {
-	
+	assert(indices != nil, "indicies are required", loc);
+	assert(len(indices) %% 3 == 0, "len(indices) must be a multiple of 3", loc);
+
+	//Check if the last triangle contained some of the new triangles
+	//The last triangles might contain 2 of the same triangles.
+
+	//insert degenerate triangles
+
+	panic("todo");
+
 }
 
 //Combine the mesh data from 2 different meshes.
@@ -142,17 +152,17 @@ generate_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, a
 		verts = make([]Default_vertex, 4)
 		_indices := make([]u16, 6);
 		
-		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
-		verts[2] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
-		verts[3] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
-		verts[1] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[1] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
+		verts[2] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
+		verts[3] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
 		
 		_indices[0] = 0;
 		_indices[1] = 1;
 		_indices[2] = 2;
-		_indices[3] = 2;
-		_indices[5] = 3;
-		_indices[4] = 1;
+		_indices[3] = 0;
+		_indices[5] = 2;
+		_indices[4] = 3;
 		indices = _indices;
 	}
 	else {

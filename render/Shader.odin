@@ -161,8 +161,10 @@ init_shaders :: proc() {
 
 	state.loaded_shaders = make([dynamic]^Shader);
 	e : Shader_load_error;
-
-	state.default_shader, e = load_shader_from_src("default_shader.glsl", #load("default_shader.glsl"), nil);
+	
+	state.default_shader, e 			= load_shader_from_src("default_shader.glsl", #load("default_shader.glsl"), nil);
+	state.default_text_shader, e 		= load_shader_from_src("default_text_shader.glsl", #load("default_text_shader.glsl"), nil);
+	state.default_instance_shader, e 	= load_shader_from_src("default_instance_shader.glsl", #load("default_instance_shader.glsl"), nil);
 	
 	if e != nil {
 		panic("Failed to load default shader!, this is internal bad error");
@@ -173,8 +175,9 @@ init_shaders :: proc() {
 
 destroy_shaders :: proc() {
 
-	unload_shader(state.default_shader);
-	state.default_shader = {};
+	unload_shader(state.default_shader);			state.default_shader = {};
+	unload_shader(state.default_text_shader); 		state.default_text_shader = {};
+	unload_shader(state.default_instance_shader); 	state.default_instance_shader = {};
 
 	if len(state.loaded_shaders) != 0 {
 		panic("not all shaders have been unloaded");
@@ -706,9 +709,9 @@ unload_shader :: proc(shader : ^Shader, loc := #caller_location) {
 
 reload_shader :: proc (shader : ^Shader) {
 	
-	if load, ok := shader.loaded.?; ok {
+	if load, ok := &shader.loaded.?; ok {
 		assert(load.path != "");
-
+		
 		file, err := os.stat(load.path);
 		defer os.file_info_delete(file);
 		
@@ -716,7 +719,8 @@ reload_shader :: proc (shader : ^Shader) {
 			log.infof("The shader %v, is up to date. skipping reloading", shader.name);
 			return; //The last load is newer then the modified file, so we do not need to reload.
 		}
-
+		load.time_stamp = time.now(); //set the old one to update the last check.
+		
 		//The acctual reloading
 		new_shader, new_err := load_shader_from_path(load.path);
 

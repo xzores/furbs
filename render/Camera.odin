@@ -5,27 +5,26 @@ import "core:mem"
 import "core:math"
 
 import glfw "vendor:glfw"
-
-import glsl "core:math/linalg/glsl"
 import linalg "core:math/linalg"
 
 // Camera projection
 CameraProjection :: enum {
-	perspective = 0,                  // Perspective projection
-	orthographic,                     // Orthographic projection
+	perspective,				// Perspective projection
+	orthographic,				// Orthographic projection
 }
 
 Camera3D :: struct {
-	position: [3]f32,            	// Camera position
-	target:   [3]f32,            	// Camera target it looks-at
-	up:       [3]f32,            	// Camera up vector (rotation over its axis)
-	fovy:     f32,                	// Camera field-of-view apperture in Y (degrees) in perspective
-	projection: CameraProjection, 	// Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
+	position		: [3]f32,            	// Camera position
+	target			: [3]f32,            	// Camera target it looks-at
+	up				: [3]f32,            	// Camera up vector (rotation over its axis)
+	fovy			: f32,                	// Camera field-of-view apperture in Y (degrees) in perspective
+	ortho_height 	: f32,					// Camera ortho_height when using orthographic projection
+	projection		: CameraProjection, 	// Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
 	
-	far, near : f32,
+	far, near 		: f32,
 }
 
-//space from (-1,-1) to (1,1) with zoom = 1.
+//Zoom = 1 for no zoom
 Camera2D :: struct {
 	position: 		[2]f32,            	// Camera position
 	target_relative:[2]f32,				// 
@@ -42,20 +41,22 @@ Camera :: union {
 
 //////////////////////////////////////////////////////////////////////////////////
 
+flip_z_axis : bool = false;
+
 get_camera_3D_prj_view :: proc(using camera : Camera3D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
-
-	view = glsl.mat4LookAt(cast(glsl.vec3)camera.position, cast(glsl.vec3)camera.target, cast(glsl.vec3)camera.up);
-
+	
+	view = linalg.matrix4_look_at(camera.position, camera.target, camera.up, flip_z_axis = flip_z_axis);
+	
     if (camera.projection == .perspective)
     {
-		prj = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, flip_z_axis = false); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
+		prj = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, flip_z_axis = flip_z_axis); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
     }
     else if (camera.projection == .orthographic)
     {	
-        top : f32 = (camera.fovy * math.PI / 180) / 2.0;
+        top : f32 = ortho_height / 2.0;
         right : f32 = top * aspect;
 		
-		prj = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
+		prj = linalg.matrix_ortho3d(-right, right, -top, top, near, far, flip_z_axis = flip_z_axis);
     }
 
 	return;
@@ -69,7 +70,7 @@ get_camera_2D_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view :
 
 	top : f32 = 1/zoom;
     right : f32 = top * aspect;
-	prj = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
+	prj = linalg.matrix_ortho3d(-right, right, -top, top, near, far, flip_z_axis = flip_z_axis);
 
 	return;
 };
@@ -86,8 +87,8 @@ bind_camera_3D :: proc(using camera : Camera3D, loc := #caller_location) {
 	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);	
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
 
-	state.prj_view_mat = state.prj_mat * state.view_mat;
-	state.inv_prj_view_mat = linalg.inverse(state.prj_view_mat);
+	state.view_prj_mat = state.prj_mat * state.view_mat;
+	state.inv_view_prj_mat = linalg.inverse(state.view_prj_mat);
 }
 
 @(private)
@@ -98,8 +99,8 @@ bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
 	state.view_mat, state.prj_mat = get_camera_2D_prj_view(camera, aspect);
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
 
-	state.prj_view_mat = state.prj_mat * state.view_mat;
-	state.inv_prj_view_mat = linalg.inverse(state.prj_mat * state.view_mat);
+	state.view_prj_mat = state.prj_mat * state.view_mat;
+	state.inv_view_prj_mat = linalg.inverse(state.view_prj_mat);
 }
 
 @(private)
@@ -118,15 +119,26 @@ bind_camera :: proc (camera : Camera, loc := #caller_location) {
 
 //////////////////////////////////////////////////////////////////////////////////
 
-get_pixel_space_camera :: proc(loc := #caller_location) -> (cam : Camera2D) {
+get_pixel_space_camera :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
 
-	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
+	w, h : f32;
+	
+	switch t in target {
+		case nil:
+			panic("!?!?");
+		case ^Frame_buffer:
+			w, h = cast(f32)t.width, cast(f32)t.height;
+		case ^Window:
+			w, h = cast(f32)t.width, cast(f32)t.height;
+	}
+
+	aspect := w / h;
 
 	cam = {
-		position 		= {state.target_pixel_width/2, state.target_pixel_height/2},
+		position 		= {w/2, h/2},
 		target_relative = {0,0},
 		rotation		= 0,
-		zoom			= 2/(state.target_pixel_height),
+		zoom			= 2/(h),
 
 		far 			= 1,
 		near			= -1,
