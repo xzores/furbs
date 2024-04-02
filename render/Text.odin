@@ -170,7 +170,8 @@ get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, sp
 	fs.SetSpacing(&font_context, spacing);
 	//fs.SetAlignHorizontal(&font_context, .LEFT);
 	//fs.SetAlignVertical(&font_context, .BASELINE);
-	
+
+	//TODO there seem to be a bug in fontstash that makes it so it only shows letter that can fit in the uploaded texture (it does not resize on the first upload).
 	it : fs.TextIter = fs.TextIterInit(&font_context, position.x, position.y, text);
 	dirtyRect : [4]f32;
 	quad : fs.Quad;
@@ -178,24 +179,11 @@ get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, sp
 	_ensure_shapes_loaded();
 
 	instance_data = make([dynamic]Default_instance_data, 0, len(text));
+	
+	should_reupload : bool = false;
 
 	for fs.TextIterNext(&font_context, &it, &quad) {
-		
-		if fs.ValidateTexture(&font_context, &dirtyRect) {
-			//Upload texture again.
-			
-			//TODO bad slow way, reupload instead (and subBufferData if there is no resize)
-			//If the texture is there then unload it.
-			if font_texture != {} {
-				destroy_texture_2D(&font_texture);
-			}
-			
-			assert(len(font_context.textureData) != 0, "font_context.textureData length is 0")
-			
-			font_texture = make_texture_2D_desc(font_tex_desc, auto_cast font_context.width, auto_cast font_context.height, .uncompressed_R8, font_context.textureData);
-			log.infof("Reuploaded font texture, new size is %v, %v", font_context.width, font_context.height);
-		}
-		
+
 		//This is weird
 		pos : linalg.Vector3f32 = {quad.x1 + (quad.x0 - quad.x1)/2, quad.y0 + (quad.y1 - quad.y0)/2, 0}; 	//this is position of single quad
 		scale : linalg.Vector3f32 = {(quad.x1 - quad.x0), (quad.y0 - quad.y1), 0};							//scale of the quad
@@ -209,13 +197,31 @@ get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, sp
 		});
 	}
 
+	for fs.ValidateTexture(&font_context, &dirtyRect) {
+		should_reupload = true;
+	}
+	
+	if should_reupload {
+		//Upload texture again.
+		
+		//TODO bad slow way, reupload instead (and subBufferData if there is no resize)
+		//If the texture is there then unload it.
+		if font_texture != {} {
+			destroy_texture_2D(&font_texture);
+		}
+		
+		assert(len(font_context.textureData) != 0, "font_context.textureData length is 0")
+		
+		font_texture = make_texture_2D_desc(font_tex_desc, auto_cast font_context.width, auto_cast font_context.height, .uncompressed_R8, font_context.textureData);
+		log.infof("Reuploaded font texture, new size is %v, %v", font_context.width, font_context.height);
+	}
+
 	return;
 }
 
 //Has its own pipeline call outisde of a pipeline, but inside a target.
 draw_text_simple :: proc (text : string, position : [2]f32, size : f32, spacing : f32 = 0, color : [4]f32 = {1,1,1,1},
 							font : Font = state.default_fonts.normal, shader := state.default_text_shader, loc := #caller_location) {
-	
 	assert(shader != nil, "shader may not be nil", loc);
 	assert(state.current_pipeline == {}, "A pipeline is already bound, text must be drawn outside of pipeline begin/end.", loc);
 	assert(state.current_target != nil, "A render target is not bound.", loc);

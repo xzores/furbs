@@ -41,11 +41,11 @@ Camera :: union {
 
 //////////////////////////////////////////////////////////////////////////////////
 
-flip_z_axis : bool = false;
+flip_z_axis : bool = true;
 
 get_camera_3D_prj_view :: proc(using camera : Camera3D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
 	
-	view = linalg.matrix4_look_at(camera.position, camera.target, camera.up, flip_z_axis = flip_z_axis);
+	view = linalg.matrix4_look_at(camera.position, camera.target, camera.up);
 	
     if (camera.projection == .perspective)
     {
@@ -98,7 +98,7 @@ bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
 
 	state.view_mat, state.prj_mat = get_camera_2D_prj_view(camera, aspect);
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
-
+	
 	state.view_prj_mat = state.prj_mat * state.view_mat;
 	state.inv_view_prj_mat = linalg.inverse(state.view_prj_mat);
 }
@@ -107,10 +107,10 @@ bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
 bind_camera :: proc (camera : Camera, loc := #caller_location) {
 
 	if cam, ok := camera.(Camera2D); ok {
-		bind_camera_2D(cam)
+		bind_camera_2D(cam);
 	}
 	else if cam, ok := camera.(Camera3D); ok {
-		bind_camera_3D(cam)
+		bind_camera_3D(cam);
 	}
 	else {
 		panic("??");
@@ -150,7 +150,7 @@ get_pixel_space_camera :: proc(target : Render_target, loc := #caller_location) 
 ///////////////////////////////////////////
 
 camera_forward :: proc(cam : Camera3D) -> [3]f32 {
-	res := linalg.normalize(cam.position - cam.target);
+	res := linalg.normalize(cam.target - cam.position);
 	return res;
 } 
 
@@ -162,7 +162,7 @@ camera_forward_horizontal :: proc(cam : Camera3D) -> [3]f32 {
 
 camera_right :: proc(cam : Camera3D) -> [3]f32 {
 	forward := camera_forward(cam);
-	return linalg.normalize(linalg.cross(cam.up, forward));
+	return linalg.normalize(linalg.cross(forward, cam.up));
 } 
 
 camera_move :: proc(cam : ^Camera3D, movement : [3]f32) {

@@ -1880,11 +1880,12 @@ delete_vertex_arrays :: proc (vaos : []Vao_id) {
 		for vao in vaos {
 			if gpu_state.bound_vao == vao {
 				gl.BindVertexArray(0);
+				cpu_state.bound_vao = 0;
 				gpu_state.bound_vao = 0;
 			}
 		}
 	}
-
+	
 	gl.DeleteVertexArrays(auto_cast len(vaos), cast([^]u32) raw_data(vaos));
 
 	when RENDER_DEBUG {
@@ -1966,10 +1967,7 @@ draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, coun
 	}
 
 	bind_vertex_array(auto_cast vao);
-	bind_buffer(.element_array_buffer, index_buf);
-	assert(cpu_state.bound_buffer[.element_array_buffer] != 0, "there must be a bound index buffer");
     gl.DrawElements(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size));
-	unbind_buffer(.element_array_buffer);
    	unbind_vertex_array();
 }
 
@@ -1993,9 +1991,7 @@ draw_elements_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int f
 	}
 
 	bind_vertex_array(auto_cast vao);
-	bind_buffer(.element_array_buffer, index_buf);
     gl.DrawElementsInstanced(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size), instance_count);
-	unbind_buffer(.element_array_buffer);
    	unbind_vertex_array();
 }
 
@@ -2232,11 +2228,11 @@ map_buffer_range :: proc (buffer : Buffer_id, buffer_type : Buffer_type,  #any_i
 unmap_buffer :: proc (buffer : Buffer_id, buffer_type : Buffer_type, loc := #caller_location) {
 
 	if cpu_state.gl_version >= .opengl_4_5 {
-		gl.UnmapNamedBuffer(auto_cast buffer, loc);
+		gl.UnmapNamedBuffer(auto_cast buffer);
 	}
 	else {
 		bind_buffer(buffer_type, buffer);
-		gl.UnmapBuffer(auto_cast buffer_type, loc);
+		gl.UnmapBuffer(auto_cast buffer_type);
 		unbind_buffer(buffer_type);
 	}
 }

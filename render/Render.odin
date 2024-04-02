@@ -404,3 +404,7 @@ set_shader_define :: proc (entry : string, value : string) {
 
 	state.shader_defines[clone(entry)] = clone(value);
 }
+
+delta_time :: proc () -> f32 {
+	return state.delta_time;
+}

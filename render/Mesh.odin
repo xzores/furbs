@@ -127,9 +127,9 @@ destroy_mesh :: proc (mesh : Mesh_ptr) {
 upload_vertex_data :: proc (mesh : Mesh_ptr, #any_int start_vertex : int, data : []$T, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
-			upload_vertex_data_single(v, start_vertex, data, loc);
+			upload_vertex_data_single(v, start_vertex, data, loc = loc);
 		case ^Mesh_buffered:
-			upload_vertex_data_buffered(v, start_vertex, data, loc);
+			upload_vertex_data_buffered(v, start_vertex, data, loc = loc);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -139,9 +139,9 @@ upload_vertex_data :: proc (mesh : Mesh_ptr, #any_int start_vertex : int, data :
 upload_index_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data : Indices, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
-			upload_index_data_single(v, start_index, data, loc);
+			upload_index_data_single(v, start_index, data, loc = loc);
 		case ^Mesh_buffered:
-			upload_index_data_buffered(v, start_index, data, loc);
+			upload_index_data_buffered(v, start_index, data, loc = loc);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -151,9 +151,9 @@ upload_index_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data : In
 upload_instance_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data : []$T, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
-			upload_instance_data_single(v, start_index, data, loc);
+			upload_instance_data_single(v, start_index, data, loc = loc);
 		case ^Mesh_buffered:
-			upload_instance_data_buffered(v, start_index, data, loc);
+			upload_instance_data_buffered(v, start_index, data, loc = loc);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -162,13 +162,13 @@ upload_instance_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data :
 //Draws a mesh_single, mesh_buffered and mesh_shared
 //There is a limitation here, and that is not that only the entire model can be drawn.
 //This is because  mesh_single, mesh_buffered and mesh_shared requires handling draw_range in different ways.
-draw_mesh :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_mesh :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
-			draw_mesh_single(v, model_matrix, nil, loc);
+			draw_mesh_single(v, model_matrix, color, nil, loc);
 		case ^Mesh_buffered:
 			i := mesh_buffered_next_draw_source(v);
-			draw_mesh_buffered(v, model_matrix, i, loc = loc);
+			draw_mesh_buffered(v, model_matrix, color, i, loc = loc);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -474,7 +474,7 @@ resize_mesh_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, lo
 	}
 }
 
-draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
+draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	assert(mesh.instance_data == nil, "This is an instanced mesh, use the draw_*_instanced function.", loc)
 	assert(mesh.primitive != nil);
@@ -488,6 +488,7 @@ draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, dr
 		index_count = r.y - r.x;
 	}
 	
+	set_uniform(state.bound_shader, .color_diffuse, color);
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
 	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
 	mvp := state.prj_mat * state.view_mat * model_matrix;
@@ -526,6 +527,7 @@ draw_mesh_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt :
 		index_count = r.y - r.x;
 	}
 
+	set_uniform(state.bound_shader, .color_diffuse, [4]f32{1,1,1,1});
 	model_matrix : matrix[4,4]f32 = 1;
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
 	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
@@ -651,26 +653,31 @@ destroy_mesh_buffered :: proc (mesh : ^Mesh_buffered) {
 	delete(mesh.backing);
 }
 
-upload_vertex_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_vertex : int, data : []$T, loc := #caller_location) {
+upload_vertex_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_vertex : int, data : []$T, keep_consistent := true, loc := #caller_location) {
 	
 	//Append data to all vertex_data_queue in all the backing
 	d := new(Upload_data);
-	d.ref_cnt = len(mesh.backing);
 	d.data = slice.clone(slice.reinterpret([]u8, data));
 	d.start_index = start_vertex;
 	
-	for &b in mesh.backing {
-		queue.append(&b.vertex_data_queue, d);
+	if keep_consistent {
+		d.ref_cnt = len(mesh.backing);
+		for &b in mesh.backing {
+			queue.append(&b.vertex_data_queue, d);
+		}
+	}
+	else {
+		d.ref_cnt = 1;
+		panic("TODO"); //queue.append(something, d);
 	}
 }
 
-upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : Indices, loc := #caller_location) {
+upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : Indices, keep_consistent := true, loc := #caller_location) {
 	
 	//Append data to all vertex_data_queue in all the backing
 	d := new(Upload_data);
-	d.ref_cnt = len(mesh.backing);
 	d.start_index = start_index;
-
+	
 	switch v in data {
 		case nil:
 			panic("!??!");
@@ -680,21 +687,34 @@ upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index 
 			d.data = slice.clone(slice.reinterpret([]u8, v)); 
 	}
 	
-	for &b in mesh.backing {
-		queue.append(&b.index_data_queue, d);
+	if keep_consistent {
+		d.ref_cnt = len(mesh.backing);
+		for &b in mesh.backing {
+			queue.append(&b.index_data_queue, d);
+		}
+	}
+	else {
+		d.ref_cnt = 1;
+		panic("TODO"); //queue.append(something, d);
 	}
 }
 
-upload_instance_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : []$T, loc := #caller_location) {
+upload_instance_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index : int, data : []$T, keep_consistent := true, loc := #caller_location) {
 	
 	//Append data to all vertex_data_queue in all the backing
 	d := new(Upload_data);
-	d.ref_cnt = len(mesh.backing);
 	d.data = slice.clone(slice.reinterpret([]u8, data));
 	d.start_index = start_index;
 	
-	for &b in mesh.backing {
-		queue.append(&b.instance_data_queue, d);
+	if keep_consistent {
+		d.ref_cnt = len(mesh.backing);
+		for &b in mesh.backing {
+			queue.append(&b.instance_data_queue, d);
+		}
+	}
+	else {
+		d.ref_cnt = 1;
+		panic("TODO"); //queue.append(something, d);
 	}
 }
 
@@ -748,7 +768,7 @@ mesh_buffered_next_draw_source :: proc (using mesh_buffer : ^Mesh_buffered, loc 
 
 //make sure that the draw_range and draw_source fits each other.
 //The server side (GPU) might not have the newest update of the draw_source yet.
-draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[4,4]f32, draw_source : int, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
+draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, draw_source : int, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	
 	mesh := &mesh_buffer.backing[draw_source];
@@ -765,7 +785,7 @@ draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[
 		}
 	}
 	
-	draw_mesh_single(mesh, model_matrix, draw_range, loc);
+	draw_mesh_single(mesh, model_matrix, color, draw_range, loc);
 	
 	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use {
 		gl.discard_fence(&mesh.read_fence);

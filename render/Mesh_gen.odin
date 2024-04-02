@@ -161,21 +161,21 @@ generate_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, a
 		_indices[1] = 1;
 		_indices[2] = 2;
 		_indices[3] = 0;
-		_indices[5] = 2;
-		_indices[4] = 3;
+		_indices[4] = 2;
+		_indices[5] = 3;
 		indices = _indices;
 	}
 	else {
 		verts = make([]Default_vertex, 6)
 		indices = nil;
 		
-		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
-		verts[1] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
-		verts[2] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
+		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[1] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
+		verts[2] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
 
-		verts[3] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
-		verts[4] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
-		verts[5] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
+		verts[3] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[4] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
+		verts[5] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
 	}
 	
 	return;

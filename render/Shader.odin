@@ -195,6 +195,14 @@ get_default_shader :: proc() -> ^Shader {
 	return state.default_shader;
 }
 
+get_default_text_shader :: proc() -> ^Shader {
+	return state.default_text_shader;
+}
+
+get_default_instance_shader :: proc() -> ^Shader {
+	return state.default_instance_shader;
+}
+
 @(private)
 bind_shader :: proc(shader : ^Shader) {
 	gl.bind_shader_program(shader.id);

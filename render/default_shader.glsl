@@ -30,12 +30,24 @@ uniform mat4 inv_mvp;
 out vec2 texture_coords;
 out vec3 normals;
 
-void main() {
-	texture_coords = (texcoord);
-	normals = normal;
-    gl_Position = mvp * vec4(position, 1.0);
-}
+//void main() {
+//	texture_coords = (texcoord);
+//	normals = normal;
+//    gl_Position = mvp * vec4(position, 1.0);
+//}
 
+void main() {
+	texture_coords = texcoord;
+	
+	vec4 pos = vec4(position, 1);
+	
+	//TODOs test again
+	//float t = (sin(time) + 0.999) / 2;
+	//vec4 pos2 = mvp * pos;
+	//pos = pos2 * t + (1 - t) * pos;
+
+	gl_Position = mvp * pos;
+}
 
 ///Fragment shader begin
 @fragment
@@ -52,8 +64,8 @@ uniform vec4 color_diffuse = vec4(1,1,1,1);
 out vec4 FragColor;
 
 void main() {
-	vec4 texColor = texture(texture_diffuse, texture_coords);
-
-    FragColor = color_diffuse * texColor;
+	vec4 tex_color = texture(texture_diffuse, texture_coords);
+	
+    FragColor = color_diffuse * tex_color;
 }
 

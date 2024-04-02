@@ -146,67 +146,63 @@ destroy_shapes :: proc() {
 	state.shape_arrow		= {};
 }
 
-draw_quad :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_quad :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_quad);
+	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_quad);
 }
 
-draw_char :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_char :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_char);
+	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_char);
 }
 
-draw_circle :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_circle :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_circle);
+	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_circle);
 }
 
-draw_cube :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_cube :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_cube);
+	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_cube);
 }
 
-draw_cylinder :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_cylinder :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_cylinder);
+	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_cylinder);
 }
 
-draw_sphere :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_sphere :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_sphere);
+	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_sphere);
 }
 
-draw_cone :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_cone :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_cone);
+	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_cone);
 }
 
-draw_arrow :: proc(model_matrix : matrix[4,4]f32, loc := #caller_location) {
+draw_arrow :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, state.shape_arrow);
+	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_arrow);
 }
 
-/*
 //TODO move to state
 arrow_forward 	: Mesh_single;
 arrow_up 		: Mesh_single;
 arrow_right 	: Mesh_single;
 arrow_init 		: bool;
 
-shapes_pipeline : Pipeline;
+shapes_pipeline 	: Pipeline;
 
-//TODO move to gui
-draw_coordinate_overlay :: proc(target : Render_target, camera : Camera3D, offset : [2]f32 = {0.8, 0.8}, scale : f32 = 1, pipeline := shapes_pipeline) {
-
-	camera := camera;
-	camera.fovy = 61;
-	camera.projection = .perspective;
-
+draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offset : [2]f32 = {0.75, 0.75}, scale : f32 = 0.5, loc := #caller_location) {
+	
+	assert(state.current_target == nil, "There must not be a target, call end_target", loc);
+	
 	if arrow_init == false {
 		arrow_forward 	= make_mesh_arrow({0,0,1}, 0.35, 0.15, 0.05, 0.15, 20, true);
 		arrow_up 		= make_mesh_arrow({0,1,0}, 0.35, 0.15, 0.05, 0.15, 20, true);
 		arrow_right 	= make_mesh_arrow({1,0,0}, 0.35, 0.15, 0.05, 0.15, 20, true);
-		shapes_pipeline = make_pipeline(get_default_shader(), .no_blend, true, true, .fill, .back_cull);
+		shapes_pipeline = make_pipeline(get_default_shader(), .no_blend, true, false, .fill, .no_cull);
 		arrow_init = true;
 	}
 	
@@ -214,35 +210,30 @@ draw_coordinate_overlay :: proc(target : Render_target, camera : Camera3D, offse
 	r := camera_right(camera);
 	u := camera.up;
 
-	overlay_camera := Camera2D {
-		position 		= {0,0}, //  -{offset.x * aspect, offset.y}, // Camera position
-		target_relative = {0,0}, // 
-		rotation		= 0,	 // in degrees
-		zoom 			= 1,     //
-		far 			= 0,
-		near 			= -camera.far - 1,
-	};
+	o := offset;
 
-	begin_pipeline(pipeline, overlay_camera);
-	
-	view, prj := get_camera_3D_prj_view(camera, 1);
-	mat := (prj * view * linalg.matrix4_translate_f32(camera.position + f) * linalg.matrix4_scale_f32({scale, scale, scale}));
-	mat = matrix[4,4]f32{
-			1,0,0,0,
-			0,1,0,0,
-			0,0,-1,camera.far,
-			0,0,0,1,} * mat;
+	begin_target(target, nil);
+		begin_pipeline(shapes_pipeline, camera);
+			
+			//view, prj := get_camera_3D_prj_view(camera, 1);
+			mat : matrix[4,4]f32 = linalg.matrix4_from_trs_f32(camera.position + f + (r * o.x) + (u * o.y), 1, {scale,scale,scale});
+			/*mat = matrix[4,4]f32{
+					1,0,0,0,
+					0,1,0,0,
+					0,0,-1,overlay_camera.far,
+					0,0,0,1,} * mat;
+			*/
+			
+			set_texture(.texture_diffuse, get_white_texture());
+
+			draw_mesh_single(&arrow_right, 		mat, [4]f32{1,0,0,1});
+			draw_mesh_single(&arrow_up, 		mat, [4]f32{0,1,0,1});
+			draw_mesh_single(&arrow_forward, 	mat, [4]f32{0,0,1,1});
+
+		end_pipeline();
 		
-	set_texture(.texture_diffuse, get_white_texture());
-	set_uniform(pipeline.shader, .color_diffuse, [4]f32{0,0,1,1});
-	draw_mesh_single(&arrow_forward, mat);
-	set_uniform(pipeline.shader, .color_diffuse, [4]f32{0,1,0,1});
-	draw_mesh_single(&arrow_up, mat);
-	set_uniform(pipeline.shader, .color_diffuse, [4]f32{1,0,0,1});
-	draw_mesh_single(&arrow_right, mat);
-	end_pipeline(pipeline);
+		draw_text_simple("Coordinate system", {0,10}, 20);
+
+	end_target();
+
 }
-*/
-
-
-
