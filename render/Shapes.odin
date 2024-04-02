@@ -193,30 +193,47 @@ arrow_right 	: Mesh_single;
 arrow_init 		: bool;
 
 shapes_pipeline 	: Pipeline;
+overlay_pipeline 	: Pipeline;
+arrow_fbo			: Frame_buffer;
 
-draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offset : [2]f32 = {0.75, 0.75}, scale : f32 = 0.5, loc := #caller_location) {
-	
-	assert(state.current_target == nil, "There must not be a target, call end_target", loc);
+//TODO move to gui
+get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 = {256,256}, loc := #caller_location) -> Texture2D {
+
+	camera := camera;
+	camera.fovy = 61;
+	camera.projection = .perspective;
 	
 	if arrow_init == false {
 		arrow_forward 	= make_mesh_arrow({0,0,1}, 0.35, 0.15, 0.05, 0.15, 20, true);
 		arrow_up 		= make_mesh_arrow({0,1,0}, 0.35, 0.15, 0.05, 0.15, 20, true);
 		arrow_right 	= make_mesh_arrow({1,0,0}, 0.35, 0.15, 0.05, 0.15, 20, true);
 		shapes_pipeline = make_pipeline(get_default_shader(), .no_blend, true, false, .fill, .no_cull);
+		overlay_pipeline = make_pipeline(get_default_shader(), .blend, true, true, .fill, .no_cull);
+		init_frame_buffer_textures(&arrow_fbo, 1, texture_size.x, texture_size.y, .RGBA8, .depth_component16, false, .linear);
 		arrow_init = true;
 	}
 	
 	f := camera_forward(camera);
 	r := camera_right(camera);
 	u := camera.up;
+	
+	overlay_camera := Camera3D {
+		position		= {0,0,-1},            	// Camera position
+		target			= {0,0,0},            	// Camera target it looks-at
+		up				= {0,1,0},            	// Camera up vector (rotation over its axis)
+		fovy			= 0,                	// Camera field-of-view apperture in Y (degrees) in perspective
+		ortho_height 	= 1,					// Camera ortho_height when using orthographic projection
+		projection		= .orthographic, 	// Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
+		far 			= 10,
+		near 			= 0.01,
+	};
+	
 
-	o := offset;
-
-	begin_target(target, nil);
-		begin_pipeline(shapes_pipeline, camera);
+	begin_target(&arrow_fbo, [4]f32{0,0,0,0});
+		begin_pipeline(shapes_pipeline, overlay_camera);
 			
 			//view, prj := get_camera_3D_prj_view(camera, 1);
-			mat : matrix[4,4]f32 = linalg.matrix4_from_trs_f32(camera.position + f + (r * o.x) + (u * o.y), 1, {scale,scale,scale});
+			mat : matrix[4,4]f32 = linalg.matrix4_look_at_f32({0,0,0}, f, u); //(linalg.matrix4_translate_f32(camera.position + f));
 			/*mat = matrix[4,4]f32{
 					1,0,0,0,
 					0,1,0,0,
@@ -234,6 +251,33 @@ draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offs
 		
 		draw_text_simple("Coordinate system", {0,10}, 20);
 
+	end_target();
+
+	return arrow_fbo.color_attachments[0].(Texture2D);
+	//return arrow_fbo.depth_attachment.(Texture2D);
+}
+
+draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offset : [2]f32 = {0.75, 0.75}, scale : f32 = 0.5, loc := #caller_location) {
+	
+	assert(state.current_target == nil, "There must not be a target, call end_target", loc);
+
+	tex := get_coordinate_overlay_texture(camera);
+
+	cam : Camera2D = {
+		position 		= {0,0},            	// Camera position
+		target_relative = {0,0},				// 
+		rotation 		= 0,				// in degrees
+		zoom 			= 1,            	//
+		near 			= -1,
+		far 			= 1,
+	};
+	
+	begin_target(target, nil);
+		begin_pipeline(overlay_pipeline, cam);
+			set_texture(.texture_diffuse, tex);
+			draw_quad(linalg.matrix4_from_trs_f32({offset.x, offset.y, 0}, 0, {-scale,scale,1}));
+			//draw_quad(1);
+		end_pipeline();
 	end_target();
 
 }
