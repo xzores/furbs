@@ -200,8 +200,6 @@ arrow_fbo			: Frame_buffer;
 get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 = {256,256}, loc := #caller_location) -> Texture2D {
 
 	camera := camera;
-	camera.fovy = 61;
-	camera.projection = .perspective;
 	
 	if arrow_init == false {
 		arrow_forward 	= make_mesh_arrow({0,0,1}, 0.35, 0.15, 0.05, 0.15, 20, true);
@@ -227,19 +225,12 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 		far 			= 10,
 		near 			= 0.01,
 	};
-	
 
 	begin_target(&arrow_fbo, [4]f32{0,0,0,0});
 		begin_pipeline(shapes_pipeline, overlay_camera);
 			
 			//view, prj := get_camera_3D_prj_view(camera, 1);
 			mat : matrix[4,4]f32 = linalg.matrix4_look_at_f32({0,0,0}, f, u); //(linalg.matrix4_translate_f32(camera.position + f));
-			/*mat = matrix[4,4]f32{
-					1,0,0,0,
-					0,1,0,0,
-					0,0,-1,overlay_camera.far,
-					0,0,0,1,} * mat;
-			*/
 			
 			set_texture(.texture_diffuse, get_white_texture());
 
@@ -275,7 +266,7 @@ draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offs
 	begin_target(target, nil);
 		begin_pipeline(overlay_pipeline, cam);
 			set_texture(.texture_diffuse, tex);
-			draw_quad(linalg.matrix4_from_trs_f32({offset.x, offset.y, 0}, 0, {-scale,scale,1}));
+			draw_quad(linalg.matrix4_from_trs_f32({offset.x, offset.y, 0}, 0, {scale,scale,1}));
 			//draw_quad(1);
 		end_pipeline();
 	end_target();
