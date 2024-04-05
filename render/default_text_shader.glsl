@@ -35,15 +35,15 @@ void main() {
 	//texture_coords = (texcoord * instance_texcoord.zw) + instance_texcoord.xy;
 	
 	if (gl_VertexID == 0) {
-		texture_coords = instance_texcoord.xw;
-	}
-	if (gl_VertexID == 1) {
 		texture_coords = instance_texcoord.xy;
 	}
-	if (gl_VertexID == 3) {
-		texture_coords = instance_texcoord.zw;
+	if (gl_VertexID == 1) {
+		texture_coords = instance_texcoord.xw;
 	}
 	if (gl_VertexID == 2) {
+		texture_coords = instance_texcoord.zw;
+	}
+	if (gl_VertexID == 3) {
 		texture_coords = instance_texcoord.zy;
 	}
 	

@@ -6,6 +6,7 @@ import "core:math"
 
 import glfw "vendor:glfw"
 import linalg "core:math/linalg"
+import glsl "core:math/linalg/glsl"
 
 // Camera projection
 CameraProjection :: enum {
@@ -45,18 +46,21 @@ flip_z_axis : bool = true;
 
 get_camera_3D_prj_view :: proc(using camera : Camera3D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
 	
-	view = linalg.matrix4_look_at(camera.position, camera.target, camera.up);
-	
+	view = linalg.matrix4_look_at(camera.position, camera.target, camera.up, flip_z_axis);
+	//view = glsl.mat4LookAt(auto_cast camera.position, auto_cast camera.target, auto_cast camera.up);
+
     if (camera.projection == .perspective)
     {
-		prj = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, flip_z_axis = flip_z_axis); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
+		prj = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, flip_z_axis); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
+		//prj = glsl.mat4Perspective(camera.fovy * math.PI / 180, aspect, near, far);
     }
     else if (camera.projection == .orthographic)
     {	
         top : f32 = ortho_height / 2.0;
         right : f32 = top * aspect;
 		
-		prj = linalg.matrix_ortho3d(-right, right, -top, top, near, far, flip_z_axis = flip_z_axis);
+		prj = linalg.matrix_ortho3d(-right, right, -top, top, near, far, flip_z_axis);
+		//prj = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
     }
 
 	return;
@@ -68,9 +72,10 @@ get_camera_2D_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view :
 	rotation_mat := linalg.matrix4_from_quaternion(linalg.quaternion_angle_axis_f32(math.to_radians(-rotation), {0,0,1}));
 	view = linalg.mul(translation_mat, rotation_mat);
 
-	top : f32 = 1/zoom;
+	top : f32 = 1 / zoom;
     right : f32 = top * aspect;
-	prj = linalg.matrix_ortho3d(-right, right, -top, top, near, far, flip_z_axis = flip_z_axis);
+	//prj = linalg.matrix_ortho3d(-right, right, -top, top, near, far, flip_z_axis = false);
+	prj = glsl.mat4Ortho3d(-right, right, -top, top, near, far);
 
 	return;
 };
@@ -172,19 +177,6 @@ camera_move :: proc(cam : ^Camera3D, movement : [3]f32) {
 
 camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {
 	using linalg;
-
-	//forward := camera_forward(cam^);
-	//quaternion_from_forward_and_up_f32()
-	//m := linalg.matrix3_rotate_f32(math.to_radians(angle_degress), auto_cast around);
-	//matrix4_from_quaternion
-	/* 
-	qx := quaternion_angle_axis_f32(math.to_radians(angles_degress.x), {1,0,0});
-	qy := quaternion_angle_axis_f32(math.to_radians(angles_degress.y), {0,1,0});
-	qz := quaternion_angle_axis_f32(math.to_radians(angles_degress.z), {0,0,1});
-
-	//m := linalg.matrix3_from_euler_angles(math.to_radians(angles_degress.x), math.to_radians(angles_degress.y), math.to_radians(angles_degress.z), .XYZ);
-	m := matrix4_from_quaternion(mul(qx, qy));	
-	*/
 
 	yaw := math.to_radians(yaw);
 	pitch := math.to_radians(pitch);

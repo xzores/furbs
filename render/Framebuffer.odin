@@ -69,9 +69,7 @@ Frame_buffer :: struct {
 	//Maybe(Depth_stencil_attachment),
 }
 
-init_frame_buffer_render_buffers :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, width, height, samples_hint : i32, 
-											color_format : Color_format, depth_format : Depth_format, loc := #caller_location) {
-
+init_frame_buffer_render_buffers :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, width, height, samples_hint : i32, color_format : Color_format, depth_format : Depth_format, loc := #caller_location) {
 	assert(width != 0, "width is 0", loc);
 	assert(height != 0, "height is 0", loc);
 	assert(color_format != nil, "color_format is nil", loc);
@@ -116,7 +114,7 @@ init_frame_buffer_render_buffers :: proc (fbo : ^Frame_buffer, color_attachemet_
 
 //if textures is not nil, textures will be filled with the texture attachments.
 init_frame_buffer_textures :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, width, height : i32, color_format : Color_format, depth_format : Depth_format,
-														 mipmaps : bool, filtermode : gl.Filtermode, loc := #caller_location) {
+														 mipmaps : bool, filtermode : gl.Filtermode, use_depth_texture := true, loc := #caller_location) {
 
 	assert(width != 0, "width is 0", loc);
 	assert(height != 0, "height is 0", loc);
@@ -148,10 +146,16 @@ init_frame_buffer_textures :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, w
 	}
 
 	//setup depth buffer
-	{
+	if use_depth_texture {
 		depth_texture := make_texture_2D(mipmaps, .clamp_to_border, filtermode, auto_cast depth_format, width, height, .no_upload, nil);
 		fbo.depth_attachment = depth_texture;
 		gl.associate_depth_texture_with_frame_buffer(fbo.id, depth_texture.id);
+	}
+	else {
+		depth_buf := gl.gen_render_buffer();
+		depth_samples := gl.associate_depth_render_buffer_with_frame_buffer(fbo.id, depth_buf, width, height, 1, auto_cast depth_format)
+		assert(fbo.samples == depth_samples, "inconsistent FBO samples", loc = loc);
+		fbo.depth_attachment = Depth_render_buffer{depth_buf, width, height, depth_samples, depth_format};
 	}
 	
 	assert(gl.validate_frame_buffer(fbo.id) == true, "Framebuffer is not complete!", loc);

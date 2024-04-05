@@ -107,7 +107,7 @@ destroy_text :: proc () {
 }
 
 @(require_results)
-load_font_from_file :: proc(font_name : string, path : string) -> Font {
+load_font_from_path :: proc(font_name : string, path : string) -> Font {
 	return auto_cast fs.AddFontPath(&state.font_context, font_name, path);
 }
 
@@ -186,7 +186,7 @@ get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, sp
 
 		//This is weird
 		pos : linalg.Vector3f32 = {quad.x1 + (quad.x0 - quad.x1)/2, quad.y0 + (quad.y1 - quad.y0)/2, 0}; 	//this is position of single quad
-		scale : linalg.Vector3f32 = {(quad.x1 - quad.x0), (quad.y0 - quad.y1), 0};							//scale of the quad
+		scale : linalg.Vector3f32 = {(quad.x1 - quad.x0), (quad.y1 - quad.y0), 0};							//scale of the quad
 		
 		//using quad;
 		//texcoords : [4][2]f32 = {{s1, t0}, {s0, t0}, {s1, t1}, {s0, t1}};
@@ -229,7 +229,7 @@ draw_text_simple :: proc (text : string, position : [2]f32, size : f32, spacing 
 	instance_data : [dynamic]Default_instance_data = get_draw_instance_data(text, position, size, spacing, font);
 	defer delete(instance_data);
 
-	pipeline := make_pipeline(shader, .blend, false, false, .fill, culling = .no_cull);
+	pipeline := make_pipeline(shader, .blend, false, false, .fill, culling = .back_cull);
 	defer destroy_pipeline(pipeline);
 	
 	if i_data, ok := state.char_mesh.instance_data.?; ok {

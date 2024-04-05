@@ -1848,8 +1848,12 @@ gen_vertex_array :: proc(loc := #caller_location) -> Vao_id {
 	return vao;
 }
 
-bind_vertex_array :: proc (vao : Vao_id) {
+bind_vertex_array :: proc (vao : Vao_id, loc := #caller_location) {
 	
+	if vao != 0 {
+		assert(gpu_state.bound_buffer[.element_array_buffer] == 0, "another index buffer is bound while calling bind_vertex_array", loc);
+	}
+
 	cpu_state.bound_vao = vao;
 
 	if gpu_state.bound_vao == vao {
@@ -1928,17 +1932,17 @@ associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes 
 		}
 		//VertexAttribPointer      :: proc "c" (index: u32, size: i32, type: u32, normalized: bool, stride: i32, pointer: uintptr)
 	}
-
-	unbind_buffer(.array_buffer);
+	
+	bind_buffer(.array_buffer, 0);
 	bind_vertex_array(0);
 }
 
 associate_index_buffer_with_vao :: proc(vao : Vao_id, buffer : Buffer_id) {
 
 	bind_vertex_array(auto_cast vao);
-	bind_buffer(.element_array_buffer, auto_cast buffer);
+	bind_buffer(.element_array_buffer, buffer);
 	bind_vertex_array(0);
-	bind_buffer(.element_array_buffer, 0);
+	unbind_buffer(.element_array_buffer);
 }
 
 draw_arrays :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32) {
@@ -1954,6 +1958,7 @@ draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, coun
 		assert(first >= 0, "first must be more then zero", loc);
 		assert(count > 0, "count must be larger then 0", loc);
 		assert(index_buf != 0, "index_buf is required", loc);
+		assert(gpu_state.bound_buffer[.element_array_buffer] == 0, "another index buffer is bound while calling draw elements", loc);
 	}
 
 	index_size : i32 = 0;
@@ -1968,7 +1973,7 @@ draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, coun
 
 	bind_vertex_array(auto_cast vao);
     gl.DrawElements(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size));
-   	unbind_vertex_array();
+	unbind_vertex_array();
 }
 
 draw_arrays_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count, instance_count : i32) {
@@ -2079,7 +2084,7 @@ bind_buffer :: proc(location : Buffer_type, buffer : Buffer_id) {
 
 }
 
-unbind_buffer :: proc(location : Buffer_type) {
+unbind_buffer :: proc(location : Buffer_type, loc := #caller_location) {
 
 	when UNBIND_DEBUG {
 		cpu_state.bound_buffer[location] = 0;
@@ -2087,7 +2092,14 @@ unbind_buffer :: proc(location : Buffer_type) {
 		gl.BindBuffer(auto_cast location, 0);
 	}
 	else {
-		cpu_state.bound_buffer[location] = 0;
+		#partial switch location {
+			case .element_array_buffer, .array_buffer:
+				cpu_state.bound_buffer[location] = 0;
+				gpu_state.bound_buffer[location] = 0;
+				gl.BindBuffer(auto_cast location, 0);
+			case:
+				cpu_state.bound_buffer[location] = 0;
+		}
 	}
 }
 
@@ -2105,18 +2117,20 @@ buffer_sub_data :: proc (buffer : Buffer_id, buffer_type : Buffer_type, #any_int
 //Setup the buffer (with optional data, data = nil. No data)
 buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data : rawptr, usage : Resource_usage) {	
 	assert(size > 0, "size must be larger then 0");
-	
+
 	if cpu_state.gl_version >= .opengl_4_5 {
 		buffer_falgs, _ := translate_resource_usage_4_4(usage);
 		gl.NamedBufferStorage(auto_cast buffer, size, data, auto_cast buffer_falgs);
 	}
 	else if cpu_state.gl_version >= .opengl_4_4 {
+		bind_vertex_array(0); //required to not overwrite stuff
 		buffer_falgs, _ := translate_resource_usage_4_4(usage);
 		bind_buffer(target, buffer);
 		gl.BufferStorage(auto_cast target, size, data, auto_cast buffer_falgs);
 		unbind_buffer(target);
 	}
 	else {
+		bind_vertex_array(0); //required to not overwrite stuff
 		buffer_falgs, _ := translate_resource_usage_3_3(usage);
 		bind_buffer(target, buffer);
 		gl.BufferData(auto_cast target, size, data, auto_cast buffer_falgs);

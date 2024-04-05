@@ -61,39 +61,41 @@ begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 	assert(state.current_target != {}, "There must be a bound target before calling begin_pipeline (call begin_target before begin_pipeline).", loc);
 	assert(state.target_pixel_width != 0, "target_pixel_width is 0", loc);
 	assert(state.target_pixel_height != 0, "target_pixel_height is 0", loc);
-
+	
 	using gl;
 	
-	bind_camera(camera);
-	bind_shader(pipeline.shader);
-	
-	gl.set_viewport(0, 0, state.target_pixel_width, state.target_pixel_height);
-	gl.set_blend_mode(pipeline.blend_mode);
-	gl.set_depth_write(pipeline.depth_write);
-	gl.set_depth_test(pipeline.depth_test);
-	gl.set_polygon_mode(pipeline.polygon_mode);
-	gl.set_culling(pipeline.culling);
-	if range, ok := pipeline.depth_clamp.([2]f64); ok {
-		gl.set_depth_clamp(true);
-		gl.set_depth_clamp_range(range);
+	{
+		bind_shader(pipeline.shader);
+
+		gl.set_blend_mode(pipeline.blend_mode);
+		gl.set_depth_write(pipeline.depth_write);
+		gl.set_depth_test(pipeline.depth_test);
+		gl.set_polygon_mode(pipeline.polygon_mode);
+		gl.set_culling(pipeline.culling);
+		if range, ok := pipeline.depth_clamp.([2]f64); ok {
+			gl.set_depth_clamp(true);
+			gl.set_depth_clamp_range(range);
+		}
+		else {
+			gl.set_depth_clamp(false);
+		}
+		
+		bind_camera(camera);
+
+		set_uniform(pipeline.shader, .prj_mat, state.prj_mat);
+		set_uniform(pipeline.shader, .inv_prj_mat, state.inv_prj_mat);
+		
+		set_uniform(pipeline.shader, .view_mat, state.view_mat);
+		set_uniform(pipeline.shader, .inv_view_mat, state.inv_view_mat);
+
+		set_uniform(pipeline.shader, .view_prj_mat, state.view_prj_mat);
+		set_uniform(pipeline.shader, .inv_view_prj_mat, state.inv_view_prj_mat);
+
+		set_uniform(pipeline.shader, .time, 		state.time_elapsed);
+		set_uniform(pipeline.shader, .delta_time, 	state.delta_time);
+
+		state.current_pipeline = pipeline;
 	}
-	else {
-		gl.set_depth_clamp(false);
-	}
-	
-	set_uniform(pipeline.shader, .prj_mat, state.prj_mat);
-	set_uniform(pipeline.shader, .inv_prj_mat, state.inv_prj_mat);
-	
-	set_uniform(pipeline.shader, .view_mat, state.view_mat);
-	set_uniform(pipeline.shader, .inv_view_mat, state.inv_view_mat);
-
-	set_uniform(pipeline.shader, .view_prj_mat, state.view_prj_mat);
-	set_uniform(pipeline.shader, .inv_view_prj_mat, state.inv_view_prj_mat);
-
-	set_uniform(pipeline.shader, .time, 		state.time_elapsed);
-	set_uniform(pipeline.shader, .delta_time, 	state.delta_time);
-
-	state.current_pipeline = pipeline;
 }
 
 end_pipeline :: proc (loc := #caller_location) {
@@ -108,14 +110,16 @@ end_pipeline :: proc (loc := #caller_location) {
 }
 
 
-
-
 ////// TARGET //////
 
 begin_target :: proc (render_target : Render_target, clear_method : Maybe([4]f32) = [4]f32{0,0,0,0}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
 	assert(state.current_target == {}, "There must not be a bound target before calling begin_target (remember to call end_target).", loc);
 	
 	using gl;
+
+	if clear_method != nil {
+		set_depth_write(true);
+	}
 
 	if window, ok := render_target.(^Window); ok {
 		if window.glfw_window == state.owner_context {
@@ -134,15 +138,18 @@ begin_target :: proc (render_target : Render_target, clear_method : Maybe([4]f32
 	else {
 		panic("!?!?!?");
 	}
-	
+
 	assert(state.target_pixel_width != 0, "target_pixel_width is 0, internal error");
 	assert(state.target_pixel_height != 0, "target_pixel_height is 0, internal error");
+
+	gl.set_viewport(0, 0, state.target_pixel_width, state.target_pixel_height);
 
 	if clear_color, ok := clear_method.?; ok {
 		gl.clear(clear_color, falgs);
 	}
 
 	state.current_target = render_target;
+
 }
 
 end_target :: proc (loc := #caller_location) {
