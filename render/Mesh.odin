@@ -29,9 +29,9 @@ Default_vertex :: struct {
 Default_instance_data :: struct {
 	instance_position 	: [3]f32,
 	instance_scale 		: [3]f32,
-	instance_texcoord 	: [4]f32,
+	instance_rotation 	: [3]f32, //Euler rotation
+	instance_tex_pos_scale 	: [4]f32,
 }
-
 
 //These are removed to other locations
 	//Occlusion culling should be handled somehow? 											- 
@@ -947,7 +947,8 @@ get_attribute_info_from_typeid :: proc (t : typeid, loc := #caller_location) -> 
 				stride = auto_cast reflect.size_of_typeid(t),
 				normalized = normalized,
 			}
-
+			
+			fmt.assertf(attrib_ex.attribute_type != .invalid, "The odin type %v, does not a have an equivalent opengl type\n", field.type.id, loc = loc);
 			log.debugf("attrib_ex : %#v\n", attrib_ex);
 
 			append(&attribs, attrib_ex);

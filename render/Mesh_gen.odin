@@ -152,10 +152,10 @@ generate_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, a
 		verts = make([]Default_vertex, 4)
 		_indices := make([]u16, 6);
 		
-		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
-		verts[1] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
-		verts[2] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
-		verts[3] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,-1}};
+		verts[1] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,-1}};
+		verts[2] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,-1}};
+		verts[3] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,-1}};
 		
 		_indices[0] = 0;
 		_indices[1] = 1;
@@ -169,13 +169,13 @@ generate_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, a
 		verts = make([]Default_vertex, 6)
 		indices = nil;
 		
-		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
-		verts[1] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,1}};
-		verts[2] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
+		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,-1}};
+		verts[1] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,-1}};
+		verts[2] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,-1}};
 
-		verts[3] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,1}};
-		verts[4] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,1}};
-		verts[5] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,1}};
+		verts[3] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,-1}};
+		verts[4] = Default_vertex{[3]f32{1,1,0} * size + offset - {0.5,0.5,0}, {1,1}, {0,0,-1}};
+		verts[5] = Default_vertex{[3]f32{0,1,0} * size + offset - {0.5,0.5,0}, {0,1}, {0,0,-1}};
 	}
 	
 	return;
@@ -228,8 +228,8 @@ generate_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_inde
 		append(&vertices, 		Default_vertex{vert2 * diameter / 2 + offset, 			vert2.xy/2 + 0.5, 	[3]f32{0,0,1}});
 
 		append(&temp_indices, 0);
-		append(&temp_indices, auto_cast (len(vertices) - 1));
 		append(&temp_indices, auto_cast (len(vertices) - 2));
+		append(&temp_indices, auto_cast (len(vertices) - 1));
 	}
 
 	if use_index_buffer {
@@ -273,39 +273,39 @@ generate_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, l
 	corners : [24]Default_vertex = {
 		//XP
 		Default_vertex{{1,0,0}, {0,0}, {1,0,0}},	
-		Default_vertex{{1,1,0}, {1,0}, {1,0,0}},
-		Default_vertex{{1,1,1}, {1,1}, {1,0,0}},
 		Default_vertex{{1,0,1}, {0,1}, {1,0,0}},
+		Default_vertex{{1,1,1}, {1,1}, {1,0,0}},
+		Default_vertex{{1,1,0}, {1,0}, {1,0,0}},
 
 		//XN
 		Default_vertex{{0,0,0}, {0,0}, {-1,0,0}},
-		Default_vertex{{0,0,1}, {0,1}, {-1,0,0}},
-		Default_vertex{{0,1,1}, {1,1}, {-1,0,0}},
 		Default_vertex{{0,1,0}, {1,0}, {-1,0,0}},
+		Default_vertex{{0,1,1}, {1,1}, {-1,0,0}},
+		Default_vertex{{0,0,1}, {0,1}, {-1,0,0}},
 
 		//YP
 		Default_vertex{{0,1,0}, {0,0}, {0,1,0}},
-		Default_vertex{{0,1,1}, {0,1}, {0,1,0}},
-		Default_vertex{{1,1,1}, {1,1}, {0,1,0}},
 		Default_vertex{{1,1,0}, {1,0}, {0,1,0}},
+		Default_vertex{{1,1,1}, {1,1}, {0,1,0}},
+		Default_vertex{{0,1,1}, {0,1}, {0,1,0}},
 
 		//YN
 		Default_vertex{{0,0,0}, {0,0}, {0,-1,0}},
-		Default_vertex{{1,0,0}, {1,0}, {0,-1,0}},
-		Default_vertex{{1,0,1}, {1,1}, {0,-1,0}},
 		Default_vertex{{0,0,1}, {0,1}, {0,-1,0}},
+		Default_vertex{{1,0,1}, {1,1}, {0,-1,0}},
+		Default_vertex{{1,0,0}, {1,0}, {0,-1,0}},
 
 		//ZP
 		Default_vertex{{0,0,1}, {0,0}, {0,0,1}},
-		Default_vertex{{1,0,1}, {1,0}, {0,0,1}},
-		Default_vertex{{1,1,1}, {1,1}, {0,0,1}},
 		Default_vertex{{0,1,1}, {0,1}, {0,0,1}},
+		Default_vertex{{1,1,1}, {1,1}, {0,0,1}},
+		Default_vertex{{1,0,1}, {1,0}, {0,0,1}},
 
 		//ZN
 		Default_vertex{{0,0,0}, {0,0}, {0,0,-1}},
-		Default_vertex{{0,1,0}, {0,1}, {0,0,-1}},
-		Default_vertex{{1,1,0}, {1,1}, {0,0,-1}},
 		Default_vertex{{1,0,0}, {1,0}, {0,0,-1}},
+		Default_vertex{{1,1,0}, {1,1}, {0,0,-1}},
+		Default_vertex{{0,1,0}, {0,1}, {0,0,-1}},
 	};
 
 	odering : [6]u16 = {
@@ -385,8 +385,8 @@ generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int,
 				below_i	 	:= up * sectors + phi - sectors;
 				this 		:= up * sectors + phi;
 				pos 		:= up * sectors + ((phi + 1) %% sectors);
-				append(&temp_indices, u16(below_i), u16(pos), u16(this));
-				append(&temp_indices, u16(below_i), u16(this), u16(below_neg)); 
+				append(&temp_indices, u16(below_i), u16(this), u16(pos));
+				append(&temp_indices, u16(below_i), u16(below_neg), u16(this)); 
 			}
 			
 		}
@@ -422,8 +422,8 @@ generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int,
 		append(&vertices, 		Default_vertex{vert2 + offset, 	[2]f32{x2, z2}/2 + 0.5, 	[3]f32{0,0,-1}}); //TODO calculate the normal correctly
 
 		append(&temp_indices, auto_cast down_center);
-		append(&temp_indices, auto_cast (len(vertices) - 2));
 		append(&temp_indices, auto_cast (len(vertices) - 1));
+		append(&temp_indices, auto_cast (len(vertices) - 2));
 	}
 
 
@@ -452,8 +452,8 @@ generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int,
 		append(&vertices, 		Default_vertex{vert2 + offset, 	[2]f32{x2, z2}/2 + 0.5, 	[3]f32{0,0,1}}); //TODO calculate the normal correctly
 
 		append(&temp_indices, auto_cast up_center);
-		append(&temp_indices, auto_cast (len(vertices) - 1));
 		append(&temp_indices, auto_cast (len(vertices) - 2));
+		append(&temp_indices, auto_cast (len(vertices) - 1));
 	}
 
 	if use_index_buffer {
@@ -508,10 +508,10 @@ generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : 
 			
 			angle : f32 = f32(phi);
 
-			t := f32(-angle) / f32(sectors-1) * 2 * math.PI;
+			t := f32(-angle + 90) / f32(sectors-1) * 2 * math.PI;
 			x := math.cos(t) * math.cos(theta);
 			z := math.sin(t) * math.cos(theta);
-
+			
 			vert := [3]f32{x / 2 + offset.x, y / 2 + offset.y, z / 2 + offset.z};
 			//append(&vertices, linalg.mul(transform, vert).xyz);
 			//append(&texcoords, [2]f32{f32(phi) / f32(sectors-1), f32(up) / f32(stacks)});
@@ -524,8 +524,8 @@ generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : 
 				below_i	 	:= up * sectors + phi - sectors;
 				this 		:= up * sectors + phi;
 				pos 		:= up * sectors + ((phi + 1) %% sectors);
-				append(&temp_indices, u16(below_i), u16(this), u16(below_neg)); 
-				append(&temp_indices, u16(below_i), u16(pos), u16(this)); 
+				append(&temp_indices, u16(below_i), u16(below_neg), u16(this)); 
+				append(&temp_indices, u16(below_i), u16(this), u16(pos)); 
 			}
 			
 		}
@@ -603,11 +603,11 @@ generate_cone :: proc (offset : [3]f32, height, diameter : f32, sectors : int, u
 		append(&vertices, 		Default_vertex{vert2 + offset, 	vert2.xz/diameter + 0.5, 	[3]f32{0,0,1}}); //TODO calculate the normal correctly
 
 		append(&temp_indices, 0);
-		append(&temp_indices, auto_cast (len(vertices) - 1));
 		append(&temp_indices, auto_cast (len(vertices) - 2));
+		append(&temp_indices, auto_cast (len(vertices) - 1));
 		
-		append(&temp_indices, auto_cast (len(vertices) - 2));
 		append(&temp_indices, auto_cast (len(vertices) - 1));
+		append(&temp_indices, auto_cast (len(vertices) - 2));
 		append(&temp_indices, 1);
 	}
 
@@ -664,7 +664,7 @@ generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 
 	b := normalize(direction);
 	a := normalize(cross(arb, b));
-	c := normalize(cross(a, b));
+	c := normalize(cross(b, a));
 
 	r_mat := matrix[4,4]f32{
 		a.x, b.x, c.x, 0,
@@ -672,6 +672,8 @@ generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 		a.z, b.z, c.z, 0,
 		0,   0,   0,   1,
 	};
+
+	r_mat = linalg.transpose(r_mat);
 	
 	t1 := linalg.matrix4_translate_f32({0,height_cyl,0});
 	t2 := linalg.matrix4_translate_f32({0,height_cyl/2,0});

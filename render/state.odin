@@ -69,6 +69,9 @@ State :: struct {
 	shape_cone : [2]int,
 	shape_arrow : [2]int,
 
+	//Extra stuff
+	fps_measurement : f32,
+
 	//Window stuff
 	owner_context : glfw.WindowHandle,
 	current_context : glfw.WindowHandle,

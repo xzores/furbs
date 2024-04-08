@@ -217,6 +217,8 @@ destroy :: proc (loc := #caller_location) {
 	state.mouse_delta 		= {};
 	state.scroll_delta 		= {};
 	
+	state.fps_measurement 	= {};
+
 	//Destroy shaders defines
 	for e, v in state.shader_defines {
 		delete_key(&state.shader_defines, e);
@@ -310,9 +312,10 @@ begin_frame :: proc() {
 	state.time_elapsed = cast(f32)time.duration_seconds(time.diff(state.time_start, now));
 	state.delta_time = cast(f32)time.duration_seconds(time.diff(state.time_last, now));
 	state.time_last = now;
-
-	begin_inputs();
 	
+	begin_inputs();
+	begin_text();
+
 	for w in state.active_windows {
 		
 		if w.is_fullscreen != w.fullscreen_target_state {
@@ -396,6 +399,7 @@ end_frame :: proc(loc := #caller_location) {
 	_swap_buffers(loc, state.owner_context);
 	glfw.PollEvents();
 	
+	end_text();
 	end_inputs();
 }
 
@@ -407,4 +411,8 @@ set_shader_define :: proc (entry : string, value : string) {
 
 delta_time :: proc () -> f32 {
 	return state.delta_time;
+}
+
+elapsed_time :: proc () -> f32 {
+	return state.time_elapsed;
 }

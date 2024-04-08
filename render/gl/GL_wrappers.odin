@@ -22,7 +22,7 @@ import utils "../../utils"
 _ :: gl.GLenum;
 
 RENDER_DEBUG	:: #config(RENDER_DEBUG, ODIN_DEBUG);
-RECORD_DEBUG 	:: #config(RECORD_DEBUG, ODIN_DEBUG);
+RECORD_DEBUG 	:: #config(RECORD_DEBUG, false);
 UNBIND_DEBUG 	:: #config(UNBIND_DEBUG, false);
 
 /////////// Opengl handles ///////////
@@ -192,6 +192,8 @@ odin_type_to_attribute_type :: proc (odin_type : typeid) -> Attribute_type {
 			return .uint;
 		case [4]u32:
 			return .uint;
+		case quaternion128: //should this be here?
+			return .vec4;
 		case:
 			return .invalid;
 	}
@@ -1850,8 +1852,10 @@ gen_vertex_array :: proc(loc := #caller_location) -> Vao_id {
 
 bind_vertex_array :: proc (vao : Vao_id, loc := #caller_location) {
 	
-	if vao != 0 {
-		assert(gpu_state.bound_buffer[.element_array_buffer] == 0, "another index buffer is bound while calling bind_vertex_array", loc);
+	when RENDER_DEBUG {
+		if vao != 0 {
+			assert(gpu_state.bound_buffer[.element_array_buffer] == 0, "another index buffer is bound while calling bind_vertex_array", loc);
+		}
 	}
 
 	cpu_state.bound_vao = vao;
@@ -1924,6 +1928,7 @@ associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes 
 	bind_buffer(.array_buffer, auto_cast buffer);
 	
 	for attrib, i in attributes {
+		fmt.assertf(attrib.attribute_type != nil, "The type : %v is not valid. The attrib is : %v\n", attrib.attribute_type, attrib, loc = loc);
 		//log.infof("setting up VertexAttribPointer : %v, %v, %v, %v, %v, %v\n", attrib.location, get_attribute_type_dimensions(attrib.attribute_type), get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
 		gl.VertexAttribPointer(auto_cast attrib.location, auto_cast get_attribute_type_dimensions(attrib.attribute_type), auto_cast get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
 		gl.EnableVertexAttribArray(auto_cast attrib.location);
@@ -1942,7 +1947,7 @@ associate_index_buffer_with_vao :: proc(vao : Vao_id, buffer : Buffer_id) {
 	bind_vertex_array(auto_cast vao);
 	bind_buffer(.element_array_buffer, buffer);
 	bind_vertex_array(0);
-	unbind_buffer(.element_array_buffer);
+	bind_buffer(.element_array_buffer, 0);
 }
 
 draw_arrays :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32) {
@@ -2084,7 +2089,7 @@ bind_buffer :: proc(location : Buffer_type, buffer : Buffer_id) {
 
 }
 
-unbind_buffer :: proc(location : Buffer_type, loc := #caller_location) {
+unbind_buffer :: proc(location : Buffer_type) {
 
 	when UNBIND_DEBUG {
 		cpu_state.bound_buffer[location] = 0;
@@ -2092,6 +2097,8 @@ unbind_buffer :: proc(location : Buffer_type, loc := #caller_location) {
 		gl.BindBuffer(auto_cast location, 0);
 	}
 	else {
+		
+		/*
 		#partial switch location {
 			case .element_array_buffer, .array_buffer:
 				cpu_state.bound_buffer[location] = 0;
@@ -2100,6 +2107,9 @@ unbind_buffer :: proc(location : Buffer_type, loc := #caller_location) {
 			case:
 				cpu_state.bound_buffer[location] = 0;
 		}
+		*/
+
+		cpu_state.bound_buffer[location] = 0;
 	}
 }
 
@@ -2127,14 +2137,14 @@ buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data :
 		buffer_falgs, _ := translate_resource_usage_4_4(usage);
 		bind_buffer(target, buffer);
 		gl.BufferStorage(auto_cast target, size, data, auto_cast buffer_falgs);
-		unbind_buffer(target);
+		bind_buffer(target, 0);
 	}
 	else {
 		bind_vertex_array(0); //required to not overwrite stuff
 		buffer_falgs, _ := translate_resource_usage_3_3(usage);
 		bind_buffer(target, buffer);
 		gl.BufferData(auto_cast target, size, data, auto_cast buffer_falgs);
-		unbind_buffer(target);
+		bind_buffer(target, 0);
 	}
 }
 

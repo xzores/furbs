@@ -112,6 +112,7 @@ end_pipeline :: proc (loc := #caller_location) {
 
 ////// TARGET //////
 
+//Following draw commands will draw the the given taret, clear method maybe be nil if clearing is not wanted. Clearing will clear both color and depth buffer if default falgs are used.
 begin_target :: proc (render_target : Render_target, clear_method : Maybe([4]f32) = [4]f32{0,0,0,0}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
 	assert(state.current_target == {}, "There must not be a bound target before calling begin_target (remember to call end_target).", loc);
 	

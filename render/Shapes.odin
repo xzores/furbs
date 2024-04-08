@@ -6,72 +6,6 @@ import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:time"
 
-@(private)
-_generate_char :: proc () -> (verts : []Default_vertex, indices : Indices) {
-	
-	char_verts : [4]Default_vertex = {
-        Default_vertex{
-                position = {
-                        -0.5,
-                        -0.5,
-                        0,
-				},
-                texcoord = {0,0},
-                normal = 0,
-        },
-        Default_vertex{
-                position = {
-                        0.5,
-                        -0.5,
-                        0,
-				},
-                texcoord = {1,0},
-                normal = 0,
-        },
-        Default_vertex{
-                position = {
-                        -0.5,
-                        0.5,
-                        0,
-				},
-                texcoord = {0,1},
-                normal = 0,
-        },
-        Default_vertex{
-                position = {
-                        0.5,
-                        0.5,
-                        0,
-				},
-                texcoord = {1,1},
-                normal = 0,
-        },
-	};
-
-	char_index : [6]u16 = {
-		0,
-		1,
-		2,
-		2,
-		1,
-		3,
-	}
-
-	verts 		= make([]Default_vertex, len(char_verts));
-	indices		= make([]u16, len(char_index));
-
-	for v, ii in char_verts {
-		verts[ii] = v;
-	}
-
-	for i, ii in char_index {
-		indices.([]u16)[ii] = i;
-	}
-
-	return;
-}
-
-
 //TODO delete draw char
 @(private)
 _ensure_shapes_loaded :: proc (loc := #caller_location) {
@@ -105,7 +39,7 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 			conv, coni := generate_cone({0,0,0}, 1, 1, 20, use_index_buffer);
 			state.shape_cone = [2]int{i, i + len_indices(coni)}; i += len_indices(coni);
 
-			arrv, arri := generate_arrow({1,0,0}, 0.6, 0.4, 0.25, 0.5, 20, use_index_buffer);
+			arrv, arri := generate_arrow({1,0,0}, 0.65, 0.35, 0.15, 0.35, 20, use_index_buffer);
 			state.shape_arrow = [2]int{i, i + len_indices(arri)}; i += len_indices(arri);
 
 			defer {
@@ -182,109 +116,18 @@ draw_cone :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc
 	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_cone);
 }
 
-draw_arrow :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+draw_arrow :: proc(position : [3]f32, direction : [3]f32, color : [4]f32 = {1,1,1,1}, up : [3]f32 = {0,1,0}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	draw_mesh_single(&state.shapes, model_matrix, color, state.shape_arrow);
-}
-
-//TODO move to state
-arrow_forward 	: Mesh_single;
-arrow_up 		: Mesh_single;
-arrow_right 	: Mesh_single;
-arrow_init 		: bool;
-
-shapes_pipeline 	: Pipeline;
-overlay_pipeline 	: Pipeline;
-arrow_fbo			: Frame_buffer;
-
-//TODO move to gui
-get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 = {256,256}, loc := #caller_location) -> Texture2D {
-
-	camera := camera;
 	
-	if arrow_init == false {
-		arrow_forward 	= make_mesh_arrow({0,0,1}, 0.35, 0.15, 0.05, 0.15, 20, true);
-		arrow_up 		= make_mesh_arrow({0,1,0}, 0.35, 0.15, 0.05, 0.15, 20, true);
-		arrow_right 	= make_mesh_arrow({1,0,0}, 0.35, 0.15, 0.05, 0.15, 20, true);
-		//s, ok := load_shader_from_path("my_shader.glsl"); assert(ok == nil);
-		shapes_pipeline = make_pipeline(get_default_shader(), .no_blend, true, true, .fill, .no_cull);
-		overlay_pipeline = make_pipeline(get_default_shader(), .blend, true, true, .fill, .no_cull);
-		init_frame_buffer_textures(&arrow_fbo, 1, texture_size.x, texture_size.y, .RGBA8, .depth_component16, false, .linear);
-		arrow_init = true;
+	using linalg;
+
+	arb := up;
+	if math.abs(linalg.dot(arb, direction)) >= 0.9999 {
+		arb = [3]f32{1,0,0}; //is there something better? likely...
 	}
-
-	f := camera_forward(camera);
-	r := camera_right(camera);
-	u := camera.up;
-
-	/*
-	view, prj := get_camera_3D_prj_view(camera, 1);
 	
-	m := view;
-	r := m[0].xyz;
-	u := m[1].xyz;
-	f := m[2].xyz;
-	*/
+	mat := look_at(position, position + direction, arb);
 
-	/*
-	overlay_camera := Camera3D {
-		position		= {0,0,-1},            	// Camera position
-		target			= {0,0,0},            	// Camera target it looks-at
-		up				= {0,1,0},            	// Camera up vector (rotation over its axis)
-		fovy			= 0,                	// Camera field-of-view apperture in Y (degrees) in perspective
-		ortho_height 	= 1,					// Camera ortho_height when using orthographic projection
-		projection		= .orthographic, 	// Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
-		far 			= 2,
-		near 			= 0.01,
-	};
-	*/
-
-	overlay_camera : Camera2D = {
-		position 		= {0,0},		// Camera position
-		target_relative = {0,0},		// 
-		rotation 		= 0,			// in degrees
-		zoom 			= 2,            //
-		near 			= -1,
-		far 			= 1,
-	};
-		
-	mat : matrix[4,4]f32 = linalg.matrix4_look_at_f32({0,0,0}, f, camera.up, false);
-
-	begin_target(&arrow_fbo, [4]f32{0,0,0,0});
-		begin_pipeline(shapes_pipeline, overlay_camera);
-			set_texture(.texture_diffuse, get_white_texture());
-			draw_mesh_single(&arrow_right, 		mat, [4]f32{0.8, 0.1, 0.1, 1});
-			draw_mesh_single(&arrow_up, 		mat, [4]f32{0.1 ,0.8 ,0.1, 1});
-			draw_mesh_single(&arrow_forward, 	mat, [4]f32{0.1 ,0.1 ,0.8 ,1});
-		end_pipeline();
-	end_target();
-
-	//TODO go back and make the depth buffer optianily a render_buffer while still using textures. See if it has an effect.
-	return arrow_fbo.color_attachments[0].(Texture2D);
-	//return arrow_fbo.depth_attachment.(Texture2D);
+	draw_mesh_single(&state.shapes, mat, color, state.shape_arrow);
 }
 
-draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offset : [2]f32 = {0.05, 0.05}, scale : f32 = 0.25, loc := #caller_location) {
-	
-	assert(state.current_target == nil, "There must not be a target, call end_target", loc);
-	
-	tex := get_coordinate_overlay_texture(camera);
-
-	cam : Camera2D = {
-		position 		= {0,0},		// Camera position
-		target_relative = {0,0},		// 
-		rotation 		= 0,			// in degrees
-		zoom 			= 1,            //
-		near 			= -10,
-		far 			= 10,
-	};
-
-	begin_target(target, nil);
-		aspect : f32 = state.target_pixel_width / state.target_pixel_height;
-		begin_pipeline(overlay_pipeline, cam);
-			set_texture(.texture_diffuse, tex);
-			draw_quad(linalg.matrix4_from_trs_f32([3]f32{(aspect) - offset.x - scale/2, 1.0 - offset.y - scale/2, 0}, 0, {scale,scale,1}));
-		end_pipeline();
-	end_target();
-
-}

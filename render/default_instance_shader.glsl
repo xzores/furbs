@@ -9,7 +9,8 @@ layout (location = 2) in vec3 normal;
 
 layout (location = 3) in vec3 instance_position;
 layout (location = 4) in vec3 instance_scale;
-layout (location = 5) in vec4 instance_texcoord;
+layout (location = 5) in vec3 instance_rotation;
+layout (location = 6) in vec4 instance_tex_pos_scale;
 
 //// Uniforms ////
 uniform float time;
@@ -34,10 +35,36 @@ uniform mat4 inv_mvp;
 out vec2 texture_coords;
 out vec3 normals;
 
+mat3 rotation_matrix(vec3 euler_angles) {
+    float cx = cos(euler_angles.x);
+    float sx = sin(euler_angles.x);
+
+    float cy = cos(euler_angles.y);
+    float sy = sin(euler_angles.y);
+    
+	float cz = cos(euler_angles.z);
+    float sz = sin(euler_angles.z);
+
+    mat3 rot_x = mat3(	1, 0, 0,
+					 	0, cx, sx,
+					 	0, -sx, cx);
+
+    mat3 rot_y = mat3(	cy, 0, -sy,
+					 	0, 1, 0,
+						sy, 0, cy);
+
+    mat3 rot_z = mat3(	cz, sz, 0,
+						-sz, cz, 0,
+						0, 0, 1);
+
+    return rot_z * rot_y * rot_x;
+}
+
 void main() {
-	texture_coords = (texcoord * instance_texcoord.zw) + instance_texcoord.xy;
+	texture_coords = (texcoord * instance_tex_pos_scale.zw) + instance_tex_pos_scale.xy;
 	normals = normal;
-    gl_Position = mvp * vec4((position * instance_scale) + instance_position, 1.0);
+	vec4 pos = vec4(((rotation_matrix(instance_rotation) * position) * instance_scale) + instance_position, 1.0);
+    gl_Position = mvp * pos;
 }
 
 

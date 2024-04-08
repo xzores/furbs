@@ -7,7 +7,7 @@ layout (location = 0) in vec3 position;
 
 layout (location = 3) in vec3 instance_position;
 layout (location = 4) in vec3 instance_scale;
-layout (location = 5) in vec4 instance_texcoord;
+layout (location = 6) in vec4 instance_tex_pos_scale;
 
 //// Uniforms ////
 uniform float time;
@@ -35,16 +35,16 @@ void main() {
 	//texture_coords = (texcoord * instance_texcoord.zw) + instance_texcoord.xy;
 	
 	if (gl_VertexID == 0) {
-		texture_coords = instance_texcoord.xy;
+		texture_coords = instance_tex_pos_scale.xy;
 	}
 	if (gl_VertexID == 1) {
-		texture_coords = instance_texcoord.xw;
+		texture_coords = instance_tex_pos_scale.zy;
 	}
 	if (gl_VertexID == 2) {
-		texture_coords = instance_texcoord.zw;
+		texture_coords = instance_tex_pos_scale.zw;
 	}
 	if (gl_VertexID == 3) {
-		texture_coords = instance_texcoord.zy;
+		texture_coords = instance_tex_pos_scale.xw;
 	}
 	
     gl_Position = mvp * vec4((position * instance_scale) + instance_position, 1.0);
