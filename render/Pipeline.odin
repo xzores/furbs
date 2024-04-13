@@ -61,7 +61,8 @@ begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 	assert(state.current_target != {}, "There must be a bound target before calling begin_pipeline (call begin_target before begin_pipeline).", loc);
 	assert(state.target_pixel_width != 0, "target_pixel_width is 0", loc);
 	assert(state.target_pixel_height != 0, "target_pixel_height is 0", loc);
-	
+	assert(pipeline != {}, "pipeline is nil", loc);
+
 	using gl;
 	
 	{

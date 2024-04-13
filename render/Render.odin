@@ -246,7 +246,7 @@ destroy :: proc (loc := #caller_location) {
 	
 	//Check that all sub windows have been destroyed.
 	if len(state.active_windows) != 0 {
-		panic("You must close all window before calling destroy");
+		log.errorf("You must close all window before calling destroy (except for the window created with init)");
 	}
 	
 	//Destoy active windows
@@ -309,7 +309,7 @@ destroy :: proc (loc := #caller_location) {
 			
 			fmt.assertf(mem.check_zero_ptr(val.data, reflect.size_of_typeid(val.id)), "\033[31mState must be reset before closing (internal error). The field %s is : %#v\n\033[0m", field.name, val);
 		}
-		panic("state is not zero");
+		//panic("state is not zero");
 	}
 }
 
