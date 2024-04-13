@@ -6,24 +6,16 @@ import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:time"
 
-//TODO move to state
-arrow_init 		: bool;
-
-shapes_pipeline 	: Pipeline;
-overlay_pipeline 	: Pipeline;
-arrow_fbo			: Frame_buffer;
 
 //Used internally
 get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 = {256,256}, loc := #caller_location) -> Texture2D {
-
-	camera := camera;
 	
-	if arrow_init == false {
+	if state.overlay_init == false {
 		//s, ok := load_shader_from_path("my_shader.glsl"); assert(ok == nil);
-		shapes_pipeline = make_pipeline(get_default_shader(), .no_blend, true, true, .fill, .no_cull);
-		overlay_pipeline = make_pipeline(get_default_shader(), .blend, true, true, .fill, .no_cull);
-		init_frame_buffer_textures(&arrow_fbo, 1, texture_size.x, texture_size.y, .RGBA8, .depth_component16, false, .linear);
-		arrow_init = true;
+		state.shapes_pipeline = make_pipeline(get_default_shader(), .blend, true, true, .fill, .no_cull);
+		state.overlay_pipeline = make_pipeline(get_default_shader(), .blend, true, true, .fill, .no_cull);
+		init_frame_buffer_textures(&state.arrow_fbo, 1, texture_size.x, texture_size.y, .RGBA8, .depth_component16, false, .linear);
+		state.overlay_init = true;
 	}
 	
 	f := camera_forward(camera);
@@ -42,8 +34,8 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 		far 			= 2,
 	}
 
-	begin_target(&arrow_fbo, [4]f32{0,0,0,0});
-		begin_pipeline(shapes_pipeline, overlay_camera);
+	begin_target(&state.arrow_fbo, [4]f32{0,0,0,0});
+		begin_pipeline(state.shapes_pipeline, overlay_camera);
 			set_texture(.texture_diffuse, get_white_texture());
 			draw_arrow({0,0,0}, {1,0,0},  [4]f32{0.8, 0.1, 0.1, 1});
 			draw_arrow({0,0,0}, {0,1,0},  [4]f32{0.1, 0.8, 0.1, 1});
@@ -51,7 +43,7 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 		end_pipeline();
 	end_target();
 
-	return arrow_fbo.color_attachments[0].(Texture2D);
+	return state.arrow_fbo.color_attachments[0].(Texture2D);
 	//return arrow_fbo.depth_attachment.(Texture2D);
 }
 
@@ -73,7 +65,7 @@ draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offs
 
 	begin_target(target, nil);
 		aspect : f32 = state.target_pixel_width / state.target_pixel_height;
-		begin_pipeline(overlay_pipeline, cam);
+		begin_pipeline(state.overlay_pipeline, cam);
 			set_texture(.texture_diffuse, tex);
 			draw_quad(linalg.matrix4_from_trs_f32([3]f32{(aspect) - offset.x - scale/2, 1.0 - offset.y - scale/2, 0}, 0, {scale,scale,1}));
 		end_pipeline();

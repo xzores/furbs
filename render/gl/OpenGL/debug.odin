@@ -35,7 +35,7 @@ when GL_DEBUG {
 		for i := 0; /**/; i += 1 {
 			err := cast(Error_Enum)impl_GetError();
 			if err == .NO_ERROR { break }
-
+			
 			if capture_error_callback != nil {
 				capture_error_callback(from_loc, ret_val, err, args, loc);
 			}

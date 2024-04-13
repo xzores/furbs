@@ -63,7 +63,7 @@ Usage :: enum {
 }
 
 Instance_usage :: enum {
-	dynamic_upload = auto_cast gl.Resource_usage.dynamic_write,	//Will use BufferSubData for updates
+	dynamic_upload = auto_cast gl.Resource_usage.dynamic_write,		//Will use BufferSubData for updates
 	stream_upload	= auto_cast gl.Resource_usage.stream_write,		//Will use persistent mapped buffer and fallback to unsyncronized mapped buffers.
 
 	dynamic_copy = auto_cast gl.Resource_usage.dynamic_host_only,	//Will use BufferSubData for updates
@@ -154,6 +154,18 @@ upload_instance_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data :
 			upload_instance_data_single(v, start_index, data, loc = loc);
 		case ^Mesh_buffered:
 			upload_instance_data_buffered(v, start_index, data, loc = loc);
+		case ^Mesh_shared:
+			panic("TODO");
+	}
+}
+
+//Will copy data, so data is not destroyed.
+resize_mesh :: proc(mesh : Mesh_ptr, #any_int new_vert_size, new_index_size : int, loc := #caller_location) {
+	switch v in mesh {
+		case ^Mesh_single:
+			resize_mesh_single(v, new_vert_size, new_index_size, loc);
+		case ^Mesh_buffered:
+			resize_mesh_bufferd(v, new_vert_size, new_index_size);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -315,7 +327,7 @@ upload_vertex_data_single :: proc(mesh : ^Mesh_single, #any_int start_vertex : i
 	//We need to check the current resouce size is the same as the vertex_size
 	if mesh.vertex_data.bytes_count < byte_size * mesh.vertex_count {
 		//The resouce should be resized
-		panic("We cannot resize");
+		fmt.panicf("We cannot resize, resource_bytes_count : %v. vertex_byte_count : %v", mesh.vertex_data.bytes_count, mesh.vertex_count, loc = loc);
 	}
 	
 	byte_data := slice.reinterpret([]u8, data);
@@ -400,17 +412,16 @@ upload_instance_data_single :: proc(mesha : ^Mesh_single, #any_int start_index :
 		*/
 
 		byte_data := slice.reinterpret([]u8, data);
-
+		
 		//Then upload
 		switch instance_data.usage {				
 			case .dynamic_upload, .dynamic_copy:
 				gl.buffer_upload_sub_data(&instance_data.data, byte_size * start_index, byte_data);
 			case .stream_upload, .stream_copy:
-				/*dst : []u8 = gl.begin_buffer_write(resource, byte_size * start_index, len(data));
-				fmt.assertf(len(dst) == len(data), "length of buffer and length of data does not match. dst : %i, data : %i", len(dst), len(data), loc = loc);
+				dst : []u8 = gl.begin_buffer_write(&instance_data.data, byte_size * start_index, len(byte_data));
+				fmt.assertf(len(dst) == len(byte_data), "length of buffer and length of data does not match. dst : %i, data : %i", len(dst), len(byte_data), loc = loc);
 				mem.copy_non_overlapping(raw_data(dst), raw_data(data), len(dst)); //TODO this mapping and unmapping is not nice when we upload multiple time a frame... in the mesh share for example.
-				gl.end_buffer_writes(resource);*/
-				panic("TODO");
+				gl.end_buffer_writes(&instance_data.data);
 		}
 	} else { 
 		panic("This mesh is not instanced");
@@ -423,40 +434,72 @@ remake_resource :: proc (old_res : gl.Resource, new_size : int) -> gl.Resource {
 	new_desc := old_res.desc;
 	new_desc.bytes_count = new_size;
 	new_res := gl.make_resource_desc(new_desc, nil);
-	gl.copy_buffer_sub_data(old_res.buffer, new_res.buffer, 0, 0, math.min(new_res.bytes_count, old_res.bytes_count));
-	gl.destroy_resource(old_res);
+
+	is_streaming : bool = old_res.usage == .stream_host_only ||old_res.usage == .stream_read || old_res.usage == .stream_read_write || old_res.usage == .stream_write;
+
+	if is_streaming {
+		panic("TODO this will not work for streaming buffers");
+	}
+	else {
+		gl.copy_buffer_sub_data(old_res.buffer, new_res.buffer, 0, 0, math.min(new_res.bytes_count, old_res.bytes_count));
+		gl.destroy_resource(old_res);
+	}
+	
 	return new_res;
 }
 
-//TODO test
-resize_mesh_single :: proc(mesh : ^Mesh_single, new_vert_size, new_index_size : int, loc := #caller_location) {
+//Data will be copied over
+resize_mesh_single :: proc(mesh : ^Mesh_single, #any_int new_vert_size, new_index_size : int, loc := #caller_location) {
+	assert(mesh.usage != .static_use, "Cannot resize a static usage mesh", loc);
+	if new_index_size == 0 {
+		assert(mesh.index_count == 0, "new_index_size may not be non-zero if existing size is zero", loc);
+	}
 
-	attrib_info := get_attribute_info_from_typeid(mesh.data_type, loc);
-	defer delete(attrib_info);
+	log.infof("resizing mesh old sizes : %v, %v, new sizes : %v, %v", mesh.vertex_count, mesh.index_count, new_vert_size, new_index_size);
 
-	mesh.vertex_data = remake_resource(mesh.vertex_data, new_vert_size);
-	gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, 0, loc);
-	
+	{
+		byte_size := reflect.size_of_typeid(mesh.data_type);
+		attrib_info := get_attribute_info_from_typeid(mesh.data_type, loc);
+		defer delete(attrib_info);
+
+		mesh.vertex_data = remake_resource(mesh.vertex_data, byte_size * new_vert_size);
+		gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, 0, loc);
+		
+		mesh.vertex_count = new_vert_size;
+	}
+
 	switch mesh.indices_type {
+
 		case .no_index_buffer:
 			assert(new_index_size == 0, "if there is no index buffer then new_index_size must be 0", loc);
+		
 		case .unsigned_short:
-			i, ok := mesh.indices_buf.(gl.Resource);
-			assert(ok, "internal error");
-			mesh.indices_buf = remake_resource(i, new_index_size);
-			gl.associate_index_buffer_with_vao(mesh.vao, i.buffer);
+			byte_size : int = 16;
+			if i, ok := mesh.indices_buf.(gl.Resource); ok {
+				new_buf := remake_resource(i, byte_size * new_index_size);
+				mesh.indices_buf = new_buf;
+				gl.associate_index_buffer_with_vao(mesh.vao, new_buf.buffer);
+			}
+			else {
+				assert(ok, "internal error");
+			}
+			
 		case .unsigned_int:
-			i, ok := mesh.indices_buf.(gl.Resource);
-			assert(ok, "internal error");
-			mesh.indices_buf = remake_resource(i, new_index_size);
-			gl.associate_index_buffer_with_vao(mesh.vao, i.buffer);
+			byte_size : int = 32;
+			if i, ok := mesh.indices_buf.(gl.Resource); ok {
+				new_buf := remake_resource(i, byte_size * new_index_size);
+				mesh.indices_buf = new_buf;
+				gl.associate_index_buffer_with_vao(mesh.vao, new_buf.buffer);
+			}
+			else {
+				assert(ok, "internal error");
+			}
 	}
 
-	if true {
-		panic("TODO this will not work for streaming buffers");
-	}
+	mesh.index_count = new_index_size;
 }
 
+//Data will be copied over
 resize_mesh_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, loc := #caller_location) {
 	
 	if instance, ok := &mesh.instance_data.?; ok {
@@ -478,10 +521,11 @@ draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, co
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	assert(mesh.instance_data == nil, "This is an instanced mesh, use the draw_*_instanced function.", loc)
 	assert(mesh.primitive != nil);
-
+	
 	start : int = 0;
 	vertex_count := mesh.vertex_count;
 	index_count := mesh.index_count;
+
 	if r, ok := draw_range.?; ok {
 		start = r.x;
 		vertex_count = r.y - r.x;
@@ -668,7 +712,8 @@ upload_vertex_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_verte
 	}
 	else {
 		d.ref_cnt = 1;
-		panic("TODO"); //queue.append(something, d);
+		l := &mesh.backing[mesh.current_write];
+		queue.append(&l.vertex_data_queue, d);
 	}
 }
 
@@ -695,7 +740,8 @@ upload_index_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_index 
 	}
 	else {
 		d.ref_cnt = 1;
-		panic("TODO"); //queue.append(something, d);
+		l := &mesh.backing[mesh.current_write];
+		queue.append(&l.index_data_queue, d);
 	}
 }
 
@@ -714,7 +760,8 @@ upload_instance_data_buffered :: proc (mesh : ^Mesh_buffered, #any_int start_ind
 	}
 	else {
 		d.ref_cnt = 1;
-		panic("TODO"); //queue.append(something, d);
+		l := &mesh.backing[mesh.current_write];
+		queue.append(&l.instance_data_queue, d);
 	}
 }
 
@@ -731,37 +778,24 @@ mesh_buffered_next_draw_source :: proc (using mesh_buffer : ^Mesh_buffered, loc 
 		upload_buffered_data(mesh_buffer, 0);
 		return 0; //We don't need to upload and we don't need to sync
 	}
- 
+	
 	//Move upload forward
 	next_write := (current_write+1) %% len(backing);
 	if gl.is_fence_ready(backing[next_write].read_fence) {
-		current_write = next_write;
-		//fmt.printf("Next write is ready, moving to %i\n", next_write);
-		
+
 		//upload data and move to next if free
 		upload_buffered_data(mesh_buffer, current_write, loc = loc);
 		assert(queue.len(mesh_buffer.backing[current_write].index_data_queue) == 0, "Data was not cleared?");
 		assert(queue.len(mesh_buffer.backing[current_write].vertex_data_queue) == 0, "Data was not cleared?");
 		
-		//next_write = (next_write+1) %% len(backing);
-		//if current_write == current_read || next_write == current_read {
-		//	break;
-		//}
+		current_write = next_write;
 	}
 	
 	//Move read/draw forward
 	next_read := (current_read+1) %% len(backing);
 	if gl.is_fence_ready(backing[next_read].transfer_fence) {
 		current_read = next_read;
-		//fmt.printf("Next read is ready, moving to %i\n", next_read);
-
-		//next_read = (next_read+1) %% len(backing);
-		//if current_read == current_write || next_read == current_write {
-		//	break;
-		//}
 	}
-
-	//fmt.printf("\n");
 
 	return current_read;
 }
@@ -1078,10 +1112,15 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 	backing : ^Backing_mesh = &mesh.backing[index];
 
 	if mesh.vertex_count != backing.vertex_count || mesh.index_count != backing.index_count{
+		
 		//We must first be very sure that we are not transfering as resizing will copy from the old buffer.
 		gl.sync_fence(&backing.transfer_fence);
+		gl.sync_fence(&backing.read_fence); //TODO is this needed?
+		
 		//Resize the submesh
 		resize_mesh_single(backing, mesh.vertex_count, mesh.index_count);
+		
+		log.debugf("Resizing backing mesh, new size : %v, %v", mesh.vertex_count, mesh.index_count);
 	}
 	
 	if queue.len(backing.index_data_queue) != 0 || queue.len(backing.vertex_data_queue) != 0 || queue.len(backing.instance_data_queue) != 0 {
@@ -1141,7 +1180,7 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 		}
 
 		//Upload instance data
-		if inst, ok := backing.instance_data.?; ok {
+		if inst, ok := &backing.instance_data.?; ok {
 			byte_size := reflect.size_of_typeid(inst.data_type);
 			for queue.len(backing.instance_data_queue) != 0 {
 				
@@ -1164,7 +1203,6 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 		backing.transfer_fence = gl.place_fence();
 	}
 }
-
 
 //NOTES on transform feedback
 //Transform feedback only allows us to draw POINTS, LINES, TRIANGLES. We can also only use glDrawArrays and glDrawArrays instanced.

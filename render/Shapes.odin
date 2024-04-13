@@ -69,16 +69,18 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 
 @(private)
 destroy_shapes :: proc() {
-	destroy_mesh(&state.shapes); state.shapes = {};
-	state.shapes_init = false;
-	state.shape_cube 		= {};
-	state.shape_circle 		= {};
-	state.shape_quad 		= {};
-	state.shape_char		= {};
-	state.shape_cylinder	= {};
-	state.shape_sphere		= {};
-	state.shape_cone		= {};
-	state.shape_arrow		= {};
+	if state.shapes_init {
+		destroy_mesh(&state.shapes); state.shapes = {};
+		state.shapes_init = false;
+		state.shape_cube 		= {};
+		state.shape_circle 		= {};
+		state.shape_quad 		= {};
+		state.shape_char		= {};
+		state.shape_cylinder	= {};
+		state.shape_sphere		= {};
+		state.shape_cone		= {};
+		state.shape_arrow		= {};
+	}
 }
 
 draw_quad :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {

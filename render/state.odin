@@ -68,9 +68,14 @@ State :: struct {
 	shape_sphere : [2]int,
 	shape_cone : [2]int,
 	shape_arrow : [2]int,
-
+	
 	//Extra stuff
 	fps_measurement : f32,
+	
+	overlay_init 		: bool,
+	shapes_pipeline 	: Pipeline,
+	overlay_pipeline 	: Pipeline,
+	arrow_fbo			: Frame_buffer,
 
 	//Window stuff
 	owner_context : glfw.WindowHandle,

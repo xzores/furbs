@@ -20,13 +20,11 @@ Fonts :: struct {
 
 @(private)
 resize_atlas :: proc (data: rawptr, w, h: int) {
-	fmt.printf("UPLOAD RESIZE! : %v\n");
 	reupload_text_texture();
 }
 
 @(private)
 upload_atlas :: proc (data: rawptr, dirtyRect: [4]f32, textureData: rawptr) {
-	fmt.printf("UPLOAD ! : %v\n");
 	reupload_text_texture();
 }
 

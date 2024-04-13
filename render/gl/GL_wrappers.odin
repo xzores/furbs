@@ -23,7 +23,7 @@ _ :: gl.GLenum;
 
 RENDER_DEBUG	:: #config(RENDER_DEBUG, ODIN_DEBUG);
 RECORD_DEBUG 	:: #config(RECORD_DEBUG, false);
-UNBIND_DEBUG 	:: #config(UNBIND_DEBUG, false);
+UNBIND_DEBUG 	:: #config(UNBIND_DEBUG, true);
 
 /////////// Opengl handles ///////////
 Shader_program_id :: distinct u32;
@@ -490,7 +490,7 @@ translate_resource_usage_4_4 :: proc(usage : Resource_usage) -> (buffer_flags : 
 		
 		//DYNAMIC//
 		case .dynamic_read:
-			buffer_flags 	= gl.MAP_READ_BIT | gl.DYNAMIC_STORAGE_BIT; //TODO gl.DYNAMIC_STORAGE_BIT might not be neeeded here
+			buffer_flags 	= gl.MAP_READ_BIT;
 			map_flags 		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .dynamic_write:
@@ -697,7 +697,7 @@ construct_upload_format :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) 
 		case .no_upload:
 			return nil;
 		case:
-			panic("TODO");
+			panic("Invalid format");
 	}
 
 	unreachable();
@@ -719,7 +719,7 @@ upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) 
 		case .no_upload:
 			return 0;
 		case:
-			panic("TODO");
+			panic("Invalid format");
 	}
 
 	unreachable();
@@ -740,7 +740,7 @@ upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components
 		case .no_upload:
 			return nil;
 		case:
-			panic("TODO");
+			panic("Invalid format");
 	}
 
 	unreachable();
@@ -759,7 +759,7 @@ upload_format_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 		case .no_upload:
 			return nil;
 		case:
-			panic("TODO");
+			panic("Invalid format");
 	}
 
 	unreachable();
@@ -779,7 +779,7 @@ upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes
 		case .no_upload:
 			return 0;
 		case:
-			panic("TODO");
+			panic("Invalid format");
 	}
 
 	unreachable();
@@ -1031,25 +1031,18 @@ else {
 	}
 }
 
-
 _gl_context : runtime.Context;
 
 init :: proc(gl_context := context) {
-	
-	/* TODO delete, this is handled by window creation
-	cpu_state, gpu_state = init_state();
-	when RENDER_DEBUG {
-		debug_state = init_debug_state();
-	}
-	*/
 
 	_gl_context = gl_context;
 
 	when RECORD_DEBUG {
 		setup_call_recorder(); 
 		gl.capture_gl_callback = record_call;
-		gl.capture_error_callback = record_err;
-		
+	}
+	
+	when gl.GL_DEBUG {
 		if cpu_state.gl_version >= .opengl_4_3 {
 			// Enable debug messages
 			log.infof("Enable opengl debug messages");
@@ -1059,10 +1052,10 @@ init :: proc(gl_context := context) {
 			// Set up debug callback function
 			gl.DebugMessageCallback(debug_callback, nil);
 
-			// Optionally, specify debug message control
-			//gl.DebugMessageControl(.DONT_CARE, .DONT_CARE, .DONT_CARE, 0, nil, true);
 		}
 	}
+
+	gl.capture_error_callback = record_err;
 
 	info = fetch_gl_info();
 	log.debugf("System info : %#v", info);
@@ -1129,13 +1122,6 @@ destroy :: proc(loc := #caller_location) -> (leaks : int) {
 	when RECORD_DEBUG {
 		destroy_call_recorder();
 	}
-
-	/* TODO delete, this is handled by window creation/destruction
-	destroy_state(&cpu_state, &gpu_state);
-	when RENDER_DEBUG {
-		destroy_debug_state(&debug_state);
-	}
-	*/
 
 	_gl_context = {};
 
@@ -1333,10 +1319,8 @@ record_err :: proc (from_loc: runtime.Source_Code_Location, err_val: any, err : 
 	assert(_gl_context != {}, "_gl_context is nil", loc);
 
 	{
-		s := fmt.aprintf("glGetError() returned GL_%v\n\tfrom:\tgl%s(%v)\n\tin:\t%v(%v:%v)\n", err, loc.procedure, args, from_loc.file_path, from_loc.line, from_loc.column);
-		defer delete(s);
 
-		log.errorf(s);
+		log.errorf("glGetError() returned GL_%v\n\tfrom:\tgl%s(%v)\n\tin:\t%v(%v:%v)\n", err, loc.procedure, args, from_loc.file_path, from_loc.line, from_loc.column);
 
 		// add location
 		//log.errorf("	in:   %s(%d:%d)\n", from_loc.file_path, from_loc.line, from_loc.column)
@@ -1384,7 +1368,7 @@ record_err :: proc (from_loc: runtime.Source_Code_Location, err_val: any, err : 
 				gl.GetDebugMessageLog(1, l, raw_data(message_sources[:]), raw_data(message_types[:]), nil, raw_data(message_severities[:]), &l, raw_data(err_str));
 				//(count : GLuint, bufSize : GLsizei, sources : ^GLenum, types : ^GLenum, ids : ^GLuint, severities : ^GLenum, lengths : ^GLsizei, messageLog : GLoutstring
 				
-				log.errorf("	recive debug message : %v", string(err_str));
+				log.errorf("recive debug message : %v", string(err_str));
 				gl.GetIntegerv(.DEBUG_LOGGED_MESSAGES, &mes_cnt)
 			}
 		}
@@ -1415,7 +1399,7 @@ fetch_gl_info :: proc () -> (info : GL_info) {
 @(require_results)
 get_version :: proc() -> GL_version {
 	
-	v := gl.GetString(auto_cast gl.VERSION); //TODO: This does not need to be deleted i think?
+	v := gl.GetString(auto_cast gl.VERSION); //This must not be deleted.
 	version := strings.clone_from(v);
 
 	Major : int = strconv.atoi(version[0:1]);
@@ -1662,12 +1646,7 @@ clear :: proc(clear_color : [4]f32, flags : Clear_flags = {.color_bit, .depth_bi
 		flag = flag | gl.ACCUM_BUFFER_BIT;
 	}
 
-	when RENDER_DEBUG {
-		gl.Clear(auto_cast flag, loc);
-	}
-	else {
-		gl.Clear(auto_cast flag);
-	}
+	gl.Clear(auto_cast flag);
 }
 
 /////////// shaders ///////////
@@ -1863,7 +1842,7 @@ bind_vertex_array :: proc (vao : Vao_id, loc := #caller_location) {
 	if gpu_state.bound_vao == vao {
 		return
 	}
-	
+
 	gpu_state.bound_vao = vao;
 
 	gl.BindVertexArray(auto_cast vao);
@@ -1921,7 +1900,7 @@ delete_vertex_array :: proc (vao : Vao_id) {
 
 }
 
-//TODO this assumes only one buffer per VAO
+//This assumes only one buffer per VAO
 associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes : []Attribute_info_ex, #any_int divisor : u32 = 0, loc := #caller_location) {
 
 	bind_vertex_array(auto_cast vao);
@@ -2050,7 +2029,7 @@ delete_buffers :: proc(location : Buffer_type, buffers : []Buffer_id) {
 			}
 		}
 	}
-
+	
 	gl.DeleteBuffers(auto_cast len(buffers), cast([^]u32) raw_data(buffers));
 
 	when RENDER_DEBUG {
@@ -2078,7 +2057,7 @@ delete_buffer :: proc(location : Buffer_type, buffer : Buffer_id) {
 bind_buffer :: proc(location : Buffer_type, buffer : Buffer_id) {
 	
 	cpu_state.bound_buffer[location] = buffer;
-
+	
 	if gpu_state.bound_buffer[location] == buffer {
 		return
 	}
@@ -2086,19 +2065,17 @@ bind_buffer :: proc(location : Buffer_type, buffer : Buffer_id) {
 	gpu_state.bound_buffer[location] = buffer;
 
 	gl.BindBuffer(auto_cast location, auto_cast buffer);
-
 }
 
 unbind_buffer :: proc(location : Buffer_type) {
-
+	
 	when UNBIND_DEBUG {
 		cpu_state.bound_buffer[location] = 0;
 		gpu_state.bound_buffer[location] = 0;
 		gl.BindBuffer(auto_cast location, 0);
 	}
 	else {
-		
-		/*
+		//This seems hacky could we do something better?
 		#partial switch location {
 			case .element_array_buffer, .array_buffer:
 				cpu_state.bound_buffer[location] = 0;
@@ -2107,9 +2084,6 @@ unbind_buffer :: proc(location : Buffer_type) {
 			case:
 				cpu_state.bound_buffer[location] = 0;
 		}
-		*/
-
-		cpu_state.bound_buffer[location] = 0;
 	}
 }
 
@@ -2133,18 +2107,16 @@ buffer_data :: proc(buffer : Buffer_id, target : Buffer_type, size : int, data :
 		gl.NamedBufferStorage(auto_cast buffer, size, data, auto_cast buffer_falgs);
 	}
 	else if cpu_state.gl_version >= .opengl_4_4 {
-		bind_vertex_array(0); //required to not overwrite stuff
 		buffer_falgs, _ := translate_resource_usage_4_4(usage);
 		bind_buffer(target, buffer);
 		gl.BufferStorage(auto_cast target, size, data, auto_cast buffer_falgs);
-		bind_buffer(target, 0);
+		unbind_buffer(target);
 	}
 	else {
-		bind_vertex_array(0); //required to not overwrite stuff
 		buffer_falgs, _ := translate_resource_usage_3_3(usage);
 		bind_buffer(target, buffer);
 		gl.BufferData(auto_cast target, size, data, auto_cast buffer_falgs);
-		bind_buffer(target, 0);
+		unbind_buffer(target);
 	}
 }
 
@@ -2319,19 +2291,6 @@ destroy_resource :: proc(resource : Resource, loc := #caller_location) {
 	delete_buffer(resource.buffer_type, resource.buffer);
 }
 
-//this may unbind/(delete/create) the/a buffer if bound and invalidate/delete any data, after calling this you will have to reupload any data. Be sure
-resize_buffer :: proc (resource : ^Resource, #any_int new_size : int, loc := #caller_location) {
-
-	#partial switch resource.usage {
-		case .static_read, .static_write, .static_read_write, .static_host_only:
-			panic("A static buffer cannot be resized, it is static!", loc = loc);
-		case:
-			//stream and dynamic can resize.
-	}
-
-	panic("TODO!");
-}
-
 buffer_upload_sub_data :: proc (resource : ^Resource, #any_int offset_bytes : int, data : []u8) {
 	buffer_sub_data(resource.buffer, resource.buffer_type, offset_bytes, data);
 }
@@ -2431,43 +2390,6 @@ end_buffer_writes :: proc(using resource : ^Resource, loc := #caller_location) {
 	}
 	
 }
-
-
-/*
-//Return false if a unnecessary stall/wait is required if end_buffer_write is called at this time.
-//return true if it is a good idea to call end_buffer_write.
-@(require_results)
-is_end_buffer_write_ready :: proc(resource : Resource) -> bool {
-	
-	switch resource.behavior {
-		case .sync:
-			return true;
-
-		case .async:
-			panic("todo");
-
-		case .persistent:
-			if cpu_state.gl_version >= .opengl_4_4 {
-				panic("TODO");
-			}
-			else {
-				panic("TODO");
-			}
-	}
-	
-	unreachable();
-}
-
- 
-request_buffer_read :: proc(buffer : Resource, range : Maybe([2]int) = nil) {
-	//TODO
-}
-
-commit_buffer_read :: proc() -> (data : []u8) {
-	//TODO
-}
-*/
-
 
 //////////// Render Buffers ////////////
 
@@ -2824,7 +2746,7 @@ associate_color_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex
 	return;
 }
 
-//TODO make this return an error instead of crashing
+
 @(require_results)
 validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid : bool) {
 	// Check if framebuffer is complete
@@ -2872,6 +2794,7 @@ validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid 
 	return true;
 }
 
+//Will blit the first color attachment to the screen.
 blit_fbo_color_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
 	
 	interpolation : gl.GLenum = .NEAREST;
@@ -2886,34 +2809,11 @@ blit_fbo_color_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_heig
 	else {
 		bind_frame_buffer_read(fbo);
 		bind_frame_buffer_draw(0);
-		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); //TODO options for .COLOR_BUFFER_BIT, .NEAREST
+		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); 
 		bind_frame_buffer_draw(0);
 		bind_frame_buffer_read(0);
 	}
 }
-
-/*
-Does not work
-blit_fbo_depth_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
-	
-	interpolation : gl.GLenum = .NEAREST;
-
-	if use_linear_interpolation {
-		interpolation = .LINEAR;
-	}
-
-	if cpu_state.gl_version >= .opengl_4_5 {
-		gl.BlitNamedFramebuffer(auto_cast fbo, 0, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .DEPTH_BUFFER_BIT, interpolation);
-	}
-	else {
-		bind_frame_buffer_read(fbo);
-		bind_frame_buffer_draw(0);
-		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .DEPTH_BUFFER_BIT, interpolation); //TODO options for .COLOR_BUFFER_BIT, .NEAREST
-		bind_frame_buffer_draw(0);
-		bind_frame_buffer_read(0);
-	}
-}
-*/
 
 //////////////////////////////////////////// Textures ////////////////////////////////////////////
 

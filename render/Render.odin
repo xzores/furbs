@@ -217,7 +217,12 @@ destroy :: proc (loc := #caller_location) {
 	state.mouse_delta 		= {};
 	state.scroll_delta 		= {};
 	
+	//Extras
 	state.fps_measurement 	= {};
+	state.overlay_init = false;
+	destroy_frame_buffer(state.arrow_fbo); 			state.arrow_fbo = {};
+	destroy_pipeline(state.shapes_pipeline);		state.shapes_pipeline = {};
+	destroy_pipeline(state.overlay_pipeline);		state.overlay_pipeline = {};
 
 	//Destroy shaders defines
 	for e, v in state.shader_defines {
@@ -253,7 +258,7 @@ destroy :: proc (loc := #caller_location) {
 	gl.destroy();
 
 	//Destroy main window
-	fmt.printf("Destorying main window\n");
+	log.infof("Destorying main window");
 	glfw.DestroyWindow(state.owner_context);
 	state.owner_context = nil;
 	state.bound_window = nil;
@@ -288,6 +293,8 @@ destroy :: proc (loc := #caller_location) {
 	state.time_last 	= {};
 	state.delta_time 	= {};
 	state.time_elapsed 	= {};
+
+	state.pref_warn = false;
 
 	glfw.Terminate();
 	

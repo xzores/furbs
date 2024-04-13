@@ -36,14 +36,14 @@ out vec2 texture_coords;
 out vec3 normals;
 
 mat3 rotation_matrix(vec3 euler_angles) {
-    float cx = cos(euler_angles.x);
-    float sx = sin(euler_angles.x);
+    float cx = cos(radians(euler_angles.x));
+    float sx = sin(radians(euler_angles.x));
 
-    float cy = cos(euler_angles.y);
-    float sy = sin(euler_angles.y);
+    float cy = cos(radians(euler_angles.y));
+    float sy = sin(radians(euler_angles.y));
     
-	float cz = cos(euler_angles.z);
-    float sz = sin(euler_angles.z);
+	float cz = cos(radians(euler_angles.z));
+    float sz = sin(radians(euler_angles.z));
 
     mat3 rot_x = mat3(	1, 0, 0,
 					 	0, cx, sx,
