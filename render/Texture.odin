@@ -146,8 +146,8 @@ load_texture_2D_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textu
 	}
 	*/
 
-	assert(img.depth == 8);
-	assert(img.channels == 4);
+	fmt.assertf(img.depth == 8, "texture %v does not have depth 8", texture_path, loc = loc);
+	fmt.assertf(img.channels == 4, "texture %v does not have 4 channels", texture_path, loc = loc);
 
 	raw_data := bytes.buffer_to_bytes(&img.pixels);
 	
@@ -258,6 +258,23 @@ get_white_texture :: proc() -> Texture2D {
 	}
 
 	return state.white_texture;
+}
+
+get_black_texture :: proc () -> render.Texture2D {
+	
+	if back_texture.id == 0 {
+		
+		desc := render.Texture_desc{
+			.repeat,
+			.nearest,
+			false,
+			.uncompressed_RGBA8,
+		};
+
+		back_texture = render.make_texture_2D_desc(desc, 1, 1, .uncompressed_RGBA8, {0, 0, 0, 255});
+	}
+
+	return back_texture;
 }
 
 /////////////////////////////////// Texture 3D ///////////////////////////////////
