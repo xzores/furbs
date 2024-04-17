@@ -106,6 +106,7 @@ State :: struct {
 	
 	//Textures stuff
 	white_texture : Texture2D,
+	black_texture : Texture2D,
 
 	//Shader stuff
 	is_init_shader : bool,
