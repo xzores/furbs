@@ -24,7 +24,7 @@ State :: struct {
 	time_start : time.Time,
 	time_last : time.Time,
 
-	delta_time : f32,
+	delta_time : f32, //TODO make f64
 	time_elapsed : f32,
 	
 	//Input stuff

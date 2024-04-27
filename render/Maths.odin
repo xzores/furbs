@@ -135,3 +135,19 @@ rotation_matrix :: proc "contextless" (euler_angles : [3]f32) -> matrix[3,3]f32 
 
     return rot_z * rot_y * rot_x;
 }
+
+get_mouse_cast :: proc (camera : Camera3D, width : f32, height : f32) -> (direction : [3]f32) {
+	
+	cam_view, cam_prj := get_camera_3D_prj_view(camera, width / height);
+	
+	m_pos := mouse_pos();
+	m_pos.y = height - m_pos.y;
+	
+	inv_prj := linalg.inverse(cam_prj);
+	ray_clip : [4]f32 = {(2 * m_pos.x / width) - 1, (2 * m_pos.y / height) - 1, 1, 1};
+	ray_eye : [3]f32 = linalg.normalize((inv_prj * ray_clip).xyz);
+
+	ray_world := (linalg.inverse(camera_look_at(camera.position, camera.target, camera.up)) * [4]f32{ray_eye.x, ray_eye.y, ray_eye.z, 0}).xyz;
+
+	return linalg.normalize(ray_world);
+}

@@ -1,11 +1,15 @@
 package render;
 
+import "base:runtime"
+
 import "core:fmt"
 import c "core:c/libc"
 import "core:os"
 import "core:bytes"
 import "core:mem"
 import "core:slice"
+import "core:log"
+import "core:thread"
 
 import "core:image"
 import "core:image/png"
@@ -117,9 +121,114 @@ load_texture_2D_from_file :: proc(filename : string, desc : Texture_desc = {.cla
     return load_texture_2D_from_png_bytes(desc, data, filename, loc = loc);
 }
 
+//Load many textures threaded, good for many of the same types of textures.
+//nil is returned if we failed to load. Allocator must be multithread safe if keep_allocator is true.
+@(require_results)
+load_textures_2D_from_file :: proc(paths : []string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .uncompressed_RGBA8}, flipped := true, keep_allocator := false, loc := #caller_location) -> (textures : []Maybe(Texture2D)) {
+	
+	Load_png_info :: struct {
+		//in
+		filename : string,	//better name path
+		flipped : bool,
+
+		//out
+		allocator : runtime.Allocator,
+		img : ^image.Image,
+		failed : bool,
+	}
+	
+	run_load_from_disk :: proc (info : rawptr) {
+		
+		info : ^Load_png_info = auto_cast info;
+		context.allocator = info.allocator;
+
+		data, ok := os.read_entire_file_from_filename(info.filename);
+		defer delete(data);
+		if ok {
+			using image;
+
+			options := Options{
+				.alpha_add_if_missing,
+			};
+
+			err: image.Error;
+			info.img, err = png.load_from_bytes(data, options);
+
+			if err != nil {
+				info.failed = true;
+				return;
+			}
+
+			switch info.img.depth {
+				case 8:
+					//do nothing
+				case 16: //convert to 8 bit depth.
+					current := bytes.buffer_to_bytes(&info.img.pixels);
+					new := make([]u8, len(current) / 2);
+					for &v, i in new {
+						v = current[i*2];
+					}
+					bytes.buffer_destroy(&info.img.pixels);
+					bytes.buffer_init(&info.img.pixels, new);
+					info.img.depth = 8;
+				case:
+					panic("unimplemented");
+			}
+
+			fmt.assertf(info.img.depth == 8, "texture %v has depth %v, not 8", info.filename, info.img.depth);
+			fmt.assertf(info.img.channels == 4, "texture %v does not have 4 channels", info.filename);
+
+			if info.flipped {
+				raw_data := bytes.buffer_to_bytes(&info.img.pixels);
+				flip_texture_2D(raw_data, info.img.width, info.img.height, info.img.channels);
+			}
+		}
+		else {
+			info.failed = true;
+		}
+	}
+
+	textures = make([]Maybe(Texture2D), len(paths));
+
+	data : []Load_png_info = make([]Load_png_info, len(paths));
+	threads := make([]^thread.Thread, len(paths));
+	defer delete(threads);
+	defer delete(data);
+
+	for to_load, i in paths {
+		res : ^Load_png_info = &data[i];
+		res.filename = to_load;
+		res.flipped = flipped;
+		res.allocator = context.allocator;
+		threads[i] = thread.create_and_start_with_data(res, run_load_from_disk);
+	}
+
+	for t, i in threads {
+		thread.join(t);
+		
+		info := data[i];
+
+		if !info.failed {
+			raw_data := bytes.buffer_to_bytes(&info.img.pixels);
+			textures[i] = make_texture_2D_desc(desc, info.img.width, info.img.height, .uncompressed_RGBA8, raw_data, loc);
+			//cleanup
+		}
+		else {
+			log.errorf("Could not load file : %v", info.filename);
+			textures[i] = nil;
+			//TODO is there any cleanup here?
+		}
+		
+		image.destroy(info.img);
+		thread.destroy(t);
+	}
+
+	return;
+}
+
 //Data is compressed bytes (ex png format)
 @(require_results)
-load_texture_2D_from_png_bytes :: proc(desc : Texture_desc, data : []byte, texture_path := "", flipped := true, loc := #caller_location) -> Texture2D {
+load_texture_2D_from_png_bytes :: proc(desc : Texture_desc, data : []byte, texture_path := "", auto_convert_depth := true, flipped := true, loc := #caller_location) -> Texture2D {
 	using image;
 
 	options := Options{
@@ -127,35 +236,40 @@ load_texture_2D_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textu
 	};
 
     img, err := png.load_from_bytes(data, options);
+	defer image.destroy(img);
 	
 	if err != nil {
 		fmt.panicf("Failed to load texture %s, err : %v", texture_path, err, loc = loc);
 	}
 
-	defer destroy(img);
-
-	//fmt.printf("Image: %vx%vx%v, %v-bit.\n", img.width, img.height, img.channels, img.depth)
-
-	//TODO do we need any header data?
-	/* 
-	if v, ok := img.metadata.(^image.PNG_Info); ok {
-		
+	if auto_convert_depth {
+		switch img.depth {
+			case 8:
+				//do nothing
+			case 16: //convert to 8 bit depth.
+				current := bytes.buffer_to_bytes(&img.pixels);
+				new := make([]u8, len(current) / 2);
+				for &v, i in new {
+					v = current[i*2];
+				}
+				bytes.buffer_destroy(&img.pixels);
+				bytes.buffer_init(&img.pixels, new);
+				img.depth = 8;
+			case:
+				panic("unimplemented");
+		}
 	}
-	else {
-		panic("Image is not png info");
-	}
-	*/
 
-	fmt.assertf(img.depth == 8, "texture %v does not have depth 8", texture_path, loc = loc);
+	fmt.assertf(img.depth == 8, "texture %v has depth %v, not 8", texture_path, img.depth, loc = loc);
 	fmt.assertf(img.channels == 4, "texture %v does not have 4 channels", texture_path, loc = loc);
-
-	raw_data := bytes.buffer_to_bytes(&img.pixels);
+	
+	raw_data := bytes.buffer_to_bytes(&img.pixels); //these are owned by the image and it will be deleted at the end of call.
 	
 	if flipped {
 		flip_texture_2D(raw_data, img.width, img.height, img.channels);
 	}
 
-	return make_texture_2D_desc(desc, auto_cast img.width, auto_cast img.height, .uncompressed_RGBA8, raw_data, loc);
+	return make_texture_2D_desc(desc, img.width, img.height, .uncompressed_RGBA8, raw_data, loc);
 }
 
 @(require_results)
@@ -173,8 +287,14 @@ make_texture_2D :: proc(mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.
 }
 
 @(require_results)
-make_texture_2D_desc :: proc(using desc : Texture_desc, width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
+make_texture_2D_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
 
+	/*
+	assert(wrapmode != nil, "wrapmode is nil", loc);
+	assert(filtermode != nil, "filtermode is nil", loc);
+	assert(format != nil, "format is nil", loc);
+	*/
+	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
 	id : gl.Tex2d_id = gl.gen_texture_2D(loc);
@@ -213,9 +333,9 @@ make_texture_2D_desc :: proc(using desc : Texture_desc, width, height : i32, upl
     return tex;
 }
 
-upload_texture_2D_data :: proc(tex : ^Texture2D, pixel_offset : [2]i32, pixel_cnt : [2]i32, data : []$T, loc := #caller_location) {
+upload_texture_2D_data :: proc(tex : ^Texture2D, upload_format : gl.Pixel_format_upload, pixel_offset : [2]i32, pixel_cnt : [2]i32, data : []$T, loc := #caller_location) {
 	
-	gl.write_texure_data_2D(tex.id, 0, pixel_offset.x, pixel_offset.y, pixel_cnt.x, pixel_cnt.y, format, data, loc);
+	gl.write_texure_data_2D(tex.id, 0, pixel_offset.x, pixel_offset.y, pixel_cnt.x, pixel_cnt.y, upload_format, data, loc);
 	
 	if (tex.mipmaps) {
 		gl.generate_mip_maps_2D(tex.id);
@@ -260,21 +380,21 @@ get_white_texture :: proc() -> Texture2D {
 	return state.white_texture;
 }
 
-get_black_texture :: proc () -> render.Texture2D {
+get_black_texture :: proc () -> Texture2D {
 	
-	if back_texture.id == 0 {
+	if state.black_texture.id == 0 {
 		
-		desc := render.Texture_desc{
+		desc := Texture_desc{
 			.repeat,
 			.nearest,
 			false,
 			.uncompressed_RGBA8,
 		};
 
-		back_texture = render.make_texture_2D_desc(desc, 1, 1, .uncompressed_RGBA8, {0, 0, 0, 255});
+		state.black_texture = make_texture_2D_desc(desc, 1, 1, .uncompressed_RGBA8, {0, 0, 0, 255});
 	}
 
-	return back_texture;
+	return state.black_texture;
 }
 
 /////////////////////////////////// Texture 3D ///////////////////////////////////

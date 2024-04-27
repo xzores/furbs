@@ -238,6 +238,11 @@ destroy :: proc (loc := #caller_location) {
 		state.white_texture = {};
 	}
 
+	if state.black_texture != {} {
+		destroy_texture_2D(&state.black_texture);
+		state.black_texture = {};
+	}
+
 	//font context
 	destroy_text();
 

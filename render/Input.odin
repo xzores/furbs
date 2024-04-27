@@ -253,7 +253,7 @@ Mouse_input_event :: struct {
 }
 
 //constantly down, button means mouse
-button_down :: proc(button : Mouse_code) -> bool {
+is_button_down :: proc(button : Mouse_code) -> bool {
 	return state.button_down[button];
 }
 
@@ -265,6 +265,18 @@ button_pressed :: proc(button : Mouse_code) -> bool {
 //trigger on release key
 button_released :: proc(button : Mouse_code) -> bool {
 	return state.button_released[button];
+}
+
+mouse_pos :: proc () -> [2]f32 {
+	return state.mouse_pos;
+}
+
+mouse_delta :: proc() -> [2]f32 {
+	return state.mouse_delta;
+}
+
+scroll_delta :: proc () -> [2]f32 {
+	return state.scroll_delta;
 }
 
 ///////////////////////
