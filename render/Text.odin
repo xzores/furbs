@@ -40,7 +40,7 @@ reupload_text_texture :: proc () {
 	
 	assert(len(font_context.textureData) != 0, "font_context.textureData length is 0")
 	
-	font_texture = make_texture_2D_desc(font_tex_desc, auto_cast font_context.width, auto_cast font_context.height, .uncompressed_R8, font_context.textureData);
+	font_texture = make_texture_2D_desc(font_tex_desc, auto_cast font_context.width, auto_cast font_context.height, .R8, font_context.textureData);
 	log.infof("Reuploaded font texture, new size is %v, %v", font_context.width, font_context.height);
 }
 
@@ -198,7 +198,7 @@ font_tex_desc :: Texture_desc {
 	wrapmode = .clamp_to_border,
 	filtermode = .nearest,
 	mipmaps = false,
-	format	= .uncompressed_R8,
+	format	= .R8,
 }
 
 get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, spacing : f32 = 0, font : Font) -> (instance_data : [dynamic]Default_instance_data) {

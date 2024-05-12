@@ -20,7 +20,6 @@ enable_preformence_warnings :: proc (warnings : bool) {
 State :: struct {
 	
 	//Time stuff
-	
 	time_start : time.Time,
 	time_last : time.Time,
 
@@ -51,10 +50,12 @@ State :: struct {
 	mouse_pos : [2]f32,
 	mouse_delta : [2]f32,
 	scroll_delta : [2]f32,
-
+		
 	//Render init variable
 	is_init : bool,
 	pref_warn : bool,
+
+	is_begin_frame : bool,
 	
 	//Shapes stuff
 	shapes : Mesh_single,

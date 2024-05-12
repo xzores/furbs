@@ -591,18 +591,18 @@ Pixel_format_internal :: enum i32 {
 	invalid = 0,
 
 	//the ussual float formats
-	uncompressed_RGB4 = gl.RGB4,
-	uncompressed_RGBA4 = gl.RGBA4,
+	RGB4 = gl.RGB4,
+	RGBA4 = gl.RGBA4,
 
-	uncompressed_R8 = gl.R8,
-	uncompressed_RG8 = gl.RG8,
-	uncompressed_RGB8 = gl.RGB8,
-	uncompressed_RGBA8 = gl.RGBA8,
+	R8 = gl.R8,
+	RG8 = gl.RG8,
+	RGB8 = gl.RGB8,
+	RGBA8 = gl.RGBA8,
 
-	uncompressed_R16 = gl.R16,
-	uncompressed_RG16 = gl.RG16,
-	uncompressed_RGB16 = gl.RGB16,
-	uncompressed_RGBA16 = gl.RGBA16,
+	R16 = gl.R16,
+	RG16 = gl.RG16,
+	RGB16 = gl.RGB16,
+	RGBA16 = gl.RGBA16,
 
 	compressed_R8 = gl.COMPRESSED_RED,
 	compressed_RG8 = gl.COMPRESSED_RG,
@@ -610,77 +610,77 @@ Pixel_format_internal :: enum i32 {
 	compressed_RGBA8 = gl.COMPRESSED_RGBA,
 
 	//Some weirder formats
-	uncompressed_S_RGB8 = gl.SRGB8,
-	uncompressed_S_RGBA8 = gl.SRGB8_ALPHA8,
+	S_RGB8 = gl.SRGB8,
+	S_RGBA8 = gl.SRGB8_ALPHA8,
 
-	uncompressed_RGB5_A1 = gl.RGB5_A1, //float format, use when you need an on off alpha.
+	RGB5_A1 = gl.RGB5_A1, //float format, use when you need an on off alpha.
 	
 	//Depth formats (only used with framebuffers)
 	depth_component16 = gl.DEPTH_COMPONENT16,
 	depth_component24 = gl.DEPTH_COMPONENT24,
 	depth_component32 = gl.DEPTH_COMPONENT32,
-
+	
 	//Some int formats
-	uncompressed_R8_int = gl.R8I,
-	uncompressed_RG8_int = gl.RG8I,
-	uncompressed_RGB8_int = gl.RGB8I,
-	uncompressed_RGBA8_int = gl.RGBA8I,
+	R8_int = gl.R8I,
+	RG8_int = gl.RG8I,
+	RGB8_int = gl.RGB8I,
+	RGBA8_int = gl.RGBA8I,
 
-	uncompressed_R16_int = gl.R16I,
-	uncompressed_RG16_int = gl.RG16I,
-	uncompressed_RGB16_int = gl.RGB16I,
-	uncompressed_RGBA16_int = gl.RGBA16I,
+	R16_int = gl.R16I,
+	RG16_int = gl.RG16I,
+	RGB16_int = gl.RGB16I,
+	RGBA16_int = gl.RGBA16I,
 
-	uncompressed_R32_int = gl.R32I,
-	uncompressed_RG32_int = gl.RG32I,
-	uncompressed_RGB32_int = gl.RGB32I,
-	uncompressed_RGBA32_int = gl.RGBA32I,
+	R32_int = gl.R32I,
+	RG32_int = gl.RG32I,
+	RGB32_int = gl.RGB32I,
+	RGBA32_int = gl.RGBA32I,
 
 	//Some unsigned int formats
-	uncompressed_R8_uint = gl.R8UI,
-	uncompressed_RG8_uint = gl.RG8UI,
-	uncompressed_RGB8_uint = gl.RGB8UI,
-	uncompressed_RGBA8_uint = gl.RGBA8UI,
+	R8_uint = gl.R8UI,
+	RG8_uint = gl.RG8UI,
+	RGB8_uint = gl.RGB8UI,
+	RGBA8_uint = gl.RGBA8UI,
 
-	uncompressed_R16_uint = gl.R16UI,
-	uncompressed_RG16_uint = gl.RG16UI,
-	uncompressed_RGB16_uint = gl.RGB16UI,
-	uncompressed_RGBA16_uint = gl.RGBA16UI,
+	R16_uint = gl.R16UI,
+	RG16_uint = gl.RG16UI,
+	RGB16_uint = gl.RGB16UI,
+	RGBA16_uint = gl.RGBA16UI,
 
-	uncompressed_R32_uint = gl.R32UI,
-	uncompressed_RG32_uint = gl.RG32UI,
-	uncompressed_RGB32_uint = gl.RGB32UI,
-	uncompressed_RGBA32_uint = gl.RGBA32UI,
+	R32_uint = gl.R32UI,
+	RG32_uint = gl.RG32UI,
+	RGB32_uint = gl.RGB32UI,
+	RGBA32_uint = gl.RGBA32UI,
 
 	//Some float formats
-	uncompressed_R16_float = gl.R16F,
-	uncompressed_RG16_float = gl.RG16F,
-	uncompressed_RGB16_float = gl.RGB16F,
-	uncompressed_RGBA16_float = gl.RGBA16F,
+	R16_float = gl.R16F,
+	RG16_float = gl.RG16F,
+	RGB16_float = gl.RGB16F,
+	RGBA16_float = gl.RGBA16F,
 
-	uncompressed_R32_float = gl.R32F,
-	uncompressed_RG32_float = gl.RG32F,
-	uncompressed_RGB32_float = gl.RGB32F,
-	uncompressed_RGBA32_float = gl.RGBA32F,
+	R32_float = gl.R32F,
+	RG32_float = gl.RG32F,
+	RGB32_float = gl.RGB32F,
+	RGBA32_float = gl.RGBA32F,
 }
 
 Pixel_format_upload :: enum i32 {
 	no_upload,
 
-	uncompressed_R8,
-	uncompressed_RG8,
-	uncompressed_RGB8,
-	uncompressed_RGBA8,
+	R8,
+	RG8,
+	RGB8,
+	RGBA8,
 
-	uncompressed_R16,
-	uncompressed_RG16,
-	uncompressed_RGB16,
-	uncompressed_RGBA16,
+	R16,
+	RG16,
+	RGB16,
+	RGBA16,
 	
-	uncompressed_R32,
-	uncompressed_RG32,
-	uncompressed_RGB32,
-	uncompressed_RGBA32,
+	R32,
+	RG32,
+	RGB32,
+	RGBA32,
 }
 
 
@@ -688,11 +688,11 @@ Pixel_format_upload :: enum i32 {
 construct_upload_format :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 
 	switch f {
-		case .uncompressed_R8, .uncompressed_RG8, .uncompressed_RGB8, .uncompressed_RGBA8:
+		case .R8, .RG8, .RGB8, .RGBA8:
 			return .UNSIGNED_BYTE;
-		case .uncompressed_R16, .uncompressed_RG16, .uncompressed_RGB16, .uncompressed_RGBA16:
+		case .R16, .RG16, .RGB16, .RGBA16:
 			return .UNSIGNED_SHORT;
-		case .uncompressed_R32, .uncompressed_RG32, .uncompressed_RGB32, .uncompressed_RGBA32:
+		case .R32, .RG32, .RGB32, .RGBA32:
 			return .UNSIGNED_INT;
 		case .no_upload:
 			return nil;
@@ -708,13 +708,13 @@ construct_upload_format :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) 
 upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) {
 
 	switch f {
-		case .uncompressed_R8, .uncompressed_R16, .uncompressed_R32:
+		case .R8, .R16, .R32:
 			return 1;
-		case .uncompressed_RG8, .uncompressed_RG16, .uncompressed_RG32:
+		case .RG8, .RG16, .RG32:
 			return 2;
-		case .uncompressed_RGB8, .uncompressed_RGB16, .uncompressed_RGB32:
+		case .RGB8, .RGB16, .RGB32:
 			return 3;
-		case .uncompressed_RGBA8, .uncompressed_RGBA16, .uncompressed_RGBA32:
+		case .RGBA8, .RGBA16, .RGBA32:
 			return 4;
 		case .no_upload:
 			return 0;
@@ -729,13 +729,13 @@ upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) 
 upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components : gl.GLenum) {
 
 	switch f {
-		case .uncompressed_R8, .uncompressed_R16, .uncompressed_R32:
+		case .R8, .R16, .R32:
 			return .RED;
-		case .uncompressed_RG8, .uncompressed_RG16, .uncompressed_RG32:
+		case .RG8, .RG16, .RG32:
 			return .RG;
-		case .uncompressed_RGB8, .uncompressed_RGB16, .uncompressed_RGB32:
+		case .RGB8, .RGB16, .RGB32:
 			return .RGB;
-		case .uncompressed_RGBA8, .uncompressed_RGBA16, .uncompressed_RGBA32:
+		case .RGBA8, .RGBA16, .RGBA32:
 			return .RGBA;
 		case .no_upload:
 			return nil;
@@ -750,11 +750,11 @@ upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components
 upload_format_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 
 	switch f {
-		case .uncompressed_R8, .uncompressed_RG8, .uncompressed_RGB8, .uncompressed_RGBA8:
+		case .R8, .RG8, .RGB8, .RGBA8:
 			return .UNSIGNED_BYTE;
-		case .uncompressed_R16, .uncompressed_RG16, .uncompressed_RGB16, .uncompressed_RGBA16:
+		case .R16, .RG16, .RGB16, .RGBA16:
 			return .UNSIGNED_SHORT;
-		case .uncompressed_R32, .uncompressed_RG32, .uncompressed_RGB32, .uncompressed_RGBA32:
+		case .R32, .RG32, .RGB32, .RGBA32:
 			return .UNSIGNED_INT;
 		case .no_upload:
 			return nil;
@@ -770,11 +770,11 @@ upload_format_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes_per_component : int) {
 
 	switch f {
-		case .uncompressed_R8, .uncompressed_RG8, .uncompressed_RGB8, .uncompressed_RGBA8:
+		case .R8, .RG8, .RGB8, .RGBA8:
 			return 1;
-		case .uncompressed_R16, .uncompressed_RG16, .uncompressed_RGB16, .uncompressed_RGBA16:
+		case .R16, .RG16, .RGB16, .RGBA16:
 			return 2;
-		case .uncompressed_R32, .uncompressed_RG32, .uncompressed_RGB32, .uncompressed_RGBA32:
+		case .R32, .RG32, .RGB32, .RGBA32:
 			return 4;
 		case .no_upload:
 			return 0;
@@ -2598,18 +2598,18 @@ unbind_render_buffer :: proc() {
 }
 
 associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_buffers : []Rbo_id, width, height, samples_hint : i32,
-						start_index : int = 0, color_format : Pixel_format_internal = .uncompressed_RGBA8, loc := #caller_location) -> (samples : i32) {
+						start_index : int = 0, color_format : Pixel_format_internal = .RGBA8, loc := #caller_location) -> (samples : i32) {
 
 	assert(len(render_buffers) + start_index <= MAX_COLOR_ATTACH, "you can only have up to 8 color attachments", loc);
 	assert(color_format != nil, "color_format is nil", loc);
 
 	#partial switch color_format {
-		case .uncompressed_RGBA8, .uncompressed_RGBA16_float, .uncompressed_RGBA32_float:
+		case .RGBA8, .RGBA16_float, .RGBA32_float:
 			//everthing is ok
-		case .uncompressed_RGB8, .uncompressed_RGB16_float, .uncompressed_RGB32_float:
+		case .RGB8, .RGB16_float, .RGB32_float:
 			//everthing is ok
 		case:
-			fmt.panicf("The format %v is not valid, it must be uncompressed_RGBA8, uncompressed_float_RGBA16, uncompressed_float_RGBA32, uncompressed_RGB8, uncompressed_float_RGB16 or uncompressed_float_RGB32", color_format, loc = loc);
+			fmt.panicf("The format %v is not valid, it must be RGBA8, float_RGBA16, float_RGBA32, RGB8, float_RGB16 or float_RGB32", color_format, loc = loc);
 	}
 
 	samples = math.min(samples_hint, info.MAX_SAMPLES, info.MAX_INTEGER_SAMPLES);

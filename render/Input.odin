@@ -267,6 +267,7 @@ button_released :: proc(button : Mouse_code) -> bool {
 	return state.button_released[button];
 }
 
+//will return the mouse position relative to the main window? what happens when you dpn't have a main window???
 mouse_pos :: proc () -> [2]f32 {
 	return state.mouse_pos;
 }

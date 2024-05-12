@@ -111,7 +111,7 @@ Texture2D :: struct {
 }
 
 @(require_results)
-load_texture_2D_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .uncompressed_RGBA8}, loc := #caller_location) -> Texture2D {
+load_texture_2D_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8}, loc := #caller_location) -> Texture2D {
 	
 	data, ok := os.read_entire_file_from_filename(filename);
 	defer delete(data);
@@ -124,7 +124,7 @@ load_texture_2D_from_file :: proc(filename : string, desc : Texture_desc = {.cla
 //Load many textures threaded, good for many of the same types of textures.
 //nil is returned if we failed to load. Allocator must be multithread safe if keep_allocator is true.
 @(require_results)
-load_textures_2D_from_file :: proc(paths : []string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .uncompressed_RGBA8}, flipped := true, keep_allocator := false, loc := #caller_location) -> (textures : []Maybe(Texture2D)) {
+load_textures_2D_from_file :: proc(paths : []string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8}, flipped := true, keep_allocator := false, loc := #caller_location) -> (textures : []Maybe(Texture2D)) {
 	
 	Load_png_info :: struct {
 		//in
@@ -210,7 +210,7 @@ load_textures_2D_from_file :: proc(paths : []string, desc : Texture_desc = {.cla
 
 		if !info.failed {
 			raw_data := bytes.buffer_to_bytes(&info.img.pixels);
-			textures[i] = make_texture_2D_desc(desc, info.img.width, info.img.height, .uncompressed_RGBA8, raw_data, loc);
+			textures[i] = make_texture_2D_desc(desc, info.img.width, info.img.height, .RGBA8, raw_data, loc);
 			//cleanup
 		}
 		else {
@@ -269,7 +269,7 @@ load_texture_2D_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textu
 		flip_texture_2D(raw_data, img.width, img.height, img.channels);
 	}
 
-	return make_texture_2D_desc(desc, img.width, img.height, .uncompressed_RGBA8, raw_data, loc);
+	return make_texture_2D_desc(desc, img.width, img.height, .RGBA8, raw_data, loc);
 }
 
 @(require_results)
@@ -371,10 +371,10 @@ get_white_texture :: proc() -> Texture2D {
 			.repeat,
 			.nearest,
 			false,
-			.uncompressed_RGBA8,
+			.RGBA8,
 		};
 
-		state.white_texture = make_texture_2D_desc(desc, 1, 1, .uncompressed_RGBA8, {255, 255, 255, 255});
+		state.white_texture = make_texture_2D_desc(desc, 1, 1, .RGBA8, {255, 255, 255, 255});
 	}
 
 	return state.white_texture;
@@ -388,10 +388,10 @@ get_black_texture :: proc () -> Texture2D {
 			.repeat,
 			.nearest,
 			false,
-			.uncompressed_RGBA8,
+			.RGBA8,
 		};
 
-		state.black_texture = make_texture_2D_desc(desc, 1, 1, .uncompressed_RGBA8, {0, 0, 0, 255});
+		state.black_texture = make_texture_2D_desc(desc, 1, 1, .RGBA8, {0, 0, 0, 255});
 	}
 
 	return state.black_texture;
@@ -535,7 +535,7 @@ Depth_texture2D :: struct {
 // Load texture for rendering (framebuffer)
 // NOTE: Render texture is loaded by default with RGBA color attachment and depth RenderBuffer
 load_render_texture :: proc(width : i32, height : i32, number_of_color_attachments : int = 1, depth_as_render_buffer : bool = false,
-							 depth_buffer_bits : Depth_format = .bits_24, color_format : Pixel_format = .uncompressed_RGBA8, loc := #caller_location) -> Render_texture {
+							 depth_buffer_bits : Depth_format = .bits_24, color_format : Pixel_format = .RGBA8, loc := #caller_location) -> Render_texture {
 	
 	//TODO number_of_color_attachments							
 	

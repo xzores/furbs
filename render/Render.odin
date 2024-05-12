@@ -144,7 +144,7 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 		if desc.antialiasing != .none {
 			glfw.WindowHint_int(glfw.SAMPLES, auto_cast desc.antialiasing);
 		}
-
+		
 		window = new(Window);
 		window.gl_states = gl.init_state();
 		setup_window_no_backbuffer(desc, window);
@@ -216,7 +216,7 @@ destroy :: proc (loc := #caller_location) {
 	state.mouse_pos 		= {};
 	state.mouse_delta 		= {};
 	state.scroll_delta 		= {};
-	
+
 	//Extras
 	state.fps_measurement 	= {};
 	state.overlay_init = false;
@@ -325,54 +325,35 @@ begin_frame :: proc() {
 	state.delta_time = cast(f32)time.duration_seconds(time.diff(state.time_last, now));
 	state.time_last = now;
 	
+	state.is_begin_frame = true;
+
+	/*
+	for w in windows {
+
+			/*
+			destroy_frame_buffer(window.framebuffer);
+			assert(window.framebuffer.color_format != nil, "window.framebuffer.color_format is nil");
+			init_frame_buffer_render_buffers(&window.framebuffer, 1, sw, sh, window.framebuffer.samples, window.framebuffer.color_format, window.framebuffer.depth_format);
+			window.width, window.height = sw, sh;
+			*/
+
+			_make_context_current(window);
+			gl.delete_frame_buffer(window.context_framebuffer.id);
+			window.context_framebuffer = {}; //set it to zero, before recreation, not required attom.
+			recreate_frame_buffer(&window.context_framebuffer, window.framebuffer);
+			_make_context_current(nil);
+	}
+	*/
+	
+	state.main_window.width, state.main_window.height = window_get_size(state.main_window);
+
 	begin_inputs();
 	begin_text();
-
-	for w in state.active_windows {
-		
-		if w.is_fullscreen != w.fullscreen_target_state {
-			r := w.target_windowed_rect;
-			glfw.SetWindowMonitor(w.glfw_window, w.target_monitor, r.x, r.y, r.z, r.w, w.target_refresh); //TODO should we allow setting a refresh rate?
-			w.is_fullscreen = !w.is_fullscreen;
-		}
-		
-		if w.resize_behavior == .resize_backbuffer {
-			sw, sh := get_screen_size(w);
-
-			if w.framebuffer.width == sw && w.framebuffer.height == sh {
-				//do nothing, everything is ok
-			}
-			else {
-				//resize both the framebuffer and the context_framebuffer.
-				destroy_frame_buffer(w.framebuffer);
-				assert(w.framebuffer.color_format != nil, "w.framebuffer.color_format is nil");
-				init_frame_buffer_render_buffers(&w.framebuffer, 1, sw, sh, w.framebuffer.samples, w.framebuffer.color_format, w.framebuffer.depth_format);
-				w.width, w.height = sw, sh;
-
-				_make_context_current(w);
-				gl.delete_frame_buffer(w.context_framebuffer.id);
-				w.context_framebuffer = {}; //set it to zero, before recreation, not required attom.
-				recreate_frame_buffer(&w.context_framebuffer, w.framebuffer);
-				_make_context_current(nil);
-			}
-		}
-	}
 	
-	//back to main window//
 	_make_context_current(nil);
 	gl.bind_frame_buffer(0);
-	if state.main_window != nil {
-		w := state.main_window;
-		
-		if w.is_fullscreen != w.fullscreen_target_state {
-			r := w.target_windowed_rect;
-			glfw.SetWindowMonitor(w.glfw_window, w.target_monitor, r.x, r.y, r.z, r.w, w.target_refresh); //TODO should we allow setting a refresh rate?
-			w.is_fullscreen = !w.is_fullscreen;
-		}
-		enable_vsync(state.vsync);
-		state.main_window.width, state.main_window.height = get_screen_size(state.main_window);
-	}
 	
+	//auto reload shaders
 	if true {
 	 	for shader in state.loaded_shaders {
 			if load, ok := shader.loaded.?; ok {
@@ -401,7 +382,7 @@ end_frame :: proc(loc := #caller_location) {
 		
 		dst_width, dst_height : i32;
 
-		dst_width, dst_height = get_screen_size(w);
+		dst_width, dst_height = window_get_size(w);
 		gl.blit_fbo_color_to_screen(w.context_framebuffer.id, 0, 0, w.framebuffer.width, w.framebuffer.height, 0, 0, dst_width, dst_height, true);
 
 		_swap_buffers(loc, w.glfw_window);
@@ -413,6 +394,8 @@ end_frame :: proc(loc := #caller_location) {
 	
 	end_text();
 	end_inputs();
+
+	state.is_begin_frame = false;
 }
 
 set_shader_define :: proc (entry : string, value : string) {

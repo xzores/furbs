@@ -1,5 +1,6 @@
 package utils;
 
+@require_results
 make_2d_slice :: proc(#any_int y, x: int, $T: typeid, allocator := context.allocator, loc := #caller_location) -> (res: [][]T, backing : []T) {
     assert(x > 0 && y > 0)
     context.allocator = allocator

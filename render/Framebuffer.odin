@@ -40,12 +40,12 @@ Depth_stencil_attachment :: union {
 }
 
 Color_format :: enum i32 {
-	RGBA8 			= cast(i32)gl.Pixel_format_internal.uncompressed_RGBA8,
-	RGBA16_float 	= cast(i32)gl.Pixel_format_internal.uncompressed_RGBA16_float,
-	RGBA32_float 	= cast(i32)gl.Pixel_format_internal.uncompressed_RGBA32_float,
-	RGB8 			= cast(i32)gl.Pixel_format_internal.uncompressed_RGB8,
-	RGB16_float 	= cast(i32)gl.Pixel_format_internal.uncompressed_RGB16_float,
-	RGB32_float 	= cast(i32)gl.Pixel_format_internal.uncompressed_RGB32_float,
+	RGBA8 			= cast(i32)gl.Pixel_format_internal.RGBA8,
+	RGBA16_float 	= cast(i32)gl.Pixel_format_internal.RGBA16_float,
+	RGBA32_float 	= cast(i32)gl.Pixel_format_internal.RGBA32_float,
+	RGB8 			= cast(i32)gl.Pixel_format_internal.RGB8,
+	RGB16_float 	= cast(i32)gl.Pixel_format_internal.RGB16_float,
+	RGB32_float 	= cast(i32)gl.Pixel_format_internal.RGB32_float,
 }
 
 Depth_format :: enum i32 {
