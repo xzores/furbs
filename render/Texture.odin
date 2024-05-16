@@ -18,11 +18,15 @@ import "gl"
 
 import "../utils"
 
+Pixel_format_internal 	:: gl.Pixel_format_internal;
+Wrapmode 				:: gl.Wrapmode;
+Filtermode 				:: gl.Filtermode;
+
 Texture_desc :: struct {
-	wrapmode : gl.Wrapmode,
-	filtermode : gl.Filtermode,
+	wrapmode : Wrapmode,
+	filtermode : Filtermode,
 	mipmaps : bool,						// Is mipmaps enabled?
-	format	: gl.Pixel_format_internal,	// Data format (PixelFormat type)
+	format	: Pixel_format_internal,	// Data format (PixelFormat type)
 }
 
 /////////////////////////////////// Texture 1D ///////////////////////////////////
@@ -34,7 +38,7 @@ Texture1D :: struct {
 }
 
 @(require_results)
-make_texture_1D :: proc(mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.Filtermode, internal_format : gl.Pixel_format_internal,
+make_texture_1D :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
 							 width : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture1D {
 
 	desc : Texture_desc = {
@@ -273,8 +277,8 @@ load_texture_2D_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textu
 }
 
 @(require_results)
-make_texture_2D :: proc(mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.Filtermode, internal_format : gl.Pixel_format_internal,
-							 width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
+make_texture_2D :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
+							#any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
 
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -342,6 +346,7 @@ upload_texture_2D_data :: proc(tex : ^Texture2D, upload_format : gl.Pixel_format
 	}
 }
 
+//TODO should this require the pointer?
 destroy_texture_2D :: proc(tex : ^Texture2D) {
 	gl.delete_texture_2D(tex.id);
 	tex^ = {};
@@ -408,7 +413,7 @@ Texture3D :: struct {
 }
 
 @(require_results)
-make_texture_3D :: proc(mipmaps : bool, wrapmode : gl.Wrapmode, filtermode : gl.Filtermode, internal_format : gl.Pixel_format_internal,
+make_texture_3D :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
 							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture3D {
 
 	desc : Texture_desc = {

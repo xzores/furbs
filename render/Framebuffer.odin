@@ -69,13 +69,13 @@ Frame_buffer :: struct {
 	//Maybe(Depth_stencil_attachment),
 }
 
-init_frame_buffer_render_buffers :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, width, height, samples_hint : i32, color_format : Color_format, depth_format : Depth_format, loc := #caller_location) {
+frame_buffer_make_render_buffers :: proc (#any_int color_attachemet_cnt, width, height, samples_hint : i32, color_format : Color_format, depth_format : Depth_format, loc := #caller_location) -> (fbo : Frame_buffer) {
 	assert(width != 0, "width is 0", loc);
 	assert(height != 0, "height is 0", loc);
 	assert(color_format != nil, "color_format is nil", loc);
 	assert(depth_format != nil, "depth_format is nil", loc);
 
-	fbo^ = Frame_buffer{
+	fbo = Frame_buffer{
 		id 				= gl.gen_frame_buffer(),
 		width			= width,
 		height			= height,
@@ -110,18 +110,20 @@ init_frame_buffer_render_buffers :: proc (fbo : ^Frame_buffer, color_attachemet_
 
 	//chekc if everything is good
 	assert(gl.validate_frame_buffer(fbo.id) == true, "Framebuffer is not complete!", loc);
+
+	return;
 }
 
 //if textures is not nil, textures will be filled with the texture attachments.
-init_frame_buffer_textures :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, width, height : i32, color_format : Color_format, depth_format : Depth_format,
-														 mipmaps : bool, filtermode : gl.Filtermode, use_depth_texture := true, loc := #caller_location) {
+frame_buffer_make_textures :: proc (#any_int color_attachemet_cnt, width, height : i32, color_format : Color_format, depth_format : Depth_format,
+														 mipmaps : bool, filtermode : gl.Filtermode, use_depth_texture := true, wrapmode : Wrapmode = .clamp_to_border, loc := #caller_location) -> (fbo : Frame_buffer){
 
 	assert(width != 0, "width is 0", loc);
 	assert(height != 0, "height is 0", loc);
 	assert(color_format != nil, "color_format is nil", loc);
 	assert(depth_format != nil, "depth_format is nil", loc);
 
-	fbo^ = Frame_buffer{
+	fbo = Frame_buffer{
 		id 				= gl.gen_frame_buffer(),
 		width			= width,
 		height			= height,
@@ -135,7 +137,7 @@ init_frame_buffer_textures :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, w
 	{
 		color_attachments_max : [MAX_COLOR_ATTACH]gl.Tex2d_id;
 		for i in 0 ..<color_attachemet_cnt {
-			color_texture := make_texture_2D(mipmaps, .clamp_to_border, filtermode, auto_cast color_format, width, height, .no_upload, nil);
+			color_texture := make_texture_2D(mipmaps, wrapmode, filtermode, auto_cast color_format, width, height, .no_upload, nil);
 			color_attachments_max[i] = color_texture.id;
 			fbo.color_attachments[i] = color_texture;
 		}
@@ -147,7 +149,7 @@ init_frame_buffer_textures :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, w
 
 	//setup depth buffer
 	if use_depth_texture {
-		depth_texture := make_texture_2D(mipmaps, .clamp_to_border, filtermode, auto_cast depth_format, width, height, .no_upload, nil);
+		depth_texture := make_texture_2D(mipmaps, wrapmode, filtermode, auto_cast depth_format, width, height, .no_upload, nil);
 		fbo.depth_attachment = depth_texture;
 		gl.associate_depth_texture_with_frame_buffer(fbo.id, depth_texture.id);
 	}
@@ -159,9 +161,11 @@ init_frame_buffer_textures :: proc (fbo : ^Frame_buffer, color_attachemet_cnt, w
 	}
 	
 	assert(gl.validate_frame_buffer(fbo.id) == true, "Framebuffer is not complete!", loc);
+
+	return;
 }
 
-destroy_frame_buffer :: proc(fbo : Frame_buffer) {
+frame_buffer_destroy :: proc(fbo : Frame_buffer) {
 
 	for ca, i in fbo.color_attachments {
 		switch &attachment in ca {
@@ -188,7 +192,7 @@ destroy_frame_buffer :: proc(fbo : Frame_buffer) {
 
 //Use for different OpenGL contexts, this will use the same render buffers/textures, but remake them for the other context.
 @(private)
-recreate_frame_buffer :: proc (dst : ^Frame_buffer, src : Frame_buffer, loc := #caller_location) {
+frame_buffer_recreate :: proc (dst : ^Frame_buffer, src : Frame_buffer, loc := #caller_location) {
 
 	assert(dst^ == {}, "dst must be empty", loc);
 

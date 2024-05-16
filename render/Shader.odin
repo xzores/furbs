@@ -175,9 +175,9 @@ init_shaders :: proc() {
 
 destroy_shaders :: proc() {
 
-	unload_shader(state.default_shader);			state.default_shader = {};
-	unload_shader(state.default_text_shader); 		state.default_text_shader = {};
-	unload_shader(state.default_instance_shader); 	state.default_instance_shader = {};
+	destroy_shader(state.default_shader);			state.default_shader = {};
+	destroy_shader(state.default_text_shader); 		state.default_text_shader = {};
+	destroy_shader(state.default_instance_shader); 	state.default_instance_shader = {};
 
 	if len(state.loaded_shaders) != 0 {
 		panic("not all shaders have been unloaded");
@@ -217,6 +217,10 @@ unbind_shader :: proc(shader : ^Shader) {
 
 set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : Uniform_odin_type, loc := #caller_location) {
 	using glgl;
+
+	when ODIN_DEBUG {
+		assert(state.bound_shader == shader, "Shader must be bound before setting the uniform", loc);
+	}
 
 	value := value;
 	
@@ -371,13 +375,22 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 
 				s := to_string(current_identifier);
 				include :=  "#include";
+				define := "#define";
 				
 				if s != include[:len(s)] {
-					err = Shader_preprocessor_error{
-						msg = fmt.aprintf("The shader '%v' failed the preprocessor stage. The error at line %i is : found a '#', but it was not '#include', you should not define #version this is done by the preprocessor.", shader_name, line),
-						line = line,
-					};
-					return;
+					if s == define[:len(s)] {
+						//it is ok that #define is there, but otherwise error
+						write_target(preprocessor, define[:len(s)]);
+						p_state = .in_code;
+						do_write = true;
+					}
+					else {
+						err = Shader_preprocessor_error{
+							msg = fmt.aprintf("The shader '%v' failed the preprocessor stage. The error at line %i is : found a '#', but it was not '#include' nor '#define', you should not define #version this is done by the preprocessor.", shader_name, line),
+							line = line,
+						};
+						return;
+					}
 				}
 				if c == ' ' {
 					p_state = .include_identifier;
@@ -694,7 +707,7 @@ load_shader_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 	return shader, nil;
 }
 
-unload_shader :: proc(shader : ^Shader, loc := #caller_location) {
+destroy_shader :: proc(shader : ^Shader, loc := #caller_location) {
 
 	if l, ok := shader.loaded.?; ok {
 		assert(l.path != "");
@@ -756,7 +769,7 @@ reload_shader :: proc (shader : ^Shader) {
 
 		//We swap the shaders and then unload the old shader (called new_shader after this operation)
 		new_shader^, shader^ = shader^, new_shader^;
-		unload_shader(new_shader);
+		destroy_shader(new_shader);
 		log.infof("Reloaded shader %v", shader.name);
 	}
 	else {

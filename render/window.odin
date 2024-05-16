@@ -208,14 +208,14 @@ window_make_desc :: proc(desc : Window_desc, loc := #caller_location) -> (window
 	setup_window_no_backbuffer(desc, window);
 	
 	//Make a framebuffer in each context shareing the underlaying buffers.
-	init_frame_buffer_render_buffers(&window.framebuffer, 1, desc.width, desc.height, auto_cast desc.antialiasing, .RGBA8, .depth_component24);
+	window.framebuffer = frame_buffer_make_render_buffers(1, desc.width, desc.height, auto_cast desc.antialiasing, .RGBA8, .depth_component24);
 	assert(window.framebuffer.id != 0, "something went wrong");
 	assert(window.framebuffer.color_format != nil, "something went wrong, color format is nil");
 	assert(window.framebuffer.depth_format != nil, "something went wrong, depth format is nil");
 	
 	_make_context_current(window);
 	
-	recreate_frame_buffer(&window.context_framebuffer, window.framebuffer);
+	frame_buffer_recreate(&window.context_framebuffer, window.framebuffer);
 	assert(window.context_framebuffer.id != 0, "something went wrong");		
 	assert(window.context_framebuffer.color_format != nil, "something went wrong, color format is nil");
 	assert(window.context_framebuffer.depth_format != nil, "something went wrong, depth format is nil");
@@ -270,7 +270,7 @@ window_destroy :: proc (window : ^Window, loc := #caller_location) {
 	gl.delete_frame_buffer(window.context_framebuffer.id);
 	
 	_make_context_current(nil);
-	destroy_frame_buffer(window.framebuffer);
+	frame_buffer_destroy(window.framebuffer);
 
 	index, found := slice.linear_search(state.active_windows[:], window);
 	if !found {

@@ -220,7 +220,7 @@ destroy :: proc (loc := #caller_location) {
 	//Extras
 	state.fps_measurement 	= {};
 	state.overlay_init = false;
-	destroy_frame_buffer(state.arrow_fbo); 			state.arrow_fbo = {};
+	frame_buffer_destroy(state.arrow_fbo); 			state.arrow_fbo = {};
 	destroy_pipeline(state.shapes_pipeline);		state.shapes_pipeline = {};
 	destroy_pipeline(state.overlay_pipeline);		state.overlay_pipeline = {};
 
@@ -331,7 +331,7 @@ begin_frame :: proc() {
 	for w in windows {
 
 			/*
-			destroy_frame_buffer(window.framebuffer);
+			frame_buffer_destroy(window.framebuffer);
 			assert(window.framebuffer.color_format != nil, "window.framebuffer.color_format is nil");
 			init_frame_buffer_render_buffers(&window.framebuffer, 1, sw, sh, window.framebuffer.samples, window.framebuffer.color_format, window.framebuffer.depth_format);
 			window.width, window.height = sw, sh;
