@@ -284,7 +284,7 @@ scroll_delta :: proc () -> [2]f32 {
 
 //Called by begin_frame
 @(private)
-begin_inputs :: proc(loc := #caller_location) {
+input_begin :: proc(loc := #caller_location) {
 
 	assert(queue.len(state.key_release_input_events) == 0, "state.key_release_input_events is not zero, did  you forget to call end_inputs?", loc = loc);
 
@@ -338,7 +338,7 @@ begin_inputs :: proc(loc := #caller_location) {
 }
 
 @(private)
-end_inputs :: proc(loc := #caller_location) {
+input_end :: proc(loc := #caller_location) {
 
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);

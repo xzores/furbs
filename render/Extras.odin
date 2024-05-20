@@ -12,8 +12,8 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 	
 	if state.overlay_init == false {
 		//s, ok := load_shader_from_path("my_shader.glsl"); assert(ok == nil);
-		state.shapes_pipeline = make_pipeline(get_default_shader(), .blend, true, true, .fill, .no_cull);
-		state.overlay_pipeline = make_pipeline(get_default_shader(), .blend, true, true, .fill, .no_cull);
+		state.shapes_pipeline = pipeline_make(get_default_shader(), .blend, true, true, .fill, .no_cull);
+		state.overlay_pipeline = pipeline_make(get_default_shader(), .blend, true, true, .fill, .no_cull);
 		state.arrow_fbo = frame_buffer_make_textures(1, texture_size.x, texture_size.y, .RGBA8, .depth_component16, false, .linear);
 		state.overlay_init = true;
 	}
@@ -34,14 +34,14 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 		far 			= 2,
 	}
 
-	begin_target(&state.arrow_fbo, [4]f32{0,0,0,0});
-		begin_pipeline(state.shapes_pipeline, overlay_camera);
-			set_texture(.texture_diffuse, get_white_texture());
+	target_begin(&state.arrow_fbo, [4]f32{0,0,0,0});
+		pipeline_begin(state.shapes_pipeline, overlay_camera);
+			set_texture(.texture_diffuse, texture2D_get_white());
 			draw_arrow({0,0,0}, {1,0,0},  [4]f32{0.8, 0.1, 0.1, 1});
 			draw_arrow({0,0,0}, {0,1,0},  [4]f32{0.1, 0.8, 0.1, 1});
 			draw_arrow({0,0,0}, {0,0,1},  [4]f32{0.1, 0.1, 0.8, 1});
-		end_pipeline();
-	end_target();
+		pipeline_end();
+	target_end();
 
 	return state.arrow_fbo.color_attachments[0].(Texture2D);
 	//return arrow_fbo.depth_attachment.(Texture2D);
@@ -50,7 +50,7 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 //offset is in "screen coordinates" from top right corner.
 draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offset : [2]f32 = {0.05, 0.05}, scale : f32 = 0.25, loc := #caller_location) {
 	
-	assert(state.current_target == nil, "There must not be a target, call end_target", loc);
+	assert(state.current_target == nil, "There must not be a target, call target_end", loc);
 	
 	tex := get_coordinate_overlay_texture(camera);
 
@@ -63,13 +63,13 @@ draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offs
 		far 			= 10,
 	};
 
-	begin_target(target, nil);
+	target_begin(target, nil);
 		aspect : f32 = state.target_pixel_width / state.target_pixel_height;
-		begin_pipeline(state.overlay_pipeline, cam);
+		pipeline_begin(state.overlay_pipeline, cam);
 			set_texture(.texture_diffuse, tex);
 			draw_quad(linalg.matrix4_from_trs_f32([3]f32{(aspect) - offset.x - scale/2, 1.0 - offset.y - scale/2, 0}, 0, {scale,scale,1}));
-		end_pipeline();
-	end_target();
+		pipeline_end();
+	target_end();
 }
 
 //offset is in "screen coordinates" from top left corner.
@@ -85,9 +85,9 @@ draw_fps_overlay :: proc (target : Render_target, offset : [2]f32 = {0,0}, scale
 	color : [4]f32 = {1,1,1,1};
 	
 	size := scale * 50;
-	text_dim := get_text_dimensions(t, size, 0);
+	text_dim := text_get_dimensions(t, size, 0);
 
-	begin_target(target, nil);
-		draw_text_simple(t, {offset.x, state.target_pixel_height - text_dim.y - offset.y}, size, 0, color);
-	end_target();
+	target_begin(target, nil);
+		text_draw_simple(t, {offset.x, state.target_pixel_height - text_dim.y - offset.y}, size, 0, color);
+	target_end();
 }

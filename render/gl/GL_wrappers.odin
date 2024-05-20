@@ -2710,9 +2710,9 @@ associate_depth_texture_with_frame_buffer :: proc(fbo : Fbo_id, texture : Tex2d_
 	}
 	else {
 		bind_frame_buffer(fbo);
-		bind_texture_2D(texture);
+		bind_texture2D(texture);
 		gl.FramebufferTexture(.FRAMEBUFFER, .DEPTH_ATTACHMENT, auto_cast texture, 0);
-		unbind_texture_2D();
+		unbind_texture2D();
 		bind_frame_buffer(0);
 	}
 }
@@ -2735,11 +2735,11 @@ associate_color_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex
 		// Create a (non-)multisampled renderbuffer object for color attachment
 		for i in 0 ..< len(textures) {
 
-			bind_texture_2D(textures[i]);
+			bind_texture2D(textures[i]);
 			gl.FramebufferTexture(.FRAMEBUFFER, auto_cast (cast(u32)gl.GLenum.COLOR_ATTACHMENT0 + auto_cast (i + start_index)), auto_cast textures[i], 0);
 		}
 		
-		unbind_texture_2D();
+		unbind_texture2D();
 		bind_frame_buffer(0);
 	}
 
@@ -2818,7 +2818,7 @@ blit_fbo_color_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_heig
 //////////////////////////////////////////// Textures ////////////////////////////////////////////
 
 //// 1D textures ////
-gen_texture_1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
+gen_texture1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
 
 	// Create renderbuffer objects
 	if cpu_state.gl_version >= .opengl_4_5 {
@@ -2836,7 +2836,7 @@ gen_texture_1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
 }
 
 @(require_results)
-gen_texture_1D :: proc (loc := #caller_location) -> (tex : Tex1d_id) {
+gen_texture1D :: proc (loc := #caller_location) -> (tex : Tex1d_id) {
 
 	// Create renderbuffer objects
 	if cpu_state.gl_version >= .opengl_4_5 {
@@ -2853,7 +2853,7 @@ gen_texture_1D :: proc (loc := #caller_location) -> (tex : Tex1d_id) {
 	return tex;
 }
 
-delete_texture_1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
+delete_texture1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
 
 	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
 		for t in textures {
@@ -2873,7 +2873,7 @@ delete_texture_1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
 	}
 }
 
-delete_texture_1D :: proc (texture : Tex1d_id, loc := #caller_location) {
+delete_texture1D :: proc (texture : Tex1d_id, loc := #caller_location) {
 	texture := texture;
 
 	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
@@ -2890,7 +2890,7 @@ delete_texture_1D :: proc (texture : Tex1d_id, loc := #caller_location) {
 	}
 }
 
-bind_texture_1D :: proc(tex : Tex1d_id, loc := #caller_location) {
+bind_texture1D :: proc(tex : Tex1d_id, loc := #caller_location) {
 	
 	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 	
@@ -2904,7 +2904,7 @@ bind_texture_1D :: proc(tex : Tex1d_id, loc := #caller_location) {
 	
 }
 
-unbind_texture_1D  :: proc() {
+unbind_texture1D  :: proc() {
 	assert(cpu_state.texture_slot == gpu_state.texture_slot);
 
 	when UNBIND_DEBUG {
@@ -2937,9 +2937,9 @@ write_texure_data_1D :: proc (tex : Tex1d_id, level, offset : i32, width : gl.GL
 		gl.TextureSubImage1D(cast(u32)tex, level, offset, width, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 	}
 	else {
-		bind_texture_1D(tex);
+		bind_texture1D(tex);
 		gl.TexSubImage1D(.TEXTURE_1D, level, offset, width, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
-		unbind_texture_1D();
+		unbind_texture1D();
 	}
 }
 
@@ -2957,14 +2957,14 @@ setup_texure_1D :: proc (tex : Tex1d_id, mipmaps : bool, width : gl.GLsizei, for
 		gl.TextureStorage1D(cast(u32)tex, levels, auto_cast format, width);
 	}
 	else if cpu_state.gl_version >= .opengl_4_3 { 
-		bind_texture_1D(tex);
+		bind_texture1D(tex);
 		gl.TexStorage1D(.TEXTURE_1D, levels, auto_cast format, width);
-		unbind_texture_1D();
+		unbind_texture1D();
 	}
 	else {
-		bind_texture_1D(tex);
+		bind_texture1D(tex);
 		gl.TexImage1D(.TEXTURE_1D, 0, auto_cast format, width, 0, .RGBA, .UNSIGNED_BYTE, nil);
-		unbind_texture_1D();
+		unbind_texture1D();
 	}
 }
 
@@ -2974,25 +2974,25 @@ generate_mip_maps_1D :: proc (tex_id : Tex1d_id) {
 		gl.GenerateTextureMipmap(auto_cast tex_id);
 	}
 	else {
-		bind_texture_1D(tex_id);
+		bind_texture1D(tex_id);
 		gl.GenerateMipmap(.TEXTURE_1D);
-		unbind_texture_1D();
+		unbind_texture1D();
 	}
 }
 
-wrapmode_texture_1D :: proc(tex_id : Tex1d_id, mode : Wrapmode) {
+wrapmode_texture1D :: proc(tex_id : Tex1d_id, mode : Wrapmode) {
 
 	if cpu_state.gl_version >= .opengl_4_5 { 
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_S, cast(i32)mode);
 	}
 	else {
-		bind_texture_1D(tex_id);
+		bind_texture1D(tex_id);
 		gl.TexParameteri(.TEXTURE_1D, .TEXTURE_WRAP_S, cast(i32)mode);
-		unbind_texture_1D();
+		unbind_texture1D();
 	}
 }
 
-filtermode_texture_1D :: proc(tex_id : Tex1d_id, mode : Filtermode, using_mipmaps : bool) {
+filtermode_texture1D :: proc(tex_id : Tex1d_id, mode : Filtermode, using_mipmaps : bool) {
 	
 	min_mode : gl.GLenum;
 	mag_mode : gl.GLenum;
@@ -3026,15 +3026,15 @@ filtermode_texture_1D :: proc(tex_id : Tex1d_id, mode : Filtermode, using_mipmap
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
 	}
 	else {
-		bind_texture_1D(tex_id);
+		bind_texture1D(tex_id);
 		gl.TexParameteri(.TEXTURE_1D, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
 		gl.TexParameteri(.TEXTURE_1D, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
-		unbind_texture_1D();
+		unbind_texture1D();
 	}
 }
 
 //// 2D textures ////
-gen_texture_2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
+gen_texture2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
 
 	// Create renderbuffer objects
 	if cpu_state.gl_version >= .opengl_4_5 {
@@ -3052,7 +3052,7 @@ gen_texture_2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
 }
 
 @(require_results)
-gen_texture_2D :: proc (loc := #caller_location) -> (tex : Tex2d_id) {
+gen_texture2D :: proc (loc := #caller_location) -> (tex : Tex2d_id) {
 
 	// Create renderbuffer objects
 	if cpu_state.gl_version >= .opengl_4_5 {
@@ -3069,7 +3069,7 @@ gen_texture_2D :: proc (loc := #caller_location) -> (tex : Tex2d_id) {
 	return tex;
 }
 
-delete_texture_2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
+delete_texture2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
 
 	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
 		for t in textures {
@@ -3089,7 +3089,7 @@ delete_texture_2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
 	}
 }
 
-delete_texture_2D :: proc (texture : Tex2d_id, loc := #caller_location) {
+delete_texture2D :: proc (texture : Tex2d_id, loc := #caller_location) {
 	texture := texture;
 
 	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
@@ -3106,7 +3106,7 @@ delete_texture_2D :: proc (texture : Tex2d_id, loc := #caller_location) {
 	}
 }
 
-bind_texture_2D :: proc(tex : Tex2d_id, loc := #caller_location) {
+bind_texture2D :: proc(tex : Tex2d_id, loc := #caller_location) {
 	
 	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 	
@@ -3120,7 +3120,7 @@ bind_texture_2D :: proc(tex : Tex2d_id, loc := #caller_location) {
 	
 }
 
-unbind_texture_2D  :: proc() {
+unbind_texture2D  :: proc() {
 	assert(cpu_state.texture_slot == gpu_state.texture_slot);
 	
 	when UNBIND_DEBUG {
@@ -3153,9 +3153,9 @@ write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, wid
 		gl.TextureSubImage2D(cast(u32)tex, level, xoffset, yoffset, width, height, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 	}
 	else {
-		bind_texture_2D(tex);
+		bind_texture2D(tex);
 		gl.TexSubImage2D(.TEXTURE_2D, level, xoffset, yoffset, width, height, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
-		unbind_texture_2D();
+		unbind_texture2D();
 	}
 }
 
@@ -3173,19 +3173,19 @@ setup_texure_2D :: proc (tex : Tex2d_id, mipmaps : bool, width, height : gl.GLsi
 		gl.TextureStorage2D(cast(u32)tex, levels, auto_cast format, width, height);
 	}
 	else if cpu_state.gl_version >= .opengl_4_3 { 
-		bind_texture_2D(tex);
+		bind_texture2D(tex);
 		gl.TexStorage2D(.TEXTURE_2D, levels, auto_cast format, width, height);
-		unbind_texture_2D();
+		unbind_texture2D();
 	}
 	else {
-		bind_texture_2D(tex);
+		bind_texture2D(tex);
 		#partial switch format {
 			case .depth_component16, .depth_component24, .depth_component32:
 				gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, .DEPTH_COMPONENT, .UNSIGNED_BYTE, nil);
 			case:
 				gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, .RGBA, .UNSIGNED_BYTE, nil);
 		}
-		unbind_texture_2D();
+		unbind_texture2D();
 	}
 }
 
@@ -3195,27 +3195,27 @@ generate_mip_maps_2D :: proc (tex_id : Tex2d_id) {
 		gl.GenerateTextureMipmap(auto_cast tex_id);
 	}
 	else {
-		bind_texture_2D(tex_id);
+		bind_texture2D(tex_id);
 		gl.GenerateMipmap(.TEXTURE_2D);
-		unbind_texture_2D();
+		unbind_texture2D();
 	}
 }
 
-wrapmode_texture_2D :: proc(tex_id : Tex2d_id, mode : Wrapmode) {
+wrapmode_texture2D :: proc(tex_id : Tex2d_id, mode : Wrapmode) {
 	
 	if cpu_state.gl_version >= .opengl_4_5 { 
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_S, cast(i32)mode);
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_T, cast(i32)mode);
 	}
 	else {
-		bind_texture_2D(tex_id);
+		bind_texture2D(tex_id);
 		gl.TexParameteri(.TEXTURE_2D, .TEXTURE_WRAP_S, cast(i32)mode);
 		gl.TexParameteri(.TEXTURE_2D, .TEXTURE_WRAP_T, cast(i32)mode);
-		unbind_texture_2D();
+		unbind_texture2D();
 	}
 }
 
-filtermode_texture_2D :: proc(tex_id : Tex2d_id, mode : Filtermode, using_mipmaps : bool) {
+filtermode_texture2D :: proc(tex_id : Tex2d_id, mode : Filtermode, using_mipmaps : bool) {
 	
 	min_mode : gl.GLenum;
 	mag_mode : gl.GLenum;
@@ -3248,10 +3248,10 @@ filtermode_texture_2D :: proc(tex_id : Tex2d_id, mode : Filtermode, using_mipmap
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
 	}
 	else {
-		bind_texture_2D(tex_id);
+		bind_texture2D(tex_id);
 		gl.TexParameteri(.TEXTURE_2D, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
 		gl.TexParameteri(.TEXTURE_2D, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
-		unbind_texture_2D();
+		unbind_texture2D();
 	}
 }
 
@@ -3269,19 +3269,19 @@ active_texture :: proc(slot : i32) {
 
 }
 
-active_bind_texture_2D :: proc (tex : Tex2d_id, slot : i32) {
+active_bind_texture2D :: proc (tex : Tex2d_id, slot : i32) {
 	active_texture(slot);
-	bind_texture_2D(tex);
+	bind_texture2D(tex);
 }
 
 /* TODO, allow binding many textures at a time
-active_bind_texture_2Ds :: proc (tex : []struct{Tex2d_id, slot : u32}) {
+active_bind_texture2Ds :: proc (tex : []struct{Tex2d_id, slot : u32}) {
 	panic("TODO");
 }
 */
 
 //// 3D textures ////
-gen_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
+gen_texture3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 
 	// Create renderbuffer objects
 	if cpu_state.gl_version >= .opengl_4_5 {
@@ -3299,7 +3299,7 @@ gen_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 }
 
 @(require_results)
-gen_texture_3D :: proc (loc := #caller_location) -> (tex : Tex3d_id) {
+gen_texture3D :: proc (loc := #caller_location) -> (tex : Tex3d_id) {
 
 	// Create renderbuffer objects
 	if cpu_state.gl_version >= .opengl_4_5 {
@@ -3316,7 +3316,7 @@ gen_texture_3D :: proc (loc := #caller_location) -> (tex : Tex3d_id) {
 	return tex;
 }
 
-delete_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
+delete_texture3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 
 	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
 		for t in textures {
@@ -3336,7 +3336,7 @@ delete_texture_3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 	}
 }
 
-bind_texture_3D :: proc(tex : Tex3d_id, loc := #caller_location) {
+bind_texture3D :: proc(tex : Tex3d_id, loc := #caller_location) {
 	
 	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 	
@@ -3349,7 +3349,7 @@ bind_texture_3D :: proc(tex : Tex3d_id, loc := #caller_location) {
 	gl.BindTexture(.TEXTURE_3D, auto_cast tex);
 }
 
-unbind_texture_3D  :: proc() {
+unbind_texture3D  :: proc() {
 	assert(cpu_state.texture_slot == gpu_state.texture_slot);
 	
 	when UNBIND_DEBUG {
@@ -3382,9 +3382,9 @@ write_texure_data_3D :: proc (tex : Tex3d_id, level, xoffset, yoffset, zoffset :
 		gl.TextureSubImage3D(cast(u32)tex, level, xoffset, yoffset, zoffset, width, height, depth, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 	}
 	else {
-		bind_texture_3D(tex);
+		bind_texture3D(tex);
 		gl.TexSubImage3D(.TEXTURE_3D, level, xoffset, yoffset, zoffset, width, height, depth, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
-		unbind_texture_3D();
+		unbind_texture3D();
 	}
 }
 
@@ -3402,14 +3402,14 @@ setup_texure_3D :: proc (tex : Tex3d_id, mipmaps : bool, width, height, depth : 
 		gl.TextureStorage3D(cast(u32)tex, levels, auto_cast format, width, height, depth);
 	}
 	else if cpu_state.gl_version >= .opengl_4_3 { 
-		bind_texture_3D(tex);
+		bind_texture3D(tex);
 		gl.TexStorage3D(.TEXTURE_3D, levels, auto_cast format, width, height, depth);
-		unbind_texture_3D();
+		unbind_texture3D();
 	}
 	else {
-		bind_texture_3D(tex);
+		bind_texture3D(tex);
 		gl.TexImage3D(.TEXTURE_3D, 0, auto_cast format, width, height, depth, 0, .RGBA, .UNSIGNED_BYTE, nil);
-		unbind_texture_3D();
+		unbind_texture3D();
 	}
 }
 
@@ -3419,13 +3419,13 @@ generate_mip_maps_3D :: proc (tex_id : Tex3d_id) {
 		gl.GenerateTextureMipmap(auto_cast tex_id);
 	}
 	else {
-		bind_texture_3D(tex_id);
+		bind_texture3D(tex_id);
 		gl.GenerateMipmap(.TEXTURE_3D);
-		unbind_texture_3D();
+		unbind_texture3D();
 	}
 }
 
-wrapmode_texture_3D :: proc(tex_id : Tex3d_id, mode : Wrapmode) {
+wrapmode_texture3D :: proc(tex_id : Tex3d_id, mode : Wrapmode) {
 
 	if cpu_state.gl_version >= .opengl_4_5 { 
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_S, cast(i32)mode);
@@ -3433,15 +3433,15 @@ wrapmode_texture_3D :: proc(tex_id : Tex3d_id, mode : Wrapmode) {
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_R, cast(i32)mode);
 	}
 	else {
-		bind_texture_3D(tex_id);
+		bind_texture3D(tex_id);
 		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_WRAP_S, cast(i32)mode);
 		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_WRAP_T, cast(i32)mode);
 		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_WRAP_R, cast(i32)mode);
-		unbind_texture_3D();
+		unbind_texture3D();
 	}
 }
 
-filtermode_texture_3D :: proc(tex_id : Tex3d_id, mode : Filtermode, using_mipmaps : bool) {
+filtermode_texture3D :: proc(tex_id : Tex3d_id, mode : Filtermode, using_mipmaps : bool) {
 	
 	min_mode : gl.GLenum;
 	mag_mode : gl.GLenum;
@@ -3474,14 +3474,14 @@ filtermode_texture_3D :: proc(tex_id : Tex3d_id, mode : Filtermode, using_mipmap
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
 	}
 	else {
-		bind_texture_3D(tex_id);
+		bind_texture3D(tex_id);
 		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
 		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
-		unbind_texture_3D();
+		unbind_texture3D();
 	}
 }
 
-delete_texture_3D :: proc (texture : Tex3d_id, loc := #caller_location) {
+delete_texture3D :: proc (texture : Tex3d_id, loc := #caller_location) {
 	texture := texture;
 
 	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {

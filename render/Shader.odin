@@ -157,14 +157,14 @@ Texture_odin_type :: union {
 	//Texture2DArray,
 }
 
-init_shaders :: proc() {
+shaders_init :: proc() {
 
 	state.loaded_shaders = make([dynamic]^Shader);
 	e : Shader_load_error;
 	
-	state.default_shader, e 			= load_shader_from_src("default_shader.glsl", #load("default_shader.glsl"), nil);
-	state.default_text_shader, e 		= load_shader_from_src("default_text_shader.glsl", #load("default_text_shader.glsl"), nil);
-	state.default_instance_shader, e 	= load_shader_from_src("default_instance_shader.glsl", #load("default_instance_shader.glsl"), nil);
+	state.default_shader, e 			= shader_load_from_src("default_shader.glsl", #load("default_shader.glsl"), nil);
+	state.default_text_shader, e 		= shader_load_from_src("default_text_shader.glsl", #load("default_text_shader.glsl"), nil);
+	state.default_instance_shader, e 	= shader_load_from_src("default_instance_shader.glsl", #load("default_instance_shader.glsl"), nil);
 	
 	if e != nil {
 		panic("Failed to load default shader!, this is internal bad error");
@@ -173,11 +173,11 @@ init_shaders :: proc() {
 	//TODO look at glValidateProgram 
 }
 
-destroy_shaders :: proc() {
+shaders_destroy :: proc() {
 
-	destroy_shader(state.default_shader);			state.default_shader = {};
-	destroy_shader(state.default_text_shader); 		state.default_text_shader = {};
-	destroy_shader(state.default_instance_shader); 	state.default_instance_shader = {};
+	shader_destroy(state.default_shader);			state.default_shader = {};
+	shader_destroy(state.default_text_shader); 		state.default_text_shader = {};
+	shader_destroy(state.default_instance_shader); 	state.default_instance_shader = {};
 
 	if len(state.loaded_shaders) != 0 {
 		panic("not all shaders have been unloaded");
@@ -185,10 +185,6 @@ destroy_shaders :: proc() {
 
 	delete(state.loaded_shaders);
 	state.loaded_shaders = {};
-}
-
-get_shader :: proc(name : string) -> ^Shader {
-	return {};
 }
 
 get_default_shader :: proc() -> ^Shader {
@@ -204,13 +200,13 @@ get_default_instance_shader :: proc() -> ^Shader {
 }
 
 @(private)
-bind_shader :: proc(shader : ^Shader) {
+shader_bind :: proc(shader : ^Shader) {
 	gl.bind_shader_program(shader.id);
 	state.bound_shader = shader;
 }
 
 @(private)
-unbind_shader :: proc(shader : ^Shader) {
+shader_unbind :: proc(shader : ^Shader) {
 	gl.unbind_shader_program();
 	state.bound_shader = nil;
 }
@@ -279,9 +275,9 @@ set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc 
 
 	switch v in value {
 		case nil:
-			gl.active_bind_texture_2D(0, cast(i32)location);
+			gl.active_bind_texture2D(0, cast(i32)location);
 		case Texture2D:
-			gl.active_bind_texture_2D(v.id, cast(i32)location);
+			gl.active_bind_texture2D(v.id, cast(i32)location);
 		case:
 			panic("TODO");
 	}
@@ -528,7 +524,7 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 
 //You must destoy the error. (if it is there)
 @(require_results)
-load_shader_from_path :: proc(path : string, loc := #caller_location) -> (shader : ^Shader, err : Shader_load_error) {
+shader_load_from_path :: proc(path : string, loc := #caller_location) -> (shader : ^Shader, err : Shader_load_error) {
 
 	file, f_err := os.stat(path);
 	defer os.file_info_delete(file);
@@ -546,12 +542,12 @@ load_shader_from_path :: proc(path : string, loc := #caller_location) -> (shader
 		return nil, .failed_fileopen;
 	}
 	
-	return load_shader_from_src(file.name, string(data), Shader_load_desc{strings.clone(path), time.now()});
+	return shader_load_from_src(file.name, string(data), Shader_load_desc{strings.clone(path), time.now()});
 }
 
 //You must destoy the error. (if it is there)
 @(require_results)
-load_shader_from_src :: proc(name : string, combined_src : string, loaded : Maybe(Shader_load_desc), loc := #caller_location) -> (shader : ^Shader, err : Shader_load_error) {
+shader_load_from_src :: proc(name : string, combined_src : string, loaded : Maybe(Shader_load_desc), loc := #caller_location) -> (shader : ^Shader, err : Shader_load_error) {
 	using gl;
 
 	shader = new(Shader);
@@ -707,7 +703,7 @@ load_shader_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 	return shader, nil;
 }
 
-destroy_shader :: proc(shader : ^Shader, loc := #caller_location) {
+shader_destroy :: proc(shader : ^Shader, loc := #caller_location) {
 
 	if l, ok := shader.loaded.?; ok {
 		assert(l.path != "");
@@ -728,7 +724,7 @@ destroy_shader :: proc(shader : ^Shader, loc := #caller_location) {
 	free(shader);
 }
 
-reload_shader :: proc (shader : ^Shader) {
+shader_reload :: proc (shader : ^Shader) {
 	
 	if load, ok := &shader.loaded.?; ok {
 		assert(load.path != "");
@@ -743,7 +739,7 @@ reload_shader :: proc (shader : ^Shader) {
 		load.time_stamp = time.now(); //set the old one to update the last check.
 		
 		//The acctual reloading
-		new_shader, new_err := load_shader_from_path(load.path);
+		new_shader, new_err := shader_load_from_path(load.path);
 
 		if new_err != nil {
 			log.errorf("Failed to reload shader %v", shader.name);
@@ -766,10 +762,10 @@ reload_shader :: proc (shader : ^Shader) {
 
 			return;
 		}
-
+		
 		//We swap the shaders and then unload the old shader (called new_shader after this operation)
 		new_shader^, shader^ = shader^, new_shader^;
-		destroy_shader(new_shader);
+		shader_destroy(new_shader);
 		log.infof("Reloaded shader %v", shader.name);
 	}
 	else {
@@ -777,9 +773,9 @@ reload_shader :: proc (shader : ^Shader) {
 	}
 }
 
-reload_shaders :: proc () {
+shader_reload_all :: proc () {
 	for shader in state.loaded_shaders {
-		reload_shader(shader)
+		shader_reload(shader)
 	}
 }
 

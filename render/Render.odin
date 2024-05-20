@@ -189,9 +189,9 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 	supported_attribs := get_max_supported_attributes();
 	assert(supported_attribs <= len(static_attrib_info) + len(dynamic_attrib_info), "The GPU does not support the amount of attributes needed", loc);
 	*/
-
-	init_shaders();
-	init_text();
+	
+	shaders_init();
+	text_init();
 	
 	return window;
 }
@@ -221,8 +221,8 @@ destroy :: proc (loc := #caller_location) {
 	state.fps_measurement 	= {};
 	state.overlay_init = false;
 	frame_buffer_destroy(state.arrow_fbo); 			state.arrow_fbo = {};
-	destroy_pipeline(state.shapes_pipeline);		state.shapes_pipeline = {};
-	destroy_pipeline(state.overlay_pipeline);		state.overlay_pipeline = {};
+	pipeline_destroy(state.shapes_pipeline);		state.shapes_pipeline = {};
+	pipeline_destroy(state.overlay_pipeline);		state.overlay_pipeline = {};
 
 	//Destroy shaders defines
 	for e, v in state.shader_defines {
@@ -234,20 +234,18 @@ destroy :: proc (loc := #caller_location) {
 	delete(state.shader_defines); state.shader_defines = {};
 
 	if state.white_texture != {} {
-		destroy_texture_2D(&state.white_texture);
+		texture2D_destroy(&state.white_texture);
 		state.white_texture = {};
 	}
 
 	if state.black_texture != {} {
-		destroy_texture_2D(&state.black_texture);
+		texture2D_destroy(&state.black_texture);
 		state.black_texture = {};
 	}
-
-	//font context
-	destroy_text();
-
-	destroy_shapes();
-	destroy_shaders();
+	
+	text_destroy();
+	shapes_destroy();
+	shaders_destroy();
 	
 	//Check that all sub windows have been destroyed.
 	if len(state.active_windows) != 0 {
@@ -347,8 +345,8 @@ begin_frame :: proc() {
 	
 	state.main_window.width, state.main_window.height = window_get_size(state.main_window);
 
-	begin_inputs();
-	begin_text();
+	input_begin();
+	text_begin();
 	
 	_make_context_current(nil);
 	gl.bind_frame_buffer(0);
@@ -362,7 +360,7 @@ begin_frame :: proc() {
 				defer os.file_info_delete(file);
 				
 				if time.duration_seconds(time.diff(file.modification_time, load.time_stamp)) <= 0 {
-					reload_shader(shader);
+					shader_reload(shader);
 				}
 
 			}
@@ -392,8 +390,8 @@ end_frame :: proc(loc := #caller_location) {
 	_swap_buffers(loc, state.owner_context);
 	glfw.PollEvents();
 	
-	end_text();
-	end_inputs();
+	text_end();
+	input_end();
 
 	state.is_begin_frame = false;
 }

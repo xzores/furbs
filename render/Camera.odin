@@ -44,7 +44,8 @@ Camera :: union {
 
 //////////////////////////////////////////////////////////////////////////////////
 
-get_camera_3D_prj_view :: proc(using camera : Camera3D, aspect : f32, loc := #caller_location) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
+@require_results
+camera3D_get_prj_view :: proc(using camera : Camera3D, aspect : f32, loc := #caller_location) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
 
 	view = camera_look_at(camera.position, camera.target, camera.up);
 
@@ -65,7 +66,7 @@ get_camera_3D_prj_view :: proc(using camera : Camera3D, aspect : f32, loc := #ca
 	return;
 };
 
-get_camera_2D_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
+camera2D_get_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
 
 	translation_mat := linalg.matrix4_translate(-linalg.Vector3f32{position.x, position.y, 0});
 	rotation_mat := linalg.matrix4_from_quaternion(linalg.quaternion_angle_axis_f32(math.to_radians(-rotation), {0,0,1}));
@@ -79,11 +80,11 @@ get_camera_2D_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view :
 };
 
 @(private)
-bind_camera_3D :: proc(using camera : Camera3D, loc := #caller_location) {
+camera3D_bind :: proc(using camera : Camera3D, loc := #caller_location) {
 
     aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 
-	state.view_mat, state.prj_mat = get_camera_3D_prj_view(camera, aspect);
+	state.view_mat, state.prj_mat = camera3D_get_prj_view(camera, aspect);
 	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);	
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
 
@@ -92,11 +93,11 @@ bind_camera_3D :: proc(using camera : Camera3D, loc := #caller_location) {
 }
 
 @(private)
-bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
+camera2D_bind :: proc(using camera : Camera2D, loc := #caller_location) {
 	
 	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 
-	state.view_mat, state.prj_mat = get_camera_2D_prj_view(camera, aspect);
+	state.view_mat, state.prj_mat = camera2D_get_prj_view(camera, aspect);
 	state.inv_prj_mat = linalg.matrix4_inverse(state.prj_mat);
 	
 	state.view_prj_mat = state.prj_mat * state.view_mat;
@@ -104,13 +105,13 @@ bind_camera_2D :: proc(using camera : Camera2D, loc := #caller_location) {
 }
 
 @(private)
-bind_camera :: proc (camera : Camera, loc := #caller_location) {
+camera_bind :: proc (camera : Camera, loc := #caller_location) {
 
 	if cam, ok := camera.(Camera2D); ok {
-		bind_camera_2D(cam);
+		camera2D_bind(cam);
 	}
 	else if cam, ok := camera.(Camera3D); ok {
-		bind_camera_3D(cam);
+		camera3D_bind(cam);
 	}
 	else {
 		panic("??");
@@ -119,7 +120,7 @@ bind_camera :: proc (camera : Camera, loc := #caller_location) {
 
 //////////////////////////////////////////////////////////////////////////////////
 
-get_pixel_space_camera :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
+camera_get_pixel_space :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
 
 	w, h : f32;
 	

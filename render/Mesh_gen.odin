@@ -133,7 +133,7 @@ combine_mesh_data_multi :: proc ($T : typeid, mesh_datas : ..Mesh_combine_data(T
 		if res_verts != nil {
 			delete(res_verts);
 		}
-		delete_indices(res_indices);
+		indices_delete(res_indices);
 		res_verts = new_verts; 
 		res_indices = new_indices;
 	}
@@ -187,9 +187,9 @@ make_mesh_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) 
 
 	vert, index := generate_quad(size, offset, use_index_buffer);
 
-	res = make_mesh_single(vert, index, .static_use);
+	res = mesh_make_single(vert, index, .static_use);
 	
-	delete_indices(index);
+	indices_delete(index);
 	delete(vert);
 	
 	return;
@@ -258,9 +258,9 @@ make_mesh_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_ind
 
 	vert, index := generate_circle(diameter, offset, sectors, use_index_buffer);
 
-	res = make_mesh_single(vert, index, .static_use);
+	res = mesh_make_single(vert, index, .static_use);
 	
-	delete_indices(index);
+	indices_delete(index);
 	delete(vert);
 
 	return;
@@ -347,9 +347,9 @@ make_mesh_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) 
 	
 	vert, index := generate_cube(size, offset, use_index_buffer);
 
-	res = make_mesh_single(vert, index, .static_use);
+	res = mesh_make_single(vert, index, .static_use);
 	
-	delete_indices(index);
+	indices_delete(index);
 	delete(vert);
 
 	return;
@@ -482,9 +482,9 @@ make_mesh_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int
 	
 	vert, index := generate_cylinder(offset, height, diameter, stacks, sectors, use_index_buffer);
 
-	res = make_mesh_single(vert, index, .static_use);
+	res = mesh_make_single(vert, index, .static_use);
 	
-	delete_indices(index);
+	indices_delete(index);
 	delete(vert);
 	return;
 }
@@ -558,9 +558,9 @@ make_mesh_sphere :: proc(offset : [3]f32, diameter : f32, stacks : int, sectors 
 	
 	vert, index := generate_sphere(offset, diameter, stacks, sectors, use_index_buffer);
 	
-	res = make_mesh_single(vert, index, .static_use);
+	res = mesh_make_single(vert, index, .static_use);
 	
-	delete_indices(index);
+	indices_delete(index);
 	delete(vert);
 
 	return;
@@ -638,9 +638,9 @@ make_mesh_cone :: proc(offset : [3]f32, height, diameter : f32, sectors : int, u
 	
 	vert, index := generate_cone(offset, height, diameter, sectors, use_index_buffer);
 	
-	res = make_mesh_single(vert, index, .static_use);
+	res = mesh_make_single(vert, index, .static_use);
 	
-	delete_indices(index);
+	indices_delete(index);
 	delete(vert);
 
 	return;
@@ -652,10 +652,10 @@ generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 
 	vert_cone, index_cone := generate_cone({0,heigth_cone/2,0}, heigth_cone, diameter_cone, sectors, use_index_buffer);
 	defer delete(vert_cone);
-	defer delete_indices(index_cone);
+	defer indices_delete(index_cone);
 	vert_cylinder, index_cylinder := generate_cylinder({0,0,0}, height_cyl, diameter_cyl, 1, sectors, use_index_buffer);
 	defer delete(vert_cylinder);
-	defer delete_indices(index_cylinder);
+	defer indices_delete(index_cylinder);
 	
 	arb := up;
 	if math.abs(linalg.dot(arb, direction)) >= 0.9999 {
@@ -706,9 +706,9 @@ make_mesh_arrow :: proc(direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 
 	vert, index := generate_arrow(direction, height_cyl, heigth_cone, diameter_cyl, diameter_cone, sectors, use_index_buffer);
 
-	res = make_mesh_single(vert, index, .static_use);
+	res = mesh_make_single(vert, index, .static_use);
 	
-	delete_indices(index);
+	indices_delete(index);
 	delete(vert);
 
 	return;

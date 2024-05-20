@@ -23,7 +23,7 @@ Pipeline :: struct {
 }
 
 @(require_results)
-make_pipeline :: proc(	shader : ^Shader,
+pipeline_make :: proc(	shader : ^Shader,
 						blend_mode : Blend_mode = .blend,
 						depth_write : bool = true,
 						depth_test : bool = true,
@@ -42,21 +42,20 @@ make_pipeline :: proc(	shader : ^Shader,
 		depth_clamp = depth_clamp,
 	};
 
-	return make_pipeline_desc(desc, loc);
+	return pipeline_make_desc(desc, loc);
 }
 
 @(require_results)
-make_pipeline_desc :: proc(desc : Pipeline_desc, loc := #caller_location) -> (pipeline : Pipeline) {
-
+pipeline_make_desc :: proc(desc : Pipeline_desc, loc := #caller_location) -> (pipeline : Pipeline) {
 	return {desc};
 }
 
-destroy_pipeline :: proc (pipeline : Pipeline, loc := #caller_location) {
+pipeline_destroy :: proc (pipeline : Pipeline, loc := #caller_location) {
 	//Currently it does nothing, might do something in the future.
 }
 
 //TODO flags: clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}
-begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_location) {
+pipeline_begin :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_location) {
 	assert(state.current_pipeline == {}, "There must not be a bound target before calling begin_pipeline (remember to call end_pipeline).", loc);
 	assert(state.current_target != {}, "There must be a bound target before calling begin_pipeline (call begin_target before begin_pipeline).", loc);
 	assert(state.target_pixel_width != 0, "target_pixel_width is 0", loc);
@@ -66,7 +65,7 @@ begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 	using gl;
 	
 	{
-		bind_shader(pipeline.shader);
+		shader_bind(pipeline.shader);
 
 		gl.set_blend_mode(pipeline.blend_mode);
 		gl.set_depth_write(pipeline.depth_write);
@@ -81,7 +80,7 @@ begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 			gl.set_depth_clamp(false);
 		}
 		
-		bind_camera(camera);
+		camera_bind(camera);
 
 		set_uniform(pipeline.shader, .prj_mat, state.prj_mat);
 		set_uniform(pipeline.shader, .inv_prj_mat, state.inv_prj_mat);
@@ -99,12 +98,12 @@ begin_pipeline :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 	}
 }
 
-end_pipeline :: proc (loc := #caller_location) {
+pipeline_end :: proc (loc := #caller_location) {
 	assert(state.current_pipeline != {}, "There must be a bound target before calling end_pipeline (use begin_pipeline).", loc);
 
 	using gl;
 	
-	unbind_shader(state.current_pipeline.shader);
+	shader_unbind(state.current_pipeline.shader);
 
 	state.camera = {};
 	state.current_pipeline = {};
@@ -114,7 +113,7 @@ end_pipeline :: proc (loc := #caller_location) {
 ////// TARGET //////
 
 //Following draw commands will draw the the given taret, clear method maybe be nil if clearing is not wanted. Clearing will clear both color and depth buffer if default falgs are used.
-begin_target :: proc (render_target : Render_target, clear_method : Maybe([4]f32) = [4]f32{0,0,0,0}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
+target_begin :: proc (render_target : Render_target, clear_method : Maybe([4]f32) = [4]f32{0,0,0,0}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
 	assert(state.current_target == {}, "There must not be a bound target before calling begin_target (remember to call end_target).", loc);
 	
 	using gl;
@@ -154,9 +153,9 @@ begin_target :: proc (render_target : Render_target, clear_method : Maybe([4]f32
 
 }
 
-end_target :: proc (loc := #caller_location) {
-	assert(state.current_target != {}, "There must be a bound target before calling end_target (use begin_target).", loc);
-	assert(state.current_pipeline == {}, "end_pipeline has not been called before end_target", loc);
+target_end :: proc (loc := #caller_location) {
+	assert(state.current_target != {}, "There must be a bound target before calling target_end (use target_begin).", loc);
+	assert(state.current_pipeline == {}, "pipeline_end has not been called before target_end", loc);
 
 	state.target_pixel_width, state.target_pixel_height = 0, 0;
 

@@ -137,7 +137,7 @@ frame_buffer_make_textures :: proc (#any_int color_attachemet_cnt, width, height
 	{
 		color_attachments_max : [MAX_COLOR_ATTACH]gl.Tex2d_id;
 		for i in 0 ..<color_attachemet_cnt {
-			color_texture := make_texture_2D(mipmaps, wrapmode, filtermode, auto_cast color_format, width, height, .no_upload, nil);
+			color_texture := texture2D_make(mipmaps, wrapmode, filtermode, auto_cast color_format, width, height, .no_upload, nil);
 			color_attachments_max[i] = color_texture.id;
 			fbo.color_attachments[i] = color_texture;
 		}
@@ -149,7 +149,7 @@ frame_buffer_make_textures :: proc (#any_int color_attachemet_cnt, width, height
 
 	//setup depth buffer
 	if use_depth_texture {
-		depth_texture := make_texture_2D(mipmaps, wrapmode, filtermode, auto_cast depth_format, width, height, .no_upload, nil);
+		depth_texture := texture2D_make(mipmaps, wrapmode, filtermode, auto_cast depth_format, width, height, .no_upload, nil);
 		fbo.depth_attachment = depth_texture;
 		gl.associate_depth_texture_with_frame_buffer(fbo.id, depth_texture.id);
 	}
@@ -174,7 +174,7 @@ frame_buffer_destroy :: proc(fbo : Frame_buffer) {
 			case Color_render_buffer:
 				gl.delete_render_buffer(attachment.id);
 			case Texture2D:
-				destroy_texture_2D(&attachment);
+				texture2D_destroy(&attachment);
 		}
 	}
 
@@ -184,7 +184,7 @@ frame_buffer_destroy :: proc(fbo : Frame_buffer) {
 		case Depth_render_buffer:
 			gl.delete_render_buffer(attachment.id);
 		case Texture2D:
-			destroy_texture_2D(&attachment);
+			texture2D_destroy(&attachment);
 	}
 
 	gl.delete_frame_buffer(fbo.id);

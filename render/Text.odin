@@ -19,36 +19,36 @@ Fonts :: struct {
 }
 
 @(private)
-resize_atlas :: proc (data: rawptr, w, h: int) {
-	reupload_text_texture();
+text_resize_atlas :: proc (data: rawptr, w, h: int) {
+	text_reupload_texture();
 }
 
 @(private)
-upload_atlas :: proc (data: rawptr, dirtyRect: [4]f32, textureData: rawptr) {
-	reupload_text_texture();
+text_upload_atlas :: proc (data: rawptr, dirtyRect: [4]f32, textureData: rawptr) {
+	text_reupload_texture();
 }
 
 @(private)
-reupload_text_texture :: proc () {
+text_reupload_texture :: proc () {
 	using state;
 
 	//TODO bad slow way, reupload instead (and subBufferData if there is no resize)
 	//If the texture is there then unload it.
 	if font_texture != {} {
-		destroy_texture_2D(&font_texture);
+		texture2D_destroy(&font_texture);
 	}
 	
 	assert(len(font_context.textureData) != 0, "font_context.textureData length is 0")
 	
-	font_texture = make_texture_2D_desc(font_tex_desc, auto_cast font_context.width, auto_cast font_context.height, .R8, font_context.textureData);
+	font_texture = texture2D_make_desc(font_tex_desc, auto_cast font_context.width, auto_cast font_context.height, .R8, font_context.textureData);
 	log.infof("Reuploaded font texture, new size is %v, %v", font_context.width, font_context.height);
 }
 
 @(private)
-init_text :: proc () {
+text_init :: proc () {
 
-	state.font_context.callbackResize = resize_atlas;
-	state.font_context.callbackUpdate = upload_atlas;
+	state.font_context.callbackResize = text_resize_atlas;
+	state.font_context.callbackUpdate = text_upload_atlas;
 	fs.Init(&state.font_context, 1, 1, .BOTTOMLEFT);	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
 
 	//If we want fontstash to handle loading the font
@@ -120,29 +120,29 @@ init_text :: proc () {
 
 	verts, indices := generate_quad({1,1,1}, {0,0,0}, true);
 	defer delete(verts);
-	defer delete_indices(indices);
-	state.char_mesh = make_mesh_single(verts, indices, .static_use, .triangles, instance_desc);
+	defer indices_delete(indices);
+	state.char_mesh = mesh_make_single(verts, indices, .static_use, .triangles, instance_desc);
 }
 
 @(private)
-begin_text :: proc() {
+text_begin :: proc() {
 	fs.BeginState(&state.font_context);
 }
 
 @(private)
-end_text :: proc() {
+text_end :: proc() {
 	fs.EndState(&state.font_context);
 }
 
 @(private)
-destroy_text :: proc () {
+text_destroy :: proc () {
 
 	state.default_fonts = {};
 
 	fs.Destroy(&state.font_context); state.font_context = {};
 
-	destroy_mesh_single(&state.char_mesh); state.char_mesh = {};
-	destroy_texture_2D(&state.font_texture)
+	mesh_destroy_single(&state.char_mesh); state.char_mesh = {};
+	texture2D_destroy(&state.font_texture)
 }
 
 @(require_results)
@@ -159,7 +159,7 @@ load_font_from_memory :: proc(font_name : string, data : []u8) -> Font {
 }
 
 @(require_results)
-get_text_dimensions :: proc(text : string, size : f32, spacing : f32 = 0, font : Font = state.default_fonts.normal) -> [2]f32 {
+text_get_dimensions :: proc(text : string, size : f32, spacing : f32 = 0, font : Font = state.default_fonts.normal) -> [2]f32 {
 	
 	fs.SetFont(&state.font_context, auto_cast font);
 	fs.SetSize(&state.font_context, size);
@@ -172,7 +172,7 @@ get_text_dimensions :: proc(text : string, size : f32, spacing : f32 = 0, font :
 }
 
 @(require_results)
-get_max_text_height :: proc(font : Font, size : f32) -> f32 {
+text_get_max_height :: proc(font : Font, size : f32) -> f32 {
 	
 	fs.SetFont(&state.font_context, auto_cast font);
 	fs.SetSize(&state.font_context, size);
@@ -182,7 +182,7 @@ get_max_text_height :: proc(font : Font, size : f32) -> f32 {
 }
 
 @(require_results)
-get_text_bounds :: proc(text : string, position : [2]f32, font : Font, size : f32, spacing : f32 = 0) -> (bounds : [4]f32) {
+text_get_bounds :: proc(text : string, position : [2]f32, font : Font, size : f32, spacing : f32 = 0) -> (bounds : [4]f32) {
 	
 	fs.SetFont(&state.font_context, auto_cast font);
 	fs.SetSize(&state.font_context, size);
@@ -201,7 +201,9 @@ font_tex_desc :: Texture_desc {
 	format	= .R8,
 }
 
-get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, spacing : f32 = 0, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
+//used internally
+@require_results
+text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, spacing : f32 = 0, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
 	using state;
 
 	get_text_quads :: proc (text : string, position : [2]f32, instance_data : ^[dynamic]Default_instance_data) {
@@ -251,7 +253,7 @@ get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, sp
 	
 	if should_reupload {
 		//Upload texture again.
-		reupload_text_texture();
+		text_reupload_texture();
 	}
 
 	return;
@@ -259,22 +261,22 @@ get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, sp
 
 //Has its own pipeline call outisde of a pipeline, but inside a target.
 //This will be drawn in pixel space.
-draw_text_simple :: proc (text : string, position : [2]f32, size : f32, spacing : f32 = 0, color : [4]f32 = {1,1,1,1},
+text_draw_simple :: proc (text : string, position : [2]f32, size : f32, spacing : f32 = 0, color : [4]f32 = {1,1,1,1},
 							font : Font = state.default_fonts.normal, shader := state.default_text_shader, loc := #caller_location) {
 	
 	assert(shader != nil, "shader may not be nil", loc);
 	assert(state.current_pipeline == {}, "A pipeline is already bound, text must be drawn outside of pipeline begin/end.", loc);
 	assert(state.current_target != nil, "A render target is not bound.", loc);
 	
-	instance_data : [dynamic]Default_instance_data = get_draw_instance_data(text, position, size, spacing, font);
+	instance_data : [dynamic]Default_instance_data = text_get_draw_instance_data(text, position, size, spacing, font);
 	defer delete(instance_data);
 
-	pipeline := make_pipeline(shader, .blend, false, false, .fill, culling = .back_cull);
-	defer destroy_pipeline(pipeline);
+	pipeline := pipeline_make(shader, .blend, false, false, .fill, culling = .back_cull);
+	defer pipeline_destroy(pipeline);
 	
 	if i_data, ok := state.char_mesh.instance_data.?; ok {
 		if i_data.data_points < len(text) {
-			resize_mesh_instance_single(&state.char_mesh, len(text));
+			mesh_resize_instance_single(&state.char_mesh, len(text));
 			log.infof("Resized text instance data. New length : %v", len(text));
 		}
 	}
@@ -284,16 +286,16 @@ draw_text_simple :: proc (text : string, position : [2]f32, size : f32, spacing 
 	
 	upload_instance_data_single(&state.char_mesh, 0, instance_data[:]);
 	
-	cam := get_pixel_space_camera(state.current_target);
+	cam := camera_get_pixel_space(state.current_target);
 
-	begin_pipeline(pipeline, cam);
+	pipeline_begin(pipeline, cam);
 	set_uniform(shader, .color_diffuse, color);
 	set_texture(.texture_diffuse, state.font_texture);
-	draw_mesh_instanced(&state.char_mesh, len(instance_data));
-	end_pipeline();
+	mesh_draw_instanced(&state.char_mesh, len(instance_data));
+	pipeline_end();
 }
 
-draw_text_ex :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, spacing : f32 = 0,
+text_draw_ex :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, spacing : f32 = 0,
 							color : [4]f32 = {0,0,0,0}, font : Fonts = state.default_fonts, shader := state.default_shader, loc := #caller_location) {
 
 

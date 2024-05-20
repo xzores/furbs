@@ -75,7 +75,7 @@ Indices :: union {
 	[]u32,
 }
 
-delete_indices :: proc (indices : Indices) {
+indices_delete :: proc (indices : Indices) {
 	switch ind in indices {
 		case nil:
 		case []u16:
@@ -85,7 +85,7 @@ delete_indices :: proc (indices : Indices) {
 	}
 }
 
-len_indices  :: proc (indices : Indices) -> int {
+indices_len  :: proc (indices : Indices) -> int {
 	switch ind in indices {
 		case nil:
 			return 0;
@@ -112,12 +112,12 @@ Mesh_ptr :: union {
 }
 
 //Destroys a mesh_single, mesh_buffered and mesh_shared
-destroy_mesh :: proc (mesh : Mesh_ptr) {
+mesh_destroy :: proc (mesh : Mesh_ptr) {
 	switch v in mesh {
 		case ^Mesh_single:
-			destroy_mesh_single(v);
+			mesh_destroy_single(v);
 		case ^Mesh_buffered:
-			destroy_mesh_buffered(v);
+			mesh_destroy_buffered(v);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -160,10 +160,10 @@ upload_instance_data :: proc(mesh : Mesh_ptr, #any_int start_index : int, data :
 }
 
 //Will copy data, so data is not destroyed.
-resize_mesh :: proc(mesh : Mesh_ptr, #any_int new_vert_size, new_index_size : int, loc := #caller_location) {
+mesh_resize :: proc(mesh : Mesh_ptr, #any_int new_vert_size, new_index_size : int, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
-			resize_mesh_single(v, new_vert_size, new_index_size, loc);
+			mesh_resize_single(v, new_vert_size, new_index_size, loc);
 		case ^Mesh_buffered:
 			resize_mesh_bufferd(v, new_vert_size, new_index_size);
 		case ^Mesh_shared:
@@ -174,10 +174,10 @@ resize_mesh :: proc(mesh : Mesh_ptr, #any_int new_vert_size, new_index_size : in
 //Draws a mesh_single, mesh_buffered and mesh_shared
 //There is a limitation here, and that is not that only the entire model can be drawn.
 //This is because  mesh_single, mesh_buffered and mesh_shared requires handling draw_range in different ways.
-draw_mesh :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+mesh_draw :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
-			draw_mesh_single(v, model_matrix, color, nil, loc);
+			mesh_draw_single(v, model_matrix, color, nil, loc);
 		case ^Mesh_buffered:
 			i := mesh_buffered_next_draw_source(v);
 			draw_mesh_buffered(v, model_matrix, color, i, loc = loc);
@@ -186,10 +186,10 @@ draw_mesh :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, color : [4]f3
 	}
 }
 
-draw_mesh_instanced :: proc (mesh : Mesh_ptr, #any_int instance_cnt : int, loc := #caller_location) {
+mesh_draw_instanced :: proc (mesh : Mesh_ptr, #any_int instance_cnt : int, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
-			draw_mesh_single_instanced(v, instance_cnt, nil, loc);
+			mesh_draw_single_instanced(v, instance_cnt, nil, loc);
 		case ^Mesh_buffered:
 			i := mesh_buffered_next_draw_source(v);
 			draw_mesh_buffered_instanced(v, instance_cnt, i, nil, loc);
@@ -228,7 +228,7 @@ Mesh_single :: struct {
 
 //Index_data may be nil if there should be no incidies. 
 @(require_results)
-make_mesh_single :: proc (vertex_data : []$T, index_data : Indices, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
+mesh_make_single :: proc (vertex_data : []$T, index_data : Indices, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
 	
 	mesh.vertex_count = len(vertex_data);
 	mesh.data_type = T;
@@ -262,7 +262,7 @@ make_mesh_single :: proc (vertex_data : []$T, index_data : Indices, usage : Usag
 
 //Makes a mesh_single without data
 @(require_results)
-make_mesh_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
+mesh_make_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
 
 	if index_type != .no_index_buffer {
 		assert(index_size != 0, "index size must not be 0, if index_type is not no_index_buffer", loc);
@@ -285,7 +285,7 @@ make_mesh_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, 
 }
 
 //Destroys the mesh (frees all associated resources)
-destroy_mesh_single :: proc (mesh : ^Mesh_single) {
+mesh_destroy_single :: proc (mesh : ^Mesh_single) {
 	
 	gl.destroy_resource(mesh.vertex_data);
 	gl.discard_fence(&mesh.read_fence); //discarding an nil fence is allowed
@@ -449,7 +449,7 @@ remake_resource :: proc (old_res : gl.Resource, new_size : int) -> gl.Resource {
 }
 
 //Data will be copied over
-resize_mesh_single :: proc(mesh : ^Mesh_single, #any_int new_vert_size, new_index_size : int, loc := #caller_location) {
+mesh_resize_single :: proc(mesh : ^Mesh_single, #any_int new_vert_size, new_index_size : int, loc := #caller_location) {
 	assert(mesh.usage != .static_use, "Cannot resize a static usage mesh", loc);
 	if new_index_size == 0 {
 		assert(mesh.index_count == 0, "new_index_size may not be non-zero if existing size is zero", loc);
@@ -500,7 +500,7 @@ resize_mesh_single :: proc(mesh : ^Mesh_single, #any_int new_vert_size, new_inde
 }
 
 //Data will be copied over
-resize_mesh_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, loc := #caller_location) {
+mesh_resize_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, loc := #caller_location) {
 	
 	if instance, ok := &mesh.instance_data.?; ok {
 
@@ -517,7 +517,7 @@ resize_mesh_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, lo
 	}
 }
 
-draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
+mesh_draw_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	assert(mesh.instance_data == nil, "This is an instanced mesh, use the draw_*_instanced function.", loc)
 	assert(mesh.primitive != nil);
@@ -557,7 +557,7 @@ draw_mesh_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, co
 	}
 }
 
-draw_mesh_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt : i32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
+mesh_draw_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt : i32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	assert(mesh.instance_data != nil, "This is an not an instanced mesh", loc);
 	assert(mesh.primitive != nil);
@@ -646,7 +646,7 @@ make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : t
 		queue.init(&index_data_queue);
 		queue.init(&instance_data_queue);
 		b := Backing_mesh {
-			mesh = make_mesh_single_empty(vertex_size, data_type, index_size, index_type, usage, primitive, instance),
+			mesh = mesh_make_single_empty(vertex_size, data_type, index_size, index_type, usage, primitive, instance),
 			vertex_data_queue = vertex_data_queue,
 			index_data_queue = index_data_queue,
 			instance_data_queue = instance_data_queue,
@@ -660,10 +660,10 @@ make_mesh_buffered :: proc (#any_int buffering, vertex_size : int, data_type : t
 	return;
 }
 
-destroy_mesh_buffered :: proc (mesh : ^Mesh_buffered) {
+mesh_destroy_buffered :: proc (mesh : ^Mesh_buffered) {
 	
 	for &b in &mesh.backing {
-		destroy_mesh_single(&b.mesh);
+		mesh_destroy_single(&b.mesh);
 		for queue.len(b.vertex_data_queue) != 0 {
 			d := queue.pop_front(&b.vertex_data_queue);
 			d.ref_cnt -= 1;
@@ -819,7 +819,7 @@ draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[
 		}
 	}
 	
-	draw_mesh_single(mesh, model_matrix, color, draw_range, loc);
+	mesh_draw_single(mesh, model_matrix, color, draw_range, loc);
 	
 	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use {
 		gl.discard_fence(&mesh.read_fence);
@@ -844,7 +844,7 @@ draw_mesh_buffered_instanced :: proc (mesh_buffer : ^Mesh_buffered, #any_int ins
 		}
 	}
 	
-	draw_mesh_single_instanced(mesh, instance_cnt, draw_range, loc);
+	mesh_draw_single_instanced(mesh, instance_cnt, draw_range, loc);
 	
 	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use {
 		gl.discard_fence(&mesh.read_fence);
@@ -1118,7 +1118,7 @@ upload_buffered_data :: proc (mesh : ^Mesh_buffered, index : int, loc := #caller
 		gl.sync_fence(&backing.read_fence); //TODO is this needed?
 		
 		//Resize the submesh
-		resize_mesh_single(backing, mesh.vertex_count, mesh.index_count);
+		mesh_resize_single(backing, mesh.vertex_count, mesh.index_count);
 		
 		log.debugf("Resizing backing mesh, new size : %v, %v", mesh.vertex_count, mesh.index_count);
 	}

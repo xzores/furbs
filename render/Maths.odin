@@ -136,9 +136,10 @@ rotation_matrix :: proc "contextless" (euler_angles : [3]f32) -> matrix[3,3]f32 
     return rot_z * rot_y * rot_x;
 }
 
+@require_results
 get_mouse_cast :: proc (camera : Camera3D, width : f32, height : f32) -> (direction : [3]f32) {
 	
-	cam_view, cam_prj := get_camera_3D_prj_view(camera, width / height);
+	cam_view, cam_prj := camera3D_get_prj_view(camera, width / height);
 	
 	m_pos := mouse_pos();
 	m_pos.y = height - m_pos.y;
