@@ -925,12 +925,18 @@ GL_state :: struct {
 	bound_target 	: Maybe(Fbo_id),
 	bound_draw_fbo 	: Maybe(Fbo_id),
 	bound_read_fbo 	: Maybe(Fbo_id),
-	bound_vao 		: Vao_id,
 	bound_rbo 		: Rbo_id,
-	bound_texture 	: [16]Texg_id,
-	texture_slot 	: i32, //0-15 (specifies what bound_texture is currently changing).
 
-	bound_buffer : map[Buffer_type]Buffer_id,
+	//Textures have a 16 slots, so there are 16 textures in play at once. texture_slot denotes the texture currently being changed.
+	//The other textures are still there and still bound in the shader.
+	texture_slot 	: i32, //0-15 (specifies what bound_texture is currently changing).
+	bound_texture 	: [16]Texg_id,
+
+	//There are a single bound VAO, it keeps track of all the bound buffers, and attributes. It also keeps track on how the attriute data is sourced from the buffers.
+	//When binding a buffer you are really binding a buffer to a VAO, even if you think a VAO is unbind, it acctually just means that the default VAO is active.
+	//So there is always an VAO. 
+	bound_vao 		: Vao_id,
+	bound_buffer 	: map[Buffer_type]Buffer_id,
 }
 
 GL_state_ex :: struct {
@@ -1796,7 +1802,6 @@ unbind_shader_program :: proc() {
 
 gen_vertex_arrays :: proc(vaos : []Vao_id, loc := #caller_location) {
 
-	
 	if cpu_state.gl_version >= .opengl_4_5 {
 		gl.CreateVertexArrays(auto_cast len(vaos), cast([^]u32) raw_data(vaos));
 	}

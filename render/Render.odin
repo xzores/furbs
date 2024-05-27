@@ -325,25 +325,28 @@ begin_frame :: proc() {
 	
 	state.is_begin_frame = true;
 
-	/*
-	for w in windows {
+	for w in &state.active_windows {
 
-			/*
-			frame_buffer_destroy(window.framebuffer);
-			assert(window.framebuffer.color_format != nil, "window.framebuffer.color_format is nil");
-			init_frame_buffer_render_buffers(&window.framebuffer, 1, sw, sh, window.framebuffer.samples, window.framebuffer.color_format, window.framebuffer.depth_format);
-			window.width, window.height = sw, sh;
-			*/
+		sw, sh := window_get_size(w);
 
-			_make_context_current(window);
-			gl.delete_frame_buffer(window.context_framebuffer.id);
-			window.context_framebuffer = {}; //set it to zero, before recreation, not required attom.
-			recreate_frame_buffer(&window.context_framebuffer, window.framebuffer);
+		if w.framebuffer.width != sw || w.framebuffer.height != sh {
+			frame_buffer_destroy(w.framebuffer);
+			assert(w.framebuffer.color_format != nil, "window.framebuffer.color_format is nil");
+			w.framebuffer = frame_buffer_make_render_buffers(1, sw, sh, w.framebuffer.samples, w.framebuffer.color_format, w.framebuffer.depth_format);
+			w.width, w.height = sw, sh;
+
+			_make_context_current(w);
+			gl.delete_frame_buffer(w.context_framebuffer.id);
+			w.context_framebuffer = {}; //set it to zero, before recreation, not required atm.
+			frame_buffer_recreate(&w.context_framebuffer, w.framebuffer);
 			_make_context_current(nil);
+		}
+
 	}
-	*/
 	
-	state.main_window.width, state.main_window.height = window_get_size(state.main_window);
+	if state.main_window != nil {
+		state.main_window.width, state.main_window.height = window_get_size(state.main_window);
+	}
 
 	input_begin();
 	text_begin();
@@ -408,4 +411,16 @@ delta_time :: proc () -> f32 {
 
 elapsed_time :: proc () -> f32 {
 	return state.time_elapsed;
+}
+
+get_render_target_size :: proc (target : Render_target) -> (w, h : i32){
+
+	switch v in target {
+		case ^Frame_buffer:
+			return v.width, v.height;
+		case ^Window:
+			return v.width, v.height;
+	}
+
+	unreachable();
 }

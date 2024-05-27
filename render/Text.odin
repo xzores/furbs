@@ -111,6 +111,7 @@ text_init :: proc () {
 		italic 		= font_RI,
 		italic_bold = font_RBI,
 	};
+	log.info("Default fonts loaded");
 
 	instance_desc : Instance_data_desc = {
 		data_type 	= Default_instance_data,
@@ -122,6 +123,8 @@ text_init :: proc () {
 	defer delete(verts);
 	defer indices_delete(indices);
 	state.char_mesh = mesh_make_single(verts, indices, .static_use, .triangles, instance_desc);
+
+	log.info("Text initialized!");
 }
 
 @(private)
@@ -143,6 +146,11 @@ text_destroy :: proc () {
 
 	mesh_destroy_single(&state.char_mesh); state.char_mesh = {};
 	texture2D_destroy(&state.font_texture)
+}
+
+get_default_fonts :: proc (loc := #caller_location) -> Fonts {
+	assert(state.default_fonts != {}, "No fonts loaded", loc);
+	return state.default_fonts;
 }
 
 @(require_results)
@@ -295,9 +303,24 @@ text_draw_simple :: proc (text : string, position : [2]f32, size : f32, spacing 
 	pipeline_end();
 }
 
-text_draw_ex :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, spacing : f32 = 0,
-							color : [4]f32 = {0,0,0,0}, font : Fonts = state.default_fonts, shader := state.default_shader, loc := #caller_location) {
+text_draw :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, spacing : f32 = 0,
+							color : [4]f32 = {0,0,0,1}, font : Fonts = state.default_fonts, shader := state.default_text_shader, loc := #caller_location) {
+	font := text_get_font_from_fonts(bold, italic, font);
+	text_draw_simple(text, position, size, spacing, color, font, shader, loc);
+}
 
+text_get_font_from_fonts :: proc ( bold, italic : bool, font : Fonts = state.default_fonts) -> Font{
 
-
+	if bold && italic {
+		return font.italic_bold;
+	} 
+	else if bold {
+		return font.bold;
+	} 
+	else if italic {
+		return font.italic;
+	}
+	else {
+		return font.normal;
+	}
 }

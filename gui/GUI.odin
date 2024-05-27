@@ -375,7 +375,7 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 			dest := container.dest;
 
 			//Common for all elemetns
-			elem_rect : [4]f32 = get_screen_space_position_rect(dest.rect, dest.anchor, dest.self_anchor, anchor_rect_pixel, {ctx.width, ctx.height}, unit_size)
+			elem_rect : [4]f32 = get_screen_space_position_rect(dest.rect, dest.anchor, dest.self_anchor, anchor_rect_pixel, {ctx.width, ctx.height}, unit_size);
 
 			active = container.is_selected;
 			

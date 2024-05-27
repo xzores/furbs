@@ -155,8 +155,8 @@ Window_desc :: struct {
 
 Window :: struct {
 	glfw_window : glfw.WindowHandle, //dont touch
-	framebuffer : Frame_buffer,			//This and context_framebuffer makes up the "fake" backbuffer.
-	context_framebuffer : Frame_buffer,
+	framebuffer : Frame_buffer,				//This and context_framebuffer makes up the "fake" backbuffer.
+	context_framebuffer : Frame_buffer,		//This is the same framebuffer, but it lives in the other (non-main) context.
 
 	resize_behavior : Resize_behavior,
 	width, height : i32,
@@ -384,7 +384,7 @@ window_set_fullscreen :: proc(window : ^Window, mode : Fullscreen_mode, monitor 
 	
 	// Get the position of the window
 	xpos, ypos := glfw.GetWindowPos(window.glfw_window);
-	ww, wh := window_get_size(state.main_window);
+	ww, wh := window_get_size(window);
 
 	monitor := window_get_monitor(window);
 	
@@ -473,7 +473,7 @@ window_set_size :: proc "contextless" (window : ^Window, w, h : i32) {
 }
 
 window_get_size :: proc "contextless" (window : ^Window, loc := #caller_location) -> (w, h : i32) {
-	
+
 	w, h = glfw.GetFramebufferSize(window.glfw_window);
 	
 	if w == 0 {

@@ -89,7 +89,7 @@ State :: struct {
 	bound_window : Maybe(^Window),
 	window_in_focus : ^Window,
 
-	main_window : ^Window,
+	main_window : ^Window,	//This will be nil if not created.
 
 	target_pixel_width, target_pixel_height : f32,
 

@@ -19,7 +19,7 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 		index_data : Indices;
 		
 		i : int = 0;
-
+		
 		{
 			cubev, cubei := generate_cube({1,1,1}, {0,0,0}, use_index_buffer);
 			state.shape_cube = [2]int{i, i + indices_len(cubei)}; i += indices_len(cubei);
@@ -83,10 +83,17 @@ shapes_destroy :: proc() {
 	}
 }
 
-draw_quad :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+draw_quad_mat :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_quad);
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_quad, loc);
 }
+
+draw_quad_rect:: proc(rect : [4]f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	mat : matrix[4,4]f32 = linalg.matrix4_from_trs_f32({rect.x, rect.y, z} + {rect.z/2, rect.w/2, 0}, 1, {rect.z, rect.w, 1});
+	draw_quad_mat(mat, color, loc);
+}
+
+draw_quad :: proc {draw_quad_mat, draw_quad_rect};
 
 draw_char :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();

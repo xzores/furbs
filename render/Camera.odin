@@ -120,6 +120,7 @@ camera_bind :: proc (camera : Camera, loc := #caller_location) {
 
 //////////////////////////////////////////////////////////////////////////////////
 
+//Z space is -1 to 1
 camera_get_pixel_space :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
 
 	w, h : f32;
