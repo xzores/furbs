@@ -493,6 +493,7 @@ Altas_row :: struct {
 	heigth : i32,
 	width : i32,
 	y_offset : i32,
+	quads : [dynamic]Atlas_handle, //quads owned by this row.
 }
 
 //Uses a modified strip packing, it is quite fast as it gets and the packing ratio is good for similar sized rectangles. 
@@ -507,7 +508,7 @@ Texture2D_atlas :: struct {
 
 	rows : [dynamic]Altas_row,
 	quads : map[Atlas_handle][4]i32, //from handle to index
-	free_quads : [dynamic][4]i32,
+	free_quads : map[Atlas_handle][4]i32,
 	
 	pixels : []u8, //TODO dont store pixels on the CPU, just do GPU (requires texture copy)
 }
@@ -522,7 +523,7 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 		backing = texture2D_make_desc(desc, init_size, init_size, upload_format, nil, loc),
 		rows = make([dynamic]Altas_row),
 		quads = make(map[Atlas_handle][4]i32),
-		free_quads = make([dynamic][4]i32),
+		free_quads = make(map[Atlas_handle][4]i32),
 		margin = margin,
 		atlas_handle_counter = 0,
 		upload_format = upload_format,
@@ -540,7 +541,7 @@ atlas_get_free_quad :: proc (atlas : ^Texture2D_atlas, #any_int width, height : 
 	//ordered_remove(&atlas.free_quads, );
 
 	return;
-}*/
+}
 
 @(require_results, private="file")
 atlas_sort :: proc (a, b : [4]i32) -> slice.Ordering {
@@ -554,6 +555,7 @@ atlas_sort :: proc (a, b : [4]i32) -> slice.Ordering {
 
 	return .Greater;
 }
+*/
 
 //Uploads a texture into the atlas and returns a handle.
 //Success may return false if the GPU texture size limit is reached.
@@ -577,33 +579,31 @@ texture2D_atlas_upload :: proc (using atlas : ^Texture2D_atlas, pixel_cnt : [2]i
 	//We will check if an unused placement is sutiable, and if it is we will use that first.
 	{
 		found_area : i32 = max(i32);
-		index : int = -1;
+		handle : Atlas_handle = -1;
 
-		for q, i in free_quads {
-			if q.z >= tex_size.x && q.w >= tex_size.y { //Todo, the arrays is acctually sorted, so we can break early..
-														//Even more todo, we could do a binary search...
+		for k, q in free_quads {
+			if q.z >= tex_size.x && q.w >= tex_size.y {
 				if (q.z * q.w) <= found_area {
-					index = i;
+					handle = k;
 					found_area = q.z * q.w;
 				}
 			}
 		}
-		if index != -1 {
+		if handle != -1 {
 			//We found a unused quad, now we make a handle for it and return that.
-			quad := free_quads[index];
+			quad := free_quads[handle];
 			quad.zw = pixel_cnt;
 
-			atlas_handle_counter += 1;
-			quads[atlas_handle_counter] = quad; //Create the quad reference
+			quads[handle] = quad; //Create the quad reference
 
 			//remove the quad from free quads, as it is now not free
-			ordered_remove(&atlas.free_quads, index);
+			delete_key(&free_quads, handle);
 
 			//Upload/copy data into texture
 			texture2D_upload_data(&backing, atlas.upload_format, quad.xy, quad.zw, data, loc);
 			utils.copy_pixels(gl.upload_format_channel_cnt(upload_format), pixel_cnt.x, pixel_cnt.y, 0, 0, data, atlas.backing.width, atlas.backing.height, quad.x, quad.y, atlas.pixels, pixel_cnt.x, pixel_cnt.y);
 			
-			return atlas_handle_counter, true; //We have already found a good solution!
+			return handle, true; //We have already found a good solution!
 		}
 	}
 
@@ -627,7 +627,7 @@ texture2D_atlas_upload :: proc (using atlas : ^Texture2D_atlas, pixel_cnt : [2]i
 	
 	//If there is no rows add an empty row. This will make sure not to go out of bounds in the next step.
 	if len(rows) == 0 {
-		append(&rows, Altas_row{0, 0, 0});
+		append(&rows, Altas_row{0, 0, 0, make([dynamic]Atlas_handle)});
 	}
 	
 	if min_row_index == -1 {
@@ -641,18 +641,29 @@ texture2D_atlas_upload :: proc (using atlas : ^Texture2D_atlas, pixel_cnt : [2]i
 			
 			//Now We want to check if we have enough horizontal space if we grow the last row.
 			if backing.width - row.width >= tex_size.x {
+				//The row will now grow
+
+				//Go back and increase secoundary heigth
+				for h in row.quads {
+					if h in atlas.free_quads {
+						//if there is a free quad then we will make it bigger, if it also shared the top.
+						q := atlas.free_quads[h];
+
+						if q.y + q.w == row.y_offset + row.heigth {
+							q.w += (tex_size.y - row.heigth);
+							atlas.free_quads[h] = q; //There is a bug, this does not always work? dunno why
+						}
+					}
+				}
 
 				//there is enough horizontal space and so we grow!
 				row.heigth = tex_size.y;
 				min_row_index = len(rows)-1;
 				min_row_heigth = row.heigth;
-
-				//Go back and increase secoundary heigth
-				//panic("todo")
 			}
 			else {
 				//There was not enough horizontal space, try to make a new row.
-				append(&rows, Altas_row{0, 0, row.y_offset + row.heigth});
+				append(&rows, Altas_row{0, 0, row.y_offset + row.heigth, make([dynamic]Atlas_handle)});
 				return texture2D_atlas_upload(atlas, tex_size, data, loc);
 			}
 		}
@@ -687,14 +698,20 @@ texture2D_atlas_upload :: proc (using atlas : ^Texture2D_atlas, pixel_cnt : [2]i
 		rows[min_row_index].heigth = math.max(rows[min_row_index].heigth, tex_size.y); //increase the row heigth to this quads hight, if it is bigger.
 		rows[min_row_index].width += tex_size.x; //incease the width by the size of the sub-texture.
 		
-		atlas_handle_counter += 1;	
-		quads[atlas_handle_counter] = quad; //Create the quad 1 reference
+		atlas_handle_counter += 1;
+		res := atlas_handle_counter;
+		quads[res] = quad; //Create the quad 1 reference
+		append(&rows[min_row_index].quads, res);
 
 		//If there is space left then we create a secoundary handle, but at the top.
 		//This handle is inactive and not in use, so it is added to "free_quads".
 		if rows[min_row_index].heigth - quad.w != 0 {
 			assert(rows[min_row_index].heigth - quad.w > 0, "internal error");
-			utils.insert_ordered_by(&atlas.free_quads, quad2, atlas_sort);
+
+			atlas_handle_counter += 1;
+			sec_res := atlas_handle_counter;
+			atlas.free_quads[sec_res] = quad2;
+			append(&rows[min_row_index].quads, sec_res);
 		}
 
 		//fmt.printf("new_column : %v\n", new_column);
@@ -702,7 +719,7 @@ texture2D_atlas_upload :: proc (using atlas : ^Texture2D_atlas, pixel_cnt : [2]i
 		utils.copy_pixels(gl.upload_format_channel_cnt(upload_format), pixel_cnt.x, pixel_cnt.y, 0, 0, data, atlas.backing.width,
 								atlas.backing.height, pixels_offset.x, pixels_offset.y, atlas.pixels, pixel_cnt.x, pixel_cnt.y);
 		
-		return atlas_handle_counter, true;
+		return res, true;
 	}
 
 	unreachable();
@@ -813,6 +830,7 @@ texture2D_atlas_grow :: proc (atlas : ^Texture2D_atlas, loc := #caller_location)
 				heigth = q.y,
 				width = 0,
 				y_offset = current_y_offset,
+				quads = make([dynamic]Atlas_handle),
 			});
 			row = &new_atlas.rows[current_row];	//the move
 		}
@@ -828,16 +846,21 @@ texture2D_atlas_grow :: proc (atlas : ^Texture2D_atlas, loc := #caller_location)
 			q.x,
 			q.y,
 		};
+		append(&row.quads, new_atlas.atlas_handle_counter);
+
 		//There might be space for another quad.
 		if row_heigth - q.y > 0 {
-			//An ampty quad is added on top
-			append(&new_atlas.free_quads, [4]i32{
+			//An empty quad is added on top
+			new_atlas.atlas_handle_counter += 1;
+			new_atlas.free_quads[new_atlas.atlas_handle_counter] = [4]i32{
 				current_x_offset,
 				current_y_offset + q.y,
 				q.x,
 				row_heigth - q.y,
-			});
+			};
+			append(&row.quads, new_atlas.atlas_handle_counter);
 		}
+
 		
 		src_offset := quad.xy;
 		
@@ -873,6 +896,9 @@ texture2D_atlas_destroy :: proc (using atlas : Texture2D_atlas) {
 	delete(pixels);
 
 	texture2D_destroy(atlas.backing);
+	for r in rows {
+		delete(r.quads);
+	}
 	delete(rows);
 	delete(quads);
 	delete(free_quads);
