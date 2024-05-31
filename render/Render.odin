@@ -234,12 +234,12 @@ destroy :: proc (loc := #caller_location) {
 	delete(state.shader_defines); state.shader_defines = {};
 
 	if state.white_texture != {} {
-		texture2D_destroy(&state.white_texture);
+		texture2D_destroy(state.white_texture);
 		state.white_texture = {};
 	}
 
 	if state.black_texture != {} {
-		texture2D_destroy(&state.black_texture);
+		texture2D_destroy(state.black_texture);
 		state.black_texture = {};
 	}
 	

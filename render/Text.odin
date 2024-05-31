@@ -35,7 +35,7 @@ text_reupload_texture :: proc () {
 	//TODO bad slow way, reupload instead (and subBufferData if there is no resize)
 	//If the texture is there then unload it.
 	if font_texture != {} {
-		texture2D_destroy(&font_texture);
+		texture2D_destroy(font_texture);
 	}
 	
 	assert(len(font_context.textureData) != 0, "font_context.textureData length is 0")
@@ -145,7 +145,7 @@ text_destroy :: proc () {
 	fs.Destroy(&state.font_context); state.font_context = {};
 
 	mesh_destroy_single(&state.char_mesh); state.char_mesh = {};
-	texture2D_destroy(&state.font_texture)
+	texture2D_destroy(state.font_texture); state.font_texture = {};
 }
 
 get_default_fonts :: proc (loc := #caller_location) -> Fonts {

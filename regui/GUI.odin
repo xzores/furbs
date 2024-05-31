@@ -368,7 +368,7 @@ draw_text :: proc (text : string, position : [2]f32, size : f32, place_rect : [4
 	unit_size := bound_state.unit_size;
 	font := render.text_get_font_from_fonts(bold, italic, fonts);
 
-	fmt.printf("position : %v\n", render.text_get_max_height());
+	//fmt.printf("position : %v\n", render.text_get_max_height());
 
 	rect := get_screen_space_position_rect(.center_center, .center_center, render.text_get_bounds(text, position, font, size), place_rect, unit_size);
 

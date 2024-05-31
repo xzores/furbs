@@ -3270,6 +3270,7 @@ active_texture :: proc(slot : i32) {
 	
 	gpu_state.texture_slot = slot;
 
+
 	gl.ActiveTexture(auto_cast (gl.TEXTURE0 + slot));
 
 }
@@ -3282,6 +3283,24 @@ active_bind_texture2D :: proc (tex : Tex2d_id, slot : i32) {
 /* TODO, allow binding many textures at a time
 active_bind_texture2Ds :: proc (tex : []struct{Tex2d_id, slot : u32}) {
 	panic("TODO");
+}
+
+
+//The copy_frame_buffer is used internally, it must exist only for the purpose of copying texture data.
+copy_texture2D_sub_data :: proc (src_tex : Tex2d_id, dst_tex : int) {
+	
+	//TODO, it seems we need a framebuffer to copy texture data.
+	//Make this take in a framebuffer, that is used to copy with
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_3 {
+		gl.CopyImageSubData(src_tex, .TEXTURE_2D, src_level, src_x, src_y, src_z, 0, .TEXTURE_2D, dst_level, dst_x, dst_y, 0, width, height, 1);
+	}
+	else {
+		bind_texture2D(src_tex);
+		gl.CopyTexSubImage2D(.TEXTURE_2D, 0, );
+		unbind_texture2D();
+	}
 }
 */
 

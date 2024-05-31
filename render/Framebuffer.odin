@@ -174,7 +174,7 @@ frame_buffer_destroy :: proc(fbo : Frame_buffer) {
 			case Color_render_buffer:
 				gl.delete_render_buffer(attachment.id);
 			case Texture2D:
-				texture2D_destroy(&attachment);
+				texture2D_destroy(attachment);
 		}
 	}
 
@@ -184,7 +184,7 @@ frame_buffer_destroy :: proc(fbo : Frame_buffer) {
 		case Depth_render_buffer:
 			gl.delete_render_buffer(attachment.id);
 		case Texture2D:
-			texture2D_destroy(&attachment);
+			texture2D_destroy(attachment);
 	}
 
 	gl.delete_frame_buffer(fbo.id);
