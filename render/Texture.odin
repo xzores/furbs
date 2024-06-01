@@ -644,7 +644,7 @@ texture2D_atlas_upload :: proc (using atlas : ^Texture2D_atlas, pixel_cnt : [2]i
 				//The row will now grow
 
 				//Go back and increase secoundary heigth
-				for h in row.quads {
+				/*for h in row.quads {
 					if h in atlas.free_quads {
 						//if there is a free quad then we will make it bigger, if it also shared the top.
 						q := atlas.free_quads[h];
@@ -654,7 +654,11 @@ texture2D_atlas_upload :: proc (using atlas : ^Texture2D_atlas, pixel_cnt : [2]i
 							atlas.free_quads[h] = q; //There is a bug, this does not always work? dunno why
 						}
 					}
-				}
+					if h in atlas.quads {
+						//The quad is in use.
+						//panic("TODO, we should store the space a quad have and the space it fills, also remember margin");
+					}
+				}*/
 
 				//there is enough horizontal space and so we grow!
 				row.heigth = tex_size.y;
@@ -743,7 +747,7 @@ texture2D_atlas_remove :: proc(atlas : Texture2D_atlas, handle : Atlas_handle) {
 //Retruns false if the GPU texture size limit is reached.
 texture2D_atlas_grow :: proc (atlas : ^Texture2D_atlas, loc := #caller_location) -> (success : bool) {
 
-	max_texture_size :: 10000;
+	max_texture_size :: 20000;
 
 	//fmt.printf("Growing to new size : %v, %v\n", atlas.backing.width * 2, atlas.backing.width * 2);
 
