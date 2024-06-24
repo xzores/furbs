@@ -41,7 +41,7 @@ Texture1D :: struct {
 
 @(require_results)
 texture1D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							 width : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture1D {
+							 width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture1D {
 
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -50,11 +50,11 @@ texture1D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 		format 			= internal_format,
 	};
 
-	return texture1D_make_desc(desc, width, upload_format, data, loc);
+	return texture1D_make_desc(desc, width, upload_format, data, loc = loc);
 }
 
 @(require_results)
-texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture1D {
+texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture1D {
 
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
@@ -77,7 +77,7 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 		assert(upload_format != .no_upload, "upload_format is no_upload, but there is data", loc);
 		length := int(cast(int)width * channels);
 		fmt.assertf(len(data) == length, "Data is not in the correct format, len is %i, while it should have been %i", len(data), length, loc = loc);
-		gl.write_texure_data_1D(id, 0, 0, width, upload_format, data, loc);
+		gl.write_texure_data_1D(id, 0, 0, width, upload_format, data, loc = loc);
 	}
 
 	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
@@ -216,7 +216,7 @@ texture2D_load_multi_from_file :: proc(paths : []string, desc : Texture_desc = {
 
 		if !info.failed {
 			raw_data := bytes.buffer_to_bytes(&info.img.pixels);
-			textures[i] = texture2D_make_desc(desc, info.img.width, info.img.height, .RGBA8, raw_data, loc);
+			textures[i] = texture2D_make_desc(desc, info.img.width, info.img.height, .RGBA8, raw_data, loc = loc);
 			//cleanup
 		}
 		else {
@@ -275,12 +275,13 @@ texture2D_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textur
 		texture2D_flip(raw_data, img.width, img.height, img.channels);
 	}
 
-	return texture2D_make_desc(desc, img.width, img.height, .RGBA8, raw_data, loc);
+	return texture2D_make_desc(desc, img.width, img.height, .RGBA8, raw_data, loc = loc);
 }
 
+//Clear color is only used if data is nil
 @(require_results)
 texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							#any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
+							#any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture2D {
 
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -289,11 +290,12 @@ texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 		format 			= internal_format,
 	};
 
-	return texture2D_make_desc(desc, width, height, upload_format, data, loc);
+	return texture2D_make_desc(desc, width, height, upload_format, data, clear_color, loc);
 }
 
+//Clear color is only used if data is nil
 @(require_results)
-texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture2D {
+texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture2D {
 
 	/*
 	assert(wrapmode != nil, "wrapmode is nil", loc);
@@ -314,9 +316,12 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	channels = gl.upload_format_channel_cnt(upload_format);
 
 	gl.setup_texure_2D(id, mipmaps, width, height, format);
-
+	
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
+		if cc, ok := clear_color.([4]f32); ok {
+			gl.clear_texture_2D(id, cc, upload_format, loc);
+		}
 	}
 	else {
 		assert(upload_format != .no_upload, "upload_format is no_upload, but there is data", loc);
@@ -324,11 +329,11 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 		fmt.assertf(len(data) == length, "Data is not in the correct format, len is %i, while it should have been %i", len(data), length, loc = loc);
 		gl.write_texure_data_2D(id, 0, 0, 0, width, height, upload_format, data, loc);
 	}
-	
+
 	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
 		gl.generate_mip_maps_2D(id);
 	}
-
+	
 	tex : Texture2D = {
 		id, 
 		width,
@@ -547,7 +552,7 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 	}
 
 	copy_proc : utils.Atlas_copy_proc : proc(atlas_src, atlas_dst : rawptr, src, dst, size : [2]i32) {
-		 
+
 		tex1 := cast(^Texutre2D_atlas_data)atlas_src;
 		tex2 := cast(^Texutre2D_atlas_data)atlas_dst;
 
@@ -583,7 +588,7 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 
 	data := new(Texutre2D_atlas_data);
 
-	data.backing = texture2D_make_desc(desc, init_size, init_size, upload_format, nil, loc);
+	data.backing = texture2D_make_desc(desc, init_size, init_size, upload_format, nil, loc = loc);
 	data.upload_format = upload_format;
 	data.pixels = make([]u8, init_size * init_size * cast(i32)gl.upload_format_channel_cnt(upload_format));
 	

@@ -681,26 +681,8 @@ Pixel_format_upload :: enum i32 {
 	RG32,
 	RGB32,
 	RGBA32,
-}
 
-
-@(require_results)
-construct_upload_format :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
-
-	switch f {
-		case .R8, .RG8, .RGB8, .RGBA8:
-			return .UNSIGNED_BYTE;
-		case .R16, .RG16, .RGB16, .RGBA16:
-			return .UNSIGNED_SHORT;
-		case .R32, .RG32, .RGB32, .RGBA32:
-			return .UNSIGNED_INT;
-		case .no_upload:
-			return nil;
-		case:
-			panic("Invalid format");
-	}
-
-	unreachable();
+	RGBA32_float,
 }
 
 
@@ -714,7 +696,7 @@ upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) 
 			return 2;
 		case .RGB8, .RGB16, .RGB32:
 			return 3;
-		case .RGBA8, .RGBA16, .RGBA32:
+		case .RGBA8, .RGBA16, .RGBA32, .RGBA32_float:
 			return 4;
 		case .no_upload:
 			return 0;
@@ -735,7 +717,7 @@ upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components
 			return .RG;
 		case .RGB8, .RGB16, .RGB32:
 			return .RGB;
-		case .RGBA8, .RGBA16, .RGBA32:
+		case .RGBA8, .RGBA16, .RGBA32, .RGBA32_float:
 			return .RGBA;
 		case .no_upload:
 			return nil;
@@ -756,6 +738,8 @@ upload_format_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 			return .UNSIGNED_SHORT;
 		case .R32, .RG32, .RGB32, .RGBA32:
 			return .UNSIGNED_INT;
+		case .RGBA32_float:
+			return .FLOAT;
 		case .no_upload:
 			return nil;
 		case:
@@ -774,7 +758,7 @@ upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes
 			return 1;
 		case .R16, .RG16, .RGB16, .RGBA16:
 			return 2;
-		case .R32, .RG32, .RGB32, .RGBA32:
+		case .R32, .RG32, .RGB32, .RGBA32, .RGBA32_float:
 			return 4;
 		case .no_upload:
 			return 0;
@@ -3275,9 +3259,64 @@ active_texture :: proc(slot : i32) {
 
 }
 
+//activates a texture slot and binds a the texture to that slot.
 active_bind_texture2D :: proc (tex : Tex2d_id, slot : i32) {
 	active_texture(slot);
 	bind_texture2D(tex);
+}
+
+//Clear mipmap level 0 of a texture
+//TODO this does not support integer and GL_DEPTH_COMPONENT, GL_STENCIL_INDEX, or GL_DEPTH_STENCIL textures, see https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearTexImage.xhtml
+clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, format : Pixel_format_upload, loc := #caller_location) {
+	bind_texture2D(tex); //TODO should we bind for the active texture? we could also always just use texture slot 0, but that might slower.
+	//assert(cpu_state.bound_texture[cpu_state.texture_slot] == 0, "There cannot be a bound texture, while clearing a texture", loc);
+	assert(N == upload_format_channel_cnt(format), "The clear_color does not have the same amount of channels as the format", loc);
+	
+	if cpu_state.gl_version >= .opengl_4_4 {
+		clear_color := clear_color;
+		t : gl.GLenum;
+
+		when T == i8 {
+			t = .BYTE;
+		}
+		else when T == u8 {
+			t = .UNSIGNED_BYTE;
+		}
+		else when T == i16 {
+			t = .SHORT;
+		}
+		else when T == u16 {
+			t = .UNSIGNED_SHORT;
+		}
+		else when T == i32 {
+			t = .INT;
+		}
+		else when T == u32 {
+			t = .UNSIGNED_INT;
+		}
+		else when T == f32 {
+			t = .FLOAT;
+		}
+		else {
+			#panic("Unsupported type");
+		}
+
+		gl.ClearTexImage(auto_cast tex, 0, .RGBA, t, &clear_color[0]);
+	}
+	else {
+		width, height : i32;
+		gl.GetTexLevelParameteriv(.TEXTURE_2D, 0, .TEXTURE_WIDTH, &width);
+		gl.GetTexLevelParameteriv(.TEXTURE_2D, 0, .TEXTURE_HEIGHT, &height);
+
+		pixels := make([][N]T, width * height);
+		defer delete(pixels);
+		
+		for &p in pixels {
+			p = clear_color;
+		}
+
+		write_texure_data_2D(tex, 0, 0, 0, width, height, .RGBA32_float, slice.reinterpret([]u8, pixels), loc);
+	}
 }
 
 /* TODO, allow binding many textures at a time

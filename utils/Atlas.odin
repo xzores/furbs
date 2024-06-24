@@ -282,9 +282,11 @@ atlas_shirnk :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : boo
 
 	new_atlas := atlas_make(atlas.max_texture_size, atlas.margin, atlas.size / 2, atlas.user_ptr, atlas.make_proc, atlas.swap_proc, atlas.upload_proc, atlas.copy_proc, atlas.delete_proc, atlas.erase_proc, loc);
 	new_atlas.user_ptr = atlas.make_proc(atlas.user_ptr, new_atlas.size);
-	defer atlas_destroy(new_atlas);
-
-	return atlas_transfer(atlas, &new_atlas);
+	
+	res := atlas_transfer(atlas, &new_atlas);
+	
+	atlas_destroy(new_atlas);
+	return res;
 }
 
 atlas_prune :: proc (atlas : ^Atlas, loc := #caller_location) {
@@ -354,6 +356,8 @@ atlas_transfer :: proc (atlas : ^Atlas, new_atlas : ^Atlas, loc := #caller_locat
 
 		i += 1;
 	}
+
+	assert(len(atlas.quads) == len(handles));
 
 	//The sort, it sorts from heighest to lowest quad height.
 	slice.reverse_sort_by(handles, sort_proc);
@@ -443,6 +447,9 @@ atlas_transfer :: proc (atlas : ^Atlas, new_atlas : ^Atlas, loc := #caller_locat
 	//TODO currently a the copies happens in small seqments, one for each quad. If a CPU side texture is used, then it would require a lot of  small copies. 
 	//A optimization can be made here as upload_data could be called here, this is not the copy, but the thing that states, please upload now.
 	atlas.upload_proc(atlas.user_ptr, {0,0, atlas.size, current_y_offset + atlas.rows[current_row].heigth}, nil);	//Nil means, there is just the copied data. No user data.
+
+	assert(len(atlas.free_quads) == 0, "internal error");
+	assert(len(new_atlas.quads) == len(atlas.quads), "internal error");
 
 	return true;
 }
