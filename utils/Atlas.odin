@@ -43,17 +43,16 @@ Altas_row :: struct {
 	y_offset : i32,
 }
 
-Atlas_make_from_proc :: #type proc(atlas_src : rawptr, new_size : i32) -> (new_ptr : rawptr);
-Atlas_swap_proc :: #type proc(atlas_src, atlas_dst : rawptr);
-Atlas_upload_proc :: #type proc(atlas : rawptr, quad : [4]i32, user_data : any);
-Atlas_copy_proc :: #type proc(atlas_src, atlas_dst : rawptr, src, dst, size : [2]i32);
-Atlas_delete_proc :: #type proc(atlas : rawptr);
-Atlas_erase_proc :: #type proc(atlas_src : rawptr, dst, size : [2]i32);
+Atlas_init_proc :: #type proc(new_data : ^$T, new_size : i32);
+Atlas_upload_proc :: #type proc(atlas : Atlas($T), quad : [4]i32);
+Atlas_copy_proc :: #type proc(atlas_src, atlas_dst : Atlas($T), src, dst, size : [2]i32);
+Atlas_delete_proc :: #type proc(atlas : Atlas($T));
+Atlas_erase_proc :: #type proc(atlas_src : Atlas($T), dst, size : [2]i32);
 
 //Uses a modified strip packing, it is quite fast as it gets and the packing ratio is good for similar sized rectangles. 
 //It might not work well for very large differences in quad sizes.
 //Singled threaded
-Atlas :: struct {
+Atlas :: struct(T : typeid) {
 	atlas_handle_counter : Atlas_handle,
 	margin : i32,
 
@@ -63,20 +62,20 @@ Atlas :: struct {
 
 	size : i32,
 	max_texture_size : i32,
-	user_ptr : rawptr,
+	user_data : T,
 
 	//procs
-	make_proc : Atlas_make_from_proc,
-	swap_proc : Atlas_swap_proc,
+	make_proc : Atlas_init_proc,
 	upload_proc : Atlas_upload_proc,
 	copy_proc : Atlas_copy_proc,
 	delete_proc : Atlas_delete_proc,
 	erase_proc : Atlas_erase_proc,
 }
 
+
 //TODO make margins work.
-atlas_make :: proc (#any_int max_texture_size : i32, #any_int margin : i32, init_size : i32, user_ptr : rawptr, make_proc : Atlas_make_from_proc, swap_proc : Atlas_swap_proc,
-						upload_proc : Atlas_upload_proc, copy_proc : Atlas_copy_proc, delete_proc : Atlas_delete_proc, erase_proc : Atlas_erase_proc, loc := #caller_location) -> (atlas : Atlas) {
+atlas_make :: proc (T : typeid, #any_int max_texture_size : i32, #any_int margin : i32, init_size : i32, user_ptr : rawptr, make_proc : Atlas_make_from_proc, swap_proc : Atlas_swap_proc,
+						upload_proc : Atlas_upload_proc, copy_proc : Atlas_copy_proc, delete_proc : Atlas_delete_proc, erase_proc : Atlas_erase_proc, loc := #caller_location) -> (atlas : Atlas(T)) {
 	
 	atlas = {
 		atlas_handle_counter = 0,
