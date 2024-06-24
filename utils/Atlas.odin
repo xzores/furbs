@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:mem"
 import "core:math"
 import "core:slice"
+import "core:container/queue"
 
 //Pixel_count the amout of pixels to be copied
 //dst_offset is how far to offset the into the dst texture 
@@ -32,8 +33,6 @@ copy_pixels :: proc (#any_int channel_width, src_width, src_height, src_offset_x
     }
 }
 
-
-
 //Refers to a quad in the atlas, there are returned from atlas_upload
 Atlas_handle :: distinct i32;
 
@@ -49,6 +48,7 @@ Atlas_swap_proc :: #type proc(atlas_src, atlas_dst : rawptr);
 Atlas_upload_proc :: #type proc(atlas : rawptr, quad : [4]i32, user_data : any);
 Atlas_copy_proc :: #type proc(atlas_src, atlas_dst : rawptr, src, dst, size : [2]i32);
 Atlas_delete_proc :: #type proc(atlas : rawptr);
+Atlas_erase_proc :: #type proc(atlas_src : rawptr, dst, size : [2]i32);
 
 //Uses a modified strip packing, it is quite fast as it gets and the packing ratio is good for similar sized rectangles. 
 //It might not work well for very large differences in quad sizes.
@@ -71,10 +71,12 @@ Atlas :: struct {
 	upload_proc : Atlas_upload_proc,
 	copy_proc : Atlas_copy_proc,
 	delete_proc : Atlas_delete_proc,
+	erase_proc : Atlas_erase_proc,
 }
 
+//TODO make margins work.
 atlas_make :: proc (#any_int max_texture_size : i32, #any_int margin : i32, init_size : i32, user_ptr : rawptr, make_proc : Atlas_make_from_proc, swap_proc : Atlas_swap_proc,
-						upload_proc : Atlas_upload_proc, copy_proc : Atlas_copy_proc, delete_proc : Atlas_delete_proc, loc := #caller_location) -> (atlas : Atlas) {
+						upload_proc : Atlas_upload_proc, copy_proc : Atlas_copy_proc, delete_proc : Atlas_delete_proc, erase_proc : Atlas_erase_proc, loc := #caller_location) -> (atlas : Atlas) {
 	
 	atlas = {
 		atlas_handle_counter = 0,
@@ -93,6 +95,7 @@ atlas_make :: proc (#any_int max_texture_size : i32, #any_int margin : i32, init
 		upload_proc = upload_proc,
 		copy_proc = copy_proc,
 		delete_proc = delete_proc,
+		erase_proc = erase_proc,
 	}
 
 	return;
@@ -240,9 +243,15 @@ atlas_get_coords :: proc (atlas : Atlas, handle : Atlas_handle) -> [4]i32 {
 	return atlas.quads[handle] / atlas.size;
 }
 
-atlas_remove :: proc(atlas : ^Atlas, handle : Atlas_handle) {
-	//TODO add a list of deleted quads and then try those before increasing the row widht/height.
-	atlas.free_quads[handle] = atlas.quads[handle];
+atlas_remove :: proc(atlas : ^Atlas, handle : Atlas_handle, loc := #caller_location) {
+	fmt.assertf(handle in atlas.quads, "the handle %v is invalid", handle, loc = loc);
+
+	quad := atlas.quads[handle];
+	assert(quad.z != 0, "width is zero, internal error", loc);
+	assert(quad.w != 0, "heigth is zero, internal error", loc);
+	atlas.erase_proc(atlas.user_ptr, quad.xy, quad.zw);
+	
+	atlas.free_quads[handle] = quad;
 	delete_key(&atlas.quads, handle);
 }
 
@@ -254,7 +263,56 @@ atlas_grow :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : bool)
 	if atlas.size * 2 > atlas.max_texture_size {
 		return false;
 	}
+	
+	//Make a new teature atlas
+	new_atlas := atlas_make(atlas.max_texture_size, atlas.margin, atlas.size * 2, atlas.user_ptr, atlas.make_proc, atlas.swap_proc, atlas.upload_proc, atlas.copy_proc, atlas.delete_proc, atlas.erase_proc, loc);
+	new_atlas.user_ptr = atlas.make_proc(atlas.user_ptr, new_atlas.size);
+	
+	atlas_transfer(atlas, &new_atlas);
 
+	//Destroy the old atlas
+	atlas_destroy(new_atlas);
+
+	return true;
+}
+
+//Will try and shrink the atlas to half the size, returns true if success, returns false if it could not shrink.
+//To shrink as much as possiable do "for atlas_shirnk(atlas) {};"
+atlas_shirnk :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : bool) {
+
+	new_atlas := atlas_make(atlas.max_texture_size, atlas.margin, atlas.size / 2, atlas.user_ptr, atlas.make_proc, atlas.swap_proc, atlas.upload_proc, atlas.copy_proc, atlas.delete_proc, atlas.erase_proc, loc);
+	new_atlas.user_ptr = atlas.make_proc(atlas.user_ptr, new_atlas.size);
+	defer atlas_destroy(new_atlas);
+
+	return atlas_transfer(atlas, &new_atlas);
+}
+
+atlas_prune :: proc (atlas : ^Atlas, loc := #caller_location) {
+	
+	//Make a new teature atlas
+	new_atlas := atlas_make(atlas.max_texture_size, atlas.margin, atlas.size, atlas.user_ptr, atlas.make_proc, atlas.swap_proc, atlas.upload_proc, atlas.copy_proc, atlas.delete_proc, atlas.erase_proc, loc);
+	new_atlas.user_ptr = atlas.make_proc(atlas.user_ptr, new_atlas.size);
+	
+	atlas_transfer(atlas, &new_atlas);
+
+	//Destroy the old atlas
+	atlas_destroy(new_atlas);
+}
+
+atlas_destroy :: proc (using atlas : Atlas) {
+
+	atlas.delete_proc(atlas.user_ptr);
+
+	delete(rows);
+	delete(quads);
+	delete(free_quads);
+}
+
+
+//Used internally
+@(private="file")
+atlas_transfer :: proc (atlas : ^Atlas, new_atlas : ^Atlas, loc := #caller_location) -> bool {
+	
 	//Sort the old data, so we know the best order to add them in (this would be heighest to lowest)
 	Handle :: struct {
 		handle : Atlas_handle,
@@ -270,6 +328,19 @@ atlas_grow :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : bool)
 	handles := make([]Handle, len(atlas.quads));
 	defer delete(handles);
 	
+	//because it prune might fail, an optimization is done
+	//This will make it so that it does not try to copy all the rects and then give up.
+	//instead it will make sure there is space and then begin the copies.
+	Copy_command :: struct {
+		old_user_ptr : rawptr,
+		new_user_ptr : rawptr, 
+		src_offset : [2]i32, 
+		current_offset : [2]i32,
+		quad : [2]i32,
+	}
+	copy_command_queue : queue.Queue(Copy_command); queue.init(&copy_command_queue);
+	defer queue.destroy(&copy_command_queue);
+
 	i : int = 0;
 
 	//Now we add the values that needs to be sorted.
@@ -286,11 +357,7 @@ atlas_grow :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : bool)
 
 	//The sort, it sorts from heighest to lowest quad height.
 	slice.reverse_sort_by(handles, sort_proc);
-	
-	//Make a new teature atlas
-	new_atlas := atlas_make(atlas.max_texture_size, atlas.margin, atlas.size * 2, atlas.user_ptr, atlas.make_proc, atlas.swap_proc, atlas.upload_proc, atlas.copy_proc, atlas.delete_proc, loc);
-	new_atlas.user_ptr = atlas.make_proc(atlas.user_ptr, new_atlas.size);
-	
+
 	current_row := 0;
 	current_y_offset : i32 = 0;
 	current_x_offset : i32 = 0;
@@ -310,7 +377,8 @@ atlas_grow :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : bool)
 			y_offset = 0,
 		});
 	}
-
+	
+	new_atlas.atlas_handle_counter = atlas.atlas_handle_counter;
 	//Now add the old quads to the new atlas in the right order.
 	for h in handles {
 
@@ -342,8 +410,7 @@ atlas_grow :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : bool)
 		row.width += q.x;
 
 		//The handle is added to the new atlas
-		new_atlas.atlas_handle_counter += 1;
-		new_atlas.quads[new_atlas.atlas_handle_counter] = [4]i32{
+		new_atlas.quads[h.handle] = [4]i32{
 			current_x_offset,
 			current_y_offset,
 			q.x,
@@ -352,20 +419,25 @@ atlas_grow :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : bool)
 		
 		src_offset := quad.xy;
 		
-		atlas.copy_proc(atlas.user_ptr, new_atlas.user_ptr, src_offset, {current_x_offset, current_y_offset}, {q.x, q.y});
-		
+		if current_y_offset + q.y > new_atlas.size {
+			return false; //Prune failed to optimize or shrink failed to shrink, meaning we do nothing.
+		}
+		queue.append(&copy_command_queue, Copy_command{atlas.user_ptr, new_atlas.user_ptr, src_offset, {current_x_offset, current_y_offset}, {q.x, q.y}});
+
 		current_x_offset += q.x
 	}
 	
-	//Swap the old and new atlas's
-	atlas^, new_atlas = new_atlas, atlas^;
+	for queue.len(copy_command_queue) != 0 {
+		e := queue.pop_front(&copy_command_queue);
+		atlas.copy_proc(e.old_user_ptr, e.new_user_ptr, e.src_offset, e.current_offset, e.quad);
+	}
 
+	//Swap the old and new atlas's
+	atlas^, new_atlas^ = new_atlas^, atlas^;
+	
 	//Ok, so because the pointer should be valid until program termination (as we do not own the pointer)
 	atlas.user_ptr, new_atlas.user_ptr = new_atlas.user_ptr, atlas.user_ptr;
 	atlas.swap_proc(atlas.user_ptr, new_atlas.user_ptr)
-
-	//Destroy the old atlas
-	atlas_destroy(new_atlas);
 
 	//Upload the initial data.
 	//TODO currently a the copies happens in small seqments, one for each quad. If a CPU side texture is used, then it would require a lot of  small copies. 
@@ -373,26 +445,4 @@ atlas_grow :: proc (atlas : ^Atlas, loc := #caller_location) -> (success : bool)
 	atlas.upload_proc(atlas.user_ptr, {0,0, atlas.size, current_y_offset + atlas.rows[current_row].heigth}, nil);	//Nil means, there is just the copied data. No user data.
 
 	return true;
-}
-
-//Will try and shrink the atlas to half the size, returns true if success, returns false if it could not shrink.
-//To shrink as much as possiable do "for atlas_shirnk(atlas) {};"
-atlas_shirnk :: proc (atlas : ^Atlas) -> (success : bool) {
-
-	//TODO
-
-	return false;
-}
-
-atlas_prune :: proc (atlas : ^Atlas) -> (success : bool) {
-	
-}
-
-atlas_destroy :: proc (using atlas : Atlas) {
-
-	atlas.delete_proc(atlas.user_ptr);
-
-	delete(rows);
-	delete(quads);
-	delete(free_quads);
 }

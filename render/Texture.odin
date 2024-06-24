@@ -547,12 +547,12 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 	}
 
 	copy_proc : utils.Atlas_copy_proc : proc(atlas_src, atlas_dst : rawptr, src, dst, size : [2]i32) {
-		
+		 
 		tex1 := cast(^Texutre2D_atlas_data)atlas_src;
 		tex2 := cast(^Texutre2D_atlas_data)atlas_dst;
 
 		assert(tex1.upload_format == tex2.upload_format);
-
+		
 		utils.copy_pixels(gl.upload_format_channel_cnt(tex1.upload_format), tex1.backing.width, tex1.backing.height, src.x, src.y, tex1.pixels,
 							tex2.backing.width, tex2.backing.height, dst.x, dst.y, tex2.pixels, size.x, size.y);
 		
@@ -561,10 +561,24 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 	}
 
 	delete_proc : utils.Atlas_delete_proc : proc(atlas : rawptr) {
+		assert(atlas != nil);
 		tex := cast(^Texutre2D_atlas_data)atlas;
 		texture2D_destroy(tex.backing);
 		delete(tex.pixels);
 		free(tex);
+	}
+
+	erase_proc : utils.Atlas_erase_proc : proc(atlas : rawptr, dst, size : [2]i32) {
+		tex := cast(^Texutre2D_atlas_data)atlas;
+		
+		erase_data : []u8 = make([]u8, size.x * size.y * cast(i32)gl.upload_format_channel_cnt(tex.upload_format));
+		defer delete(erase_data);
+
+		for d, i in erase_data {
+			erase_data[i] = 0;
+		}
+		
+		texture2D_upload_data(&tex.backing, tex.upload_format, dst, size, erase_data);
 	}
 
 	data := new(Texutre2D_atlas_data);
@@ -575,7 +589,7 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 	
 	atlas = Texture2D_atlas{
 		data = data,
-		impl = utils.atlas_make(10000, margin, init_size, data, make_proc, swap_proc, upload_proc, copy_proc, delete_proc, loc),
+		impl = utils.atlas_make(10000, margin, init_size, data, make_proc, swap_proc, upload_proc, copy_proc, delete_proc, erase_proc, loc),
 	}
 
 	return;
@@ -587,7 +601,14 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 @(require_results)
 texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_handle, success : bool) {
 	fmt.assertf(cast(i32)len(data) == cast(i32)gl.upload_format_channel_cnt(atlas.upload_format) * pixel_cnt.x * pixel_cnt.y, "upload size must match, data len : %v, but size resulted in %v", len(data), pixel_cnt.x * pixel_cnt.y * 4, loc = loc);
-	return utils.atlas_upload(&atlas.impl, pixel_cnt, data, loc);
+	handle, success = utils.atlas_upload(&atlas.impl, pixel_cnt, data, loc);
+	
+	if !success { //if we fail, we prune and try again.
+		utils.atlas_prune(&atlas.impl);
+		handle, success = utils.atlas_upload(&atlas.impl, pixel_cnt, data, loc);
+	}
+	
+	return handle, success;
 }
 
 //Returns the texture coordinates in (0,0) -> (1,1) coordinates. 

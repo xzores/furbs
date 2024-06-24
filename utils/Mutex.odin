@@ -4,6 +4,12 @@ import "core:fmt"
 import "core:sync"
 import "core:runtime"
 
+
+/*
+
+TRACY_ENABLE 	:: #config(ODIN_DEBUG, false);
+LOCK_DEBUG 		:: #config(ODIN_DEBUG, true);
+
 when LOCK_DEBUG || TRACY_ENABLE {
 
 	Mutex :: struct #no_copy {
@@ -146,3 +152,5 @@ else {
 	lock_read :: sync.rw_mutex_shared_lock;
 	unlock_read :: sync.rw_mutex_shared_unlock;
 }
+
+*/

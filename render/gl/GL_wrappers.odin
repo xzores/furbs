@@ -3112,7 +3112,7 @@ delete_texture2D :: proc (texture : Tex2d_id, loc := #caller_location) {
 }
 
 bind_texture2D :: proc(tex : Tex2d_id, loc := #caller_location) {
-	
+
 	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 	
 	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
@@ -3120,8 +3120,8 @@ bind_texture2D :: proc(tex : Tex2d_id, loc := #caller_location) {
 	}
 	
 	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
-
-	gl.BindTexture(.TEXTURE_2D, auto_cast tex);
+	
+	gl.BindTexture(.TEXTURE_2D, cast(gl.GLuint)tex);
 	
 }
 

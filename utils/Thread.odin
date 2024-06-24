@@ -6,6 +6,8 @@ import "core:runtime"
 import "core:sync"
 import base_thread "core:thread"
 
+MEM_DEBUG 		:: #config(ODIN_DEBUG, false);
+
 Thread_Priority :: base_thread.Thread_Priority;
 
 Thread_Proc :: #type proc(^Thread);
