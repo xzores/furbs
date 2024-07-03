@@ -64,7 +64,7 @@ Atlas :: struct {
 	size : i32,
 	max_texture_size : i32,
 	user_ptr : rawptr,
-
+	
 	//procs
 	make_proc : Atlas_make_from_proc,
 	swap_proc : Atlas_swap_proc,
@@ -106,7 +106,7 @@ atlas_make :: proc (#any_int max_texture_size : i32, #any_int margin : i32, init
 @(require_results)
 atlas_upload :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, user_data : any, loc := #caller_location) -> (handle : Atlas_handle, success : bool) {
 
-	tex_size := pixel_cnt + 2 * [2]i32{atlas.margin, atlas.margin};
+	tex_size := pixel_cnt + 2 * [2]i32{atlas.margin, atlas.margin}
 
 	//If the texture is not big enough, then we double and try again.
 	if tex_size.x > atlas.size || tex_size.x > atlas.size {
@@ -196,7 +196,7 @@ atlas_upload :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, user_data : any,
 			else {
 				//There was not enough horizontal space, try to make a new row.
 				append(&rows, Altas_row{0, 0, row.y_offset + row.heigth});
-				return atlas_upload(atlas, tex_size, user_data, loc);
+				return atlas_upload(atlas, pixel_cnt, user_data, loc);
 			}
 		}
 	}
@@ -207,15 +207,13 @@ atlas_upload :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, user_data : any,
 		if !growed {
 			return -1, false;
 		}
-		return atlas_upload(atlas, tex_size, user_data, loc);
+		return atlas_upload(atlas, pixel_cnt, user_data, loc);
 	}
 	else {
 		//A placement was found.
-		pixels_offset : [2]i32 = {rows[min_row_index].width + margin, rows[min_row_index].y_offset + margin};
-
 		quad := [4]i32{
-			rows[min_row_index].width + margin,		//X_pos
-			rows[min_row_index].y_offset + margin,	//Y_pos
+			rows[min_row_index].width,		//X_pos
+			rows[min_row_index].y_offset,	//Y_pos
 			pixel_cnt.x, 							//Width (x_size)
 			pixel_cnt.y								//Heigth (y_size)
 		};
@@ -310,7 +308,6 @@ atlas_destroy :: proc (using atlas : Atlas) {
 	delete(free_quads);
 }
 
-
 //Used internally
 @(private="file")
 atlas_transfer :: proc (atlas : ^Atlas, new_atlas : ^Atlas, loc := #caller_location) -> bool {
@@ -372,7 +369,7 @@ atlas_transfer :: proc (atlas : ^Atlas, new_atlas : ^Atlas, loc := #caller_locat
 		h : i32 = 0;
 		
 		if len(handles) != 0 {
-			h = handles[0].heigth;
+			h = handles[0].heigth + 2 * atlas.margin;
 		}
 
 		append(&new_atlas.rows, Altas_row{
@@ -387,7 +384,7 @@ atlas_transfer :: proc (atlas : ^Atlas, new_atlas : ^Atlas, loc := #caller_locat
 	for h in handles {
 
 		quad := atlas.quads[h.handle];
-		q := quad.zw + (2 * [2]i32{atlas.margin, atlas.margin});
+		q := quad.zw + 2 * [2]i32{atlas.margin, atlas.margin};
 		
 		//Because we sort from heigst to lowest, we can just append to each row.
 		//when the end of the row is reached, we make a new row. There will always be space enough.
@@ -433,6 +430,7 @@ atlas_transfer :: proc (atlas : ^Atlas, new_atlas : ^Atlas, loc := #caller_locat
 	
 	for queue.len(copy_command_queue) != 0 {
 		e := queue.pop_front(&copy_command_queue);
+		fmt.assertf(e.quad.x + e.src_offset.x <= new_atlas.size, "width is too great : %#v", e);
 		atlas.copy_proc(e.old_user_ptr, e.new_user_ptr, e.src_offset, e.current_offset, e.quad);
 	}
 

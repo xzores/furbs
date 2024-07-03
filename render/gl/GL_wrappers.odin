@@ -3319,6 +3319,16 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, format : Pixel_f
 	}
 }
 
+//TODO move up to 1D stuff
+clear_texture_1D :: proc (tex : Tex1d_id, clear_color : [$N]$T, format : Pixel_format_upload, loc := #caller_location) {
+	panic("TODO");
+}
+
+//TODO move down to 3d stuff
+clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [$N]$T, format : Pixel_format_upload, loc := #caller_location) {
+	panic("TODO");
+}
+
 /* TODO, allow binding many textures at a time
 active_bind_texture2Ds :: proc (tex : []struct{Tex2d_id, slot : u32}) {
 	panic("TODO");

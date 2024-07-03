@@ -66,7 +66,7 @@ load_all_as_json :: proc($T : typeid, directory_path : string, extension : strin
 
 	full_ex := fmt.tprintf(".%s", extension);
 
-		res = make(map[string]T);
+	res = make(map[string]T);
 
 	for fi in files_info {
 		

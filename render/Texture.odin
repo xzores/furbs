@@ -72,6 +72,9 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
+		if cc, ok := clear_color.([4]f32); ok {
+			gl.clear_texture_1D(id, cc, upload_format, loc);
+		}
 	}
 	else {
 		assert(upload_format != .no_upload, "upload_format is no_upload, but there is data", loc);
@@ -420,7 +423,7 @@ Texture3D :: struct {
 
 @(require_results)
 texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture3D {
+							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture3D {
 
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -429,17 +432,17 @@ texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 		format 			= internal_format,
 	};
 
-	return texture3D_make_desc(desc, width, height, depth, upload_format, data, loc);
+	return texture3D_make_desc(desc, width, height, depth, upload_format, data, clear_color, loc);
 }
 
 @(require_results)
-texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) -> Texture3D {
+texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture3D {
 
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
 	id : gl.Tex3d_id = gl.gen_texture3D(loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
-
+	
     gl.wrapmode_texture3D(id, desc.wrapmode);
 	gl.filtermode_texture3D(id, desc.filtermode, mipmaps);
 	
@@ -451,12 +454,15 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
+		if cc, ok := clear_color.([4]f32); ok {
+			gl.clear_texture_3D(id, cc, upload_format, loc);
+		}
 	}
 	else {
 		assert(upload_format != .no_upload, "upload_format is no_upload, but there is data", loc);
 		length := int(cast(int)width * channels);
 		fmt.assertf(len(data) == length, "Data is not in the correct format, len is %i, while it should have been %i", len(data), length, loc = loc);
-		gl.write_texure_data_3D(id, 0, 0, 0, 0, width, height, depth, upload_format, data, loc);
+		gl.write_texure_data_3D(id, 0, 0, 0, 0, width, height, depth, upload_format, data, loc = loc);
 	}
 
 	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
@@ -541,6 +547,8 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 			fmt.assertf(tex.backing.width >= quad.x + quad.z, "Tex out of bounds, width : %v, quad x pos: %v, quad width : %v", tex.backing.width, quad.x, quad.z);
 			fmt.assertf(tex.backing.height >= quad.y + quad.w, "Tex out of bounds, height : %v, quad y pos: %v, quad height : %v", tex.backing.height, quad.y, quad.w);
 			texture2D_upload_data(&tex.backing, tex.upload_format, quad.xy, quad.zw, v);
+
+			//TODO make it not store pixels client side and just do an GPU-GPU copy.
 			utils.copy_pixels(gl.upload_format_channel_cnt(tex.upload_format), quad.z, quad.w, 0, 0, v, tex.backing.width, tex.backing.height, quad.x, quad.y, tex.pixels, quad.z, quad.w);
 		}
 		else if user_data == nil {
@@ -558,6 +566,7 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 
 		assert(tex1.upload_format == tex2.upload_format);
 		
+		//TODO make it not store pixels client side and just do an GPU-GPU copy.
 		utils.copy_pixels(gl.upload_format_channel_cnt(tex1.upload_format), tex1.backing.width, tex1.backing.height, src.x, src.y, tex1.pixels,
 							tex2.backing.width, tex2.backing.height, dst.x, dst.y, tex2.pixels, size.x, size.y);
 		
