@@ -499,6 +499,9 @@ texture3D_upload_data :: proc(tex : ^Texture3D, pixel_offset : [3]i32, pixel_cnt
 //Refers to a quad in the atlas, there are returned from texture2D_atlas_upload
 Atlas_handle :: utils.Atlas_handle;
 
+//Refers to a quad in the atlas, there are returned from atlas_upload
+Atlas_handle :: distinct i32;
+
 @(private="file")
 Texutre2D_atlas_data :: struct {
 	backing : Texture2D,
@@ -512,6 +515,13 @@ Texutre2D_atlas_data :: struct {
 Texture2D_atlas :: struct {
 	impl : utils.Atlas,
 	using data : ^Texutre2D_atlas_data,
+}
+
+//internal use
+Altas_row :: struct {
+	heigth : i32,
+	width : i32,
+	y_offset : i32,
 }
 
 texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Texture_desc = {.clamp_to_edge, .linear, false, .RGBA8},
@@ -574,14 +584,6 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 		//texture2D_upload_data(&tex2.backing, tex2.upload_format, dst, size, tex2.pixels);
 	}
 
-	delete_proc : utils.Atlas_delete_proc : proc(atlas : rawptr) {
-		assert(atlas != nil);
-		tex := cast(^Texutre2D_atlas_data)atlas;
-		texture2D_destroy(tex.backing);
-		delete(tex.pixels);
-		free(tex);
-	}
-
 	erase_proc : utils.Atlas_erase_proc : proc(atlas : rawptr, dst, size : [2]i32) {
 		tex := cast(^Texutre2D_atlas_data)atlas;
 		
@@ -615,11 +617,144 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 @(require_results)
 texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_handle, success : bool) {
 	fmt.assertf(cast(i32)len(data) == cast(i32)gl.upload_format_channel_cnt(atlas.upload_format) * pixel_cnt.x * pixel_cnt.y, "upload size must match, data len : %v, but size resulted in %v", len(data), pixel_cnt.x * pixel_cnt.y * 4, loc = loc);
-	handle, success = utils.atlas_upload(&atlas.impl, pixel_cnt, data, loc);
+	
+	//Uploads a texture into the atlas and returns a handle.
+	//Success may return false if the GPU texture size limit is reached.
+	@(require_results)
+	atlas_upload_internal :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, user_data : any, loc := #caller_location) -> (handle : Atlas_handle, success : bool) {
+
+		tex_size := pixel_cnt + 2 * [2]i32{atlas.margin, atlas.margin}
+
+		//If the texture is not big enough, then we double and try again.
+		if tex_size.x > atlas.size || tex_size.x > atlas.size {
+			growed := atlas_grow(atlas);
+			if !growed {
+				return -1, false;
+			}
+			return atlas_upload_internal(atlas, tex_size, user_data, loc);
+		}
+		//At this point the texture is big enough, but there might still not be space because if the other rects.
+		
+		//We will check if an unused placement is sutiable, and if it is we will use that first.
+		{
+			found_area : i32 = max(i32);
+			handle : Atlas_handle = -1;
+			
+			for k, q in free_quads {
+				//r := atlas.rows[v.row];
+				//q := [4]i32{v.x_offset, r.y_offset, v.width, r.heigth};
+				if q.z >= tex_size.x && q.w >= tex_size.y {
+					if (q.z * q.w) <= found_area {
+						handle = k;
+						found_area = q.z * q.w;
+					}
+				}
+			}
+			if handle != -1 {
+				//We found a unused quad, now we make a handle for it and return that.
+				//v := free_quads[handle];
+				//r := atlas.rows[v.row];
+				//quad := [4]i32{v.x_offset, r.y_offset, v.width, r.heigth};
+				quad := free_quads[handle];
+				quad.zw = pixel_cnt;
+
+				quads[handle] = quad; //Create the quad reference
+
+				//remove the quad from free quads, as it is now not free
+				delete_key(&free_quads, handle);
+
+				//Upload/copy data into texture
+				atlas.upload_proc(atlas.user_ptr, quad, user_data);
+
+				return handle, true; //We have already found a good solution!
+			}
+		}
+
+		//Followingly we will find the row with the lowest (height) that can accomedate the texture.
+		min_row_index : int = -1;
+		min_row_heigth : i32 = max(i32);
+
+		//linear search though all rows.
+		for r, i in rows {
+
+			if r.heigth >= tex_size.y && r.heigth < min_row_heigth {
+				//there is enough vertical space, but is there enough horizontal space
+
+				if atlas.size - r.width >= tex_size.x {
+					//There is enough space and we can use this row.
+					min_row_index = i;
+					min_row_heigth = r.heigth;
+				}
+			}
+		}
+		
+		//If there is no rows add an empty row. This will make sure not to go out of bounds in the next step.
+		if len(rows) == 0 {
+			append(&rows, Altas_row{0, 0, 0});
+		}
+		
+		if min_row_index == -1 {
+			
+			//We did not find a row, check if we can grow the last row, if not grow texture.
+			row := rows[len(rows)-1];
+			
+			if size - row.y_offset >= tex_size.y {
+				
+				//We can grow the last row!
+				
+				//Now We want to check if we have enough horizontal space if we grow the last row.
+				if size - row.width >= tex_size.x {
+
+					//there is enough horizontal space and so we grow!
+					row.heigth = tex_size.y;
+					min_row_index = len(rows)-1;
+					min_row_heigth = row.heigth;
+				}
+				else {
+					//There was not enough horizontal space, try to make a new row.
+					append(&rows, Altas_row{0, 0, row.y_offset + row.heigth});
+					return atlas_upload_internal(atlas, pixel_cnt, user_data, loc);
+				}
+			}
+		}
+
+		if min_row_index == -1 {
+			//No placement has been found and the texture must be grown and we try again.
+			growed := atlas_grow(atlas);
+			if !growed {
+				return -1, false;
+			}
+			return atlas_upload_internal(atlas, pixel_cnt, user_data, loc);
+		}
+		else {
+			//A placement was found.
+			quad := [4]i32{
+				rows[min_row_index].width,		//X_pos
+				rows[min_row_index].y_offset,	//Y_pos
+				pixel_cnt.x, 							//Width (x_size)
+				pixel_cnt.y								//Heigth (y_size)
+			};
+			
+			rows[min_row_index].heigth = math.max(rows[min_row_index].heigth, tex_size.y); //increase the row heigth to this quads hight, if it is bigger.
+			rows[min_row_index].width += tex_size.x; //incease the width by the size of the sub-texture.
+			
+			atlas_handle_counter += 1;
+			quads[atlas_handle_counter] = quad; //Create the quad 1 reference
+
+			//Upload
+			atlas.upload_proc(atlas.user_ptr, quad, user_data);
+			
+			return atlas_handle_counter, true;
+		}
+
+		unreachable();
+	}	
+	
+	handle, success = utils.atlas_upload_internal(&atlas.impl, pixel_cnt, data, loc);
 	
 	if !success { //if we fail, we prune and try again.
 		utils.atlas_prune(&atlas.impl);
-		handle, success = utils.atlas_upload(&atlas.impl, pixel_cnt, data, loc);
+		handle, success = utils.atlasatlas_upload_internal_upload(&atlas.impl, pixel_cnt, data, loc);
 	}
 	
 	return handle, success;
@@ -630,30 +765,225 @@ texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, da
 //resized refers to texture2D_atlas_shirnk, texture2D_atlas_grow and texture2D_atlas_upload.
 @(require_results)
 texture2D_atlas_get_coords :: proc (atlas : Texture2D_atlas, handle : Atlas_handle) -> [4]i32 {
-	return utils.atlas_get_coords(atlas.impl, handle);
+	return atlas.quads[handle] / atlas.size;
 }
 
 texture2D_atlas_remove :: proc(atlas : ^Texture2D_atlas, handle : Atlas_handle) {
 	//TODO add a list of deleted quads and then try those before increasing the row widht/height.
-	utils.atlas_remove(&atlas.impl, handle);
+	fmt.assertf(handle in atlas.quads, "the handle %v is invalid", handle, loc = loc);
+
+	quad := atlas.quads[handle];
+	assert(quad.z != 0, "width is zero, internal error", loc);
+	assert(quad.w != 0, "heigth is zero, internal error", loc);
+	atlas.erase_proc(atlas.user_ptr, quad.xy, quad.zw);
+	
+	atlas.free_quads[handle] = quad;
+	delete_key(&atlas.quads, handle);
 }
 
 //Will double the size (in each dimension) of the atlas, the old rects will be repacked in a smart way to increase the packing ratio.
 //Retruns false if the GPU texture size limit is reached.
 texture2D_atlas_grow :: proc (atlas : ^Texture2D_atlas, loc := #caller_location) -> (success : bool) {
-	return utils.atlas_grow(&atlas.impl);
+	//Check if there is space on the GPU.
+	if atlas.size * 2 > atlas.max_texture_size {
+		return false;
+	}
+	
+	//Make a new teature atlas
+	new_atlas := atlas_make(atlas.max_texture_size, atlas.margin, atlas.size * 2, atlas.user_ptr, atlas.make_proc, atlas.swap_proc, atlas.upload_proc, atlas.copy_proc, atlas.delete_proc, atlas.erase_proc, loc);
+	new_atlas.user_ptr = atlas.make_proc(atlas.user_ptr, new_atlas.size);
+	
+	atlas_transfer(atlas, &new_atlas);
+
+	//Destroy the old atlas
+	atlas_destroy(new_atlas);
+
+	return true;
 }
 
 //Will try and shrink the atlas to half the size, returns true if success, returns false if it could not shrink.
 //To shrink as much as possiable do "for texture2D_atlas_shirnk(atlas) {};"
 texture2D_atlas_shirnk :: proc (atlas : ^Texture2D_atlas) -> (success : bool) {
-	return utils.atlas_shirnk(&atlas.impl);
+	new_atlas := atlas_make(atlas.max_texture_size, atlas.margin, atlas.size / 2, atlas.user_ptr, atlas.make_proc, atlas.swap_proc, atlas.upload_proc, atlas.copy_proc, atlas.delete_proc, atlas.erase_proc, loc);
+	new_atlas.user_ptr = atlas.make_proc(atlas.user_ptr, new_atlas.size);
+	
+	res := atlas_transfer(atlas, &new_atlas);
+	
+	atlas_destroy(new_atlas);
+	return res;
 }
 
-texture2D_atlas_destroy :: proc (using atlas : Texture2D_atlas) {
-	utils.atlas_destroy(atlas.impl);
-	texture2D_destroy(atlas.backing);
+//Will remake the texture to be tighter packed.
+texture2D_atlas_prune :: proc (atlas : ^Texture2D_atlas) {
+	//Make a new teature atlas
+	new_atlas := atlas_make(atlas.max_texture_size, atlas.margin, atlas.size, atlas.user_ptr, atlas.make_proc, atlas.swap_proc, atlas.upload_proc, atlas.copy_proc, atlas.delete_proc, atlas.erase_proc, loc);
+	new_atlas.user_ptr = atlas.make_proc(atlas.user_ptr, new_atlas.size);
+	
+	atlas_transfer(atlas, &new_atlas);
+
+	//Destroy the old atlas
+	atlas_destroy(new_atlas);
 }
+
+//Will destroy the atlas
+texture2D_atlas_destroy :: proc (using atlas : Texture2D_atlas) {
+	
+	assert(atlas != nil);
+	tex := cast(^Texutre2D_atlas_data)atlas;
+	texture2D_destroy(tex.backing);
+	delete(tex.pixels);
+	free(tex);
+	
+	//from atlas utils
+	delete(rows);
+	delete(quads);
+	delete(free_quads);
+}
+
+//Used internally
+@(private="file")
+atlas_transfer :: proc (atlas : ^Atlas, new_atlas : ^Atlas, loc := #caller_location) -> bool {
+	
+	//Sort the old data, so we know the best order to add them in (this would be heighest to lowest)
+	Handle :: struct {
+		handle : Atlas_handle,
+		width, heigth : i32,
+	}
+	
+	//Used to sort the array
+	sort_proc :: proc (a : Handle, b : Handle) -> bool {
+		return a.heigth < b.heigth;
+	}
+
+	//Make a slice of handles
+	handles := make([]Handle, len(atlas.quads));
+	defer delete(handles);
+	
+	//because it prune might fail, an optimization is done
+	//This will make it so that it does not try to copy all the rects and then give up.
+	//instead it will make sure there is space and then begin the copies.
+	Copy_command :: struct {
+		old_user_ptr : rawptr,
+		new_user_ptr : rawptr, 
+		src_offset : [2]i32, 
+		current_offset : [2]i32,
+		quad : [2]i32,
+	}
+	copy_command_queue : queue.Queue(Copy_command); queue.init(&copy_command_queue);
+	defer queue.destroy(&copy_command_queue);
+
+	i : int = 0;
+
+	//Now we add the values that needs to be sorted.
+	for k, quad in atlas.quads {
+
+		handles[i] = Handle{
+			k,
+			quad.z,
+			quad.w,
+		}
+
+		i += 1;
+	}
+
+	assert(len(atlas.quads) == len(handles));
+
+	//The sort, it sorts from heighest to lowest quad height.
+	slice.reverse_sort_by(handles, sort_proc);
+
+	current_row := 0;
+	current_y_offset : i32 = 0;
+	current_x_offset : i32 = 0;
+	row_heigth : i32 = 0;
+
+	if len(new_atlas.rows) == 0 {
+
+		h : i32 = 0;
+		
+		if len(handles) != 0 {
+			h = handles[0].heigth + 2 * atlas.margin;
+		}
+
+		append(&new_atlas.rows, Altas_row{
+			heigth = h,
+			width = 0,
+			y_offset = 0,
+		});
+	}
+	
+	new_atlas.atlas_handle_counter = atlas.atlas_handle_counter;
+	//Now add the old quads to the new atlas in the right order.
+	for h in handles {
+
+		quad := atlas.quads[h.handle];
+		q := quad.zw + 2 * [2]i32{atlas.margin, atlas.margin};
+		
+		//Because we sort from heigst to lowest, we can just append to each row.
+		//when the end of the row is reached, we make a new row. There will always be space enough.
+
+		row := &new_atlas.rows[current_row];
+		
+		if row.width + q.x > new_atlas.size {
+			//There is not enough space to place the quad on the same row, so we move forward.
+			
+			//Create a new row
+			current_row += 1;
+			current_y_offset += row.heigth;
+			current_x_offset = 0;
+			row_heigth = q.y;
+			append(&new_atlas.rows, Altas_row{
+				heigth = q.y,
+				width = 0,
+				y_offset = current_y_offset,
+			});
+			row = &new_atlas.rows[current_row];	//the move
+		}
+
+		//The row width is increased
+		row.width += q.x;
+
+		//The handle is added to the new atlas
+		new_atlas.quads[h.handle] = [4]i32{
+			current_x_offset,
+			current_y_offset,
+			q.x,
+			q.y,
+		};
+		
+		src_offset := quad.xy;
+		
+		if current_y_offset + q.y > new_atlas.size {
+			return false; //Prune failed to optimize or shrink failed to shrink, meaning we do nothing.
+		}
+		queue.append(&copy_command_queue, Copy_command{atlas.user_ptr, new_atlas.user_ptr, src_offset, {current_x_offset, current_y_offset}, {q.x, q.y}});
+
+		current_x_offset += q.x
+	}
+	
+	for queue.len(copy_command_queue) != 0 {
+		e := queue.pop_front(&copy_command_queue);
+		fmt.assertf(e.quad.x + e.src_offset.x <= new_atlas.size, "width is too great : %#v", e);
+		atlas.copy_proc(e.old_user_ptr, e.new_user_ptr, e.src_offset, e.current_offset, e.quad);
+	}
+
+	//Swap the old and new atlas's
+	atlas^, new_atlas^ = new_atlas^, atlas^;
+	
+	//Ok, so because the pointer should be valid until program termination (as we do not own the pointer)
+	atlas.user_ptr, new_atlas.user_ptr = new_atlas.user_ptr, atlas.user_ptr;
+	atlas.swap_proc(atlas.user_ptr, new_atlas.user_ptr)
+
+	//Upload the initial data.
+	//TODO currently a the copies happens in small seqments, one for each quad. If a CPU side texture is used, then it would require a lot of  small copies. 
+	//A optimization can be made here as upload_data could be called here, this is not the copy, but the thing that states, please upload now.
+	atlas.upload_proc(atlas.user_ptr, {0,0, atlas.size, current_y_offset + atlas.rows[current_row].heigth}, nil);	//Nil means, there is just the copied data. No user data.
+
+	assert(len(atlas.free_quads) == 0, "internal error");
+	assert(len(new_atlas.quads) == len(atlas.quads), "internal error");
+
+	return true;
+}
+
 
 /////////////////////////////////// Texture 2D Atlas Array ///////////////////////////////////
 

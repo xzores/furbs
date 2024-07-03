@@ -685,7 +685,6 @@ Pixel_format_upload :: enum i32 {
 	RGBA32_float,
 }
 
-
 @(require_results)
 upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) {
 
