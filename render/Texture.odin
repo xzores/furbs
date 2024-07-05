@@ -298,7 +298,7 @@ texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 
 //Clear color is only used if data is nil
 @(require_results)
-texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture2D {
+texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0.4}, loc := #caller_location) -> Texture2D {
 
 	/*
 	assert(wrapmode != nil, "wrapmode is nil", loc);
@@ -500,7 +500,7 @@ texture3D_upload_data :: proc(tex : ^Texture3D, pixel_offset : [3]i32, pixel_cnt
 Atlas_handle :: utils.Atlas_handle;
 
 @(private="file")
-Texutre2D_atlas_data :: struct {
+Texture2D_atlas_data :: struct {
 	backing : Texture2D,
 	upload_format : gl.Pixel_format_upload,
 	pixels : []u8, //TODO dont store pixels on the CPU, just do GPU (requires texture copy)
@@ -511,7 +511,7 @@ Texutre2D_atlas_data :: struct {
 //Resize might not be fast.
 Texture2D_atlas :: struct {
 	impl : utils.Atlas,
-	using data : ^Texutre2D_atlas_data,
+	using data : ^Texture2D_atlas_data,
 }
 
 texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Texture_desc = {.clamp_to_edge, .linear, false, .RGBA8},
@@ -519,93 +519,18 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 	
 	assert(upload_format != nil, "upload_format may not be nil", loc);
 	//TODO remove assert(gl.upload_format_channel_cnt(upload_format) == 4, "upload_format channel count must be 4", loc);
+
+	data := new(Texture2D_atlas_data);
 	
-	make_proc : utils.Atlas_make_from_proc : proc(atlas_src : rawptr, new_size : i32) -> rawptr {
-		
-		tex1 := cast(^Texutre2D_atlas_data)atlas_src;
-		tex2 := new(Texutre2D_atlas_data);
-		
-		//We make a new texture from the descrition of the old.
-		tex2.backing = texture2D_make_desc(tex1.backing.desc, new_size, new_size, tex1.upload_format, nil);
-		tex2.pixels = make([]u8, new_size * new_size * cast(i32)gl.upload_format_channel_cnt(tex1.upload_format));
-		tex2.upload_format = tex1.upload_format;
-		
-		return tex2;
-	}
-	
-	swap_proc : utils.Atlas_swap_proc : proc(atlas_src : rawptr, atlas_dst : rawptr) {
-		tex1 := cast(^Texutre2D_atlas_data)atlas_src;
-		tex2 := cast(^Texutre2D_atlas_data)atlas_dst;
-		tex1^, tex2^ = tex2^, tex1^;
-	}
-	
-	upload_proc : utils.Atlas_upload_proc : proc(atlas : rawptr, quad : [4]i32, user_data : any) {
-		
-		tex := cast(^Texutre2D_atlas_data)atlas;
-		
-		if v, ok := user_data.([]u8); ok {
-			fmt.assertf(tex.backing.width >= quad.x + quad.z, "Tex out of bounds, width : %v, quad x pos: %v, quad width : %v", tex.backing.width, quad.x, quad.z);
-			fmt.assertf(tex.backing.height >= quad.y + quad.w, "Tex out of bounds, height : %v, quad y pos: %v, quad height : %v", tex.backing.height, quad.y, quad.w);
-			texture2D_upload_data(&tex.backing, tex.upload_format, quad.xy, quad.zw, v);
-
-			//TODO make it not store pixels client side and just do an GPU-GPU copy.
-			utils.copy_pixels(gl.upload_format_channel_cnt(tex.upload_format), quad.z, quad.w, 0, 0, v, tex.backing.width, tex.backing.height, quad.x, quad.y, tex.pixels, quad.z, quad.w);
-		}
-		else if user_data == nil {
-			texture2D_upload_data(&tex.backing, tex.upload_format, quad.xy, quad.zw, tex.pixels);
-		}
-		else {
-			fmt.panicf("Unhandled : %v", user_data);
-		}
-	}
-
-	copy_proc : utils.Atlas_copy_proc : proc(atlas_src, atlas_dst : rawptr, src, dst, size : [2]i32) {
-
-		tex1 := cast(^Texutre2D_atlas_data)atlas_src;
-		tex2 := cast(^Texutre2D_atlas_data)atlas_dst;
-
-		assert(tex1.upload_format == tex2.upload_format);
-		
-		//TODO make it not store pixels client side and just do an GPU-GPU copy.
-		utils.copy_pixels(gl.upload_format_channel_cnt(tex1.upload_format), tex1.backing.width, tex1.backing.height, src.x, src.y, tex1.pixels,
-							tex2.backing.width, tex2.backing.height, dst.x, dst.y, tex2.pixels, size.x, size.y);
-		
-		//TODO here we upload the entire texture, and that is slow.
-		//texture2D_upload_data(&tex2.backing, tex2.upload_format, dst, size, tex2.pixels);
-	}
-
-	delete_proc : utils.Atlas_delete_proc : proc(atlas : rawptr) {
-		assert(atlas != nil);
-		tex := cast(^Texutre2D_atlas_data)atlas;
-		texture2D_destroy(tex.backing);
-		delete(tex.pixels);
-		free(tex);
-	}
-
-	erase_proc : utils.Atlas_erase_proc : proc(atlas : rawptr, dst, size : [2]i32) {
-		tex := cast(^Texutre2D_atlas_data)atlas;
-		
-		erase_data : []u8 = make([]u8, size.x * size.y * cast(i32)gl.upload_format_channel_cnt(tex.upload_format));
-		defer delete(erase_data);
-
-		for d, i in erase_data {
-			erase_data[i] = 0;
-		}
-		
-		texture2D_upload_data(&tex.backing, tex.upload_format, dst, size, erase_data);
-	}
-
-	data := new(Texutre2D_atlas_data);
-
 	data.backing = texture2D_make_desc(desc, init_size, init_size, upload_format, nil, loc = loc);
 	data.upload_format = upload_format;
 	data.pixels = make([]u8, init_size * init_size * cast(i32)gl.upload_format_channel_cnt(upload_format));
 	
 	atlas = Texture2D_atlas{
 		data = data,
-		impl = utils.atlas_make(10000, margin, init_size, data, make_proc, swap_proc, upload_proc, copy_proc, delete_proc, erase_proc, loc),
+		impl = utils.atlas_make(margin, init_size, data, loc),
 	}
-
+	
 	return;
 }
 
@@ -615,12 +540,29 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 @(require_results)
 texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_handle, success : bool) {
 	fmt.assertf(cast(i32)len(data) == cast(i32)gl.upload_format_channel_cnt(atlas.upload_format) * pixel_cnt.x * pixel_cnt.y, "upload size must match, data len : %v, but size resulted in %v", len(data), pixel_cnt.x * pixel_cnt.y * 4, loc = loc);
-	handle, success = utils.atlas_upload(&atlas.impl, pixel_cnt, data, loc);
+	quad : [4]i32;
+	handle, quad, success = utils.atlas_upload(&atlas.impl, pixel_cnt, loc);
 	
-	if !success { //if we fail, we prune and try again.
-		utils.atlas_prune(&atlas.impl);
-		handle, success = utils.atlas_upload(&atlas.impl, pixel_cnt, data, loc);
+	for !success { //if we fail, we prune and try again.
+		grew := texture2D_atlas_grow(atlas);
+		handle, quad, success = utils.atlas_upload(&atlas.impl, pixel_cnt, loc);
+		if !grew {
+			pruned := texture2D_atlas_prune(atlas);
+			handle, quad, success = utils.atlas_upload(&atlas.impl, pixel_cnt, loc);
+			break;
+		}
 	}
+	
+	fmt.assertf(quad.z == pixel_cnt.x, "quad width does not match pixel count: %v, %v", quad, pixel_cnt);
+	fmt.assertf(quad.w == pixel_cnt.y, "quad heigth does not match pixel count: %v, %v", quad, pixel_cnt);
+	
+	if success {
+		//TODO make it not store pixels client side and just do an GPU-GPU copy.
+		utils.copy_pixels(gl.upload_format_channel_cnt(atlas.upload_format), quad.z, quad.w, 0, 0, data, atlas.backing.width, atlas.backing.height, quad.x, quad.y, atlas.pixels, quad.z, quad.w);
+		texture2D_upload_data(&atlas.backing, atlas.upload_format, quad.xy, quad.zw, data);
+	}
+	
+	fmt.printf("added entry, now : %#v", atlas.impl);
 	
 	return handle, success;
 }
@@ -635,24 +577,80 @@ texture2D_atlas_get_coords :: proc (atlas : Texture2D_atlas, handle : Atlas_hand
 
 texture2D_atlas_remove :: proc(atlas : ^Texture2D_atlas, handle : Atlas_handle) {
 	//TODO add a list of deleted quads and then try those before increasing the row widht/height.
-	utils.atlas_remove(&atlas.impl, handle);
+	quad := utils.atlas_remove(&atlas.impl, handle);
+	
+	assert(quad.z != 0);
+	assert(quad.w != 0);
+	erase_data : []u8 = make([]u8, quad.z * quad.w * cast(i32)gl.upload_format_channel_cnt(atlas.upload_format));
+	defer delete(erase_data);
+	
+	for d, i in erase_data {
+		erase_data[i] = 0;
+	}
+	
+	texture2D_upload_data(&atlas.backing, atlas.upload_format, quad.xy, quad.zw, erase_data);
+	
+	fmt.printf("Removed entry, now : %#v", atlas.impl);
 }
+
+texture2D_atlas_prune :: proc (atlas : ^Texture2D_atlas, loc := #caller_location) -> (success : bool) {
+	return texture2D_atlas_transfer(atlas, atlas.impl.size);
+}
+
+//TODO, read from opengl
+max_texture_size :: 10000;
 
 //Will double the size (in each dimension) of the atlas, the old rects will be repacked in a smart way to increase the packing ratio.
 //Retruns false if the GPU texture size limit is reached.
 texture2D_atlas_grow :: proc (atlas : ^Texture2D_atlas, loc := #caller_location) -> (success : bool) {
-	return utils.atlas_grow(&atlas.impl);
+	if atlas.impl.size * 2 > max_texture_size {
+		return false;
+	}
+	return texture2D_atlas_transfer(atlas, atlas.impl.size * 2);
 }
 
 //Will try and shrink the atlas to half the size, returns true if success, returns false if it could not shrink.
 //To shrink as much as possiable do "for texture2D_atlas_shirnk(atlas) {};"
 texture2D_atlas_shirnk :: proc (atlas : ^Texture2D_atlas) -> (success : bool) {
-	return utils.atlas_shirnk(&atlas.impl);
+	return texture2D_atlas_transfer(atlas, math.max(1, atlas.impl.size / 2));
 }
 
 texture2D_atlas_destroy :: proc (using atlas : Texture2D_atlas) {
+
+	tex := cast(^Texture2D_atlas_data)atlas;
+	texture2D_destroy(tex.backing);
+	delete(tex.pixels);
+	free(tex);
+	
 	utils.atlas_destroy(atlas.impl);
 	texture2D_destroy(atlas.backing);
+}
+
+//used internally
+@(private="file")
+texture2D_atlas_transfer :: proc (atlas : ^Texture2D_atlas, new_size : i32, loc := #caller_location) -> (success : bool) {
+	
+	new_atlas : Texture2D_atlas = texture2D_atlas_make(atlas.upload_format, atlas.backing.desc, atlas.impl.margin, new_size);
+	
+	suc, copy_commands, max_height := utils.atlas_transfer(&atlas.impl, &new_atlas.impl);
+	
+	if !suc {
+		texture2D_atlas_destroy(new_atlas);
+		return false;
+	}
+	
+	for c in copy_commands {
+		utils.copy_pixels(gl.upload_format_channel_cnt(atlas.upload_format), atlas.backing.width, atlas.backing.height, c.src_offset.x, c.src_offset.y, atlas.pixels,
+					new_atlas.backing.width, new_atlas.backing.height, c.dst_offset.x, c.dst_offset.y, new_atlas.pixels, c.size.x, c.size.y, loc);
+	}
+	
+	texture2D_upload_data(&new_atlas.backing, atlas.upload_format, {0,0}, {new_atlas.backing.width, max_height}, new_atlas.pixels);
+	
+	atlas^, new_atlas = new_atlas, atlas^;
+	texture2D_atlas_destroy(new_atlas);
+	delete(copy_commands);
+	
+	return suc;
 }
 
 /////////////////////////////////// Texture 2D Atlas Array ///////////////////////////////////
