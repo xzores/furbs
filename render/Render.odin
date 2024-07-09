@@ -1,7 +1,7 @@
 package render;
 
 
-import "core:runtime"
+import "base:runtime"
 import "core:fmt"
 import "core:mem"
 import "core:strings"

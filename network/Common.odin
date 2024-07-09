@@ -1,9 +1,9 @@
 package network
 
 import "core:net"
-import "core:intrinsics"
+import "base:intrinsics"
 import "core:fmt"
-import "core:runtime"
+import "base:runtime"
 import "core:mem"
 import "core:reflect"
 import "core:builtin"

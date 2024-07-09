@@ -1,7 +1,7 @@
 package utils;
 
 import base_thread "core:thread"
-import "core:intrinsics"
+import "base:intrinsics"
 import "core:sync"
 import "core:mem"
 

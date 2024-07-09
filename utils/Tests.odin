@@ -1,7 +1,7 @@
 package utils;
 
 import "core:fmt"
-import "core:runtime"
+import "base:runtime"
 import "core:testing"
 
 @test

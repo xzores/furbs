@@ -2,7 +2,7 @@ package utils;
 
 import "core:fmt"
 import "core:sync"
-import "core:runtime"
+import "base:runtime"
 
 
 /*

@@ -2,7 +2,7 @@ package render;
 
 import "core:fmt"
 import "core:reflect"
-import "core:runtime"
+import "base:runtime"
 import "core:mem"
 import "core:slice"
 import "core:log"

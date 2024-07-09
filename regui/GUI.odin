@@ -5,7 +5,7 @@ import "core:strings"
 import "core:unicode/utf8"
 import "core:math"
 import "core:reflect"
-import "core:intrinsics"
+import "base:intrinsics"
 import "core:strconv"
 import "core:mem"
 

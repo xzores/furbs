@@ -4,7 +4,7 @@ import "core:c"
 import "core:fmt"
 import "core:mem"
 import "core:sync"
-import "core:runtime"
+import "base:runtime"
 import "core:os"
 
 tracking_allcoators : [dynamic]Pair(^mem.Tracking_Allocator, int);

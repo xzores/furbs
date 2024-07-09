@@ -1,8 +1,8 @@
 package utils;
 
-import "core:runtime"
+import "base:runtime"
 import "core:reflect"
-import "core:intrinsics"
+import "base:intrinsics"
 
 is_enum_valid :: proc(a : any, loc := #caller_location) -> bool {
 

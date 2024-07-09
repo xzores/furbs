@@ -65,7 +65,7 @@ Shader_load_error :: union {
 
 destroy_shader_error :: proc(e : ^Shader_load_error) {
 
-	switch se in e {
+	switch &se in e {
 		case Shader_file_error: 
 			//Nothing to do
 		case Shader_preprocessor_error:

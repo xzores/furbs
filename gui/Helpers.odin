@@ -2,7 +2,7 @@ package gui
 
 import "core:reflect"
 import "core:fmt"
-import "core:runtime"
+import "base:runtime"
 import "core:strconv"
 import "core:strings"
 import "core:encoding/json"

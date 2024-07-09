@@ -3,7 +3,7 @@ package utils;
 import "core:fmt"
 import "core:reflect"
 import "core:mem"
-import "core:runtime"
+import "base:runtime"
 
 Header_size_type :: u32;
 

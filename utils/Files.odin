@@ -2,7 +2,7 @@ package utils;
 
 import "core:fmt"
 import "core:mem"
-import "core:runtime"
+import "base:runtime"
 import "core:encoding/json"
 import "core:strings"
 import "core:os"

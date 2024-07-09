@@ -1,7 +1,7 @@
 package render;
 
 import "core:fmt"
-import "core:runtime"
+import "base:runtime"
 import "core:slice"
 import "core:sync"
 import "core:container/queue"
