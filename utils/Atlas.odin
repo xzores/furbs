@@ -1,10 +1,14 @@
 package utils;
 
+//////////////////////////////////////////////////////////////////////////////////////
+//	Written by Jakob Furbo Enevoldsen, as an alternative to the original fontstash	//
+//				This work is devoteted to the public domain 2024					//
+///////////////////////////////////////////////////////////////////////////////////////
+
 import "core:fmt"
 import "core:mem"
 import "core:math"
 import "core:slice"
-import "core:container/queue"
 
 //Pixel_count the amout of pixels to be copied
 //dst_offset is how far to offset the into the dst texture 
@@ -77,7 +81,7 @@ Atlas :: struct {
 
 //margin is to each side, so effectivly doubled.
 @(require_results)
-atlas_make :: proc (#any_int margin, size : i32, user_ptr : rawptr, loc := #caller_location) -> (atlas : Atlas) {
+atlas_make :: proc (#any_int size, margin : i32, loc := #caller_location) -> (atlas : Atlas) {
 
 	return Atlas {
 		size = size,
@@ -89,61 +93,6 @@ atlas_make :: proc (#any_int margin, size : i32, user_ptr : rawptr, loc := #call
 		
 		free_rects = make([dynamic]Atlas_index),
 	};
-}
-
-//Returns a free atlas handle, this will also consume the atlas handle space.
-get_next_free_handle :: proc (using atlas : ^Atlas) -> (h : Atlas_handle) {
-	h = atlas.current_handle_counter;
-	atlas.current_handle_counter += 1;
-	return h;
-}
-
-//If multiple textures are added to the atlas at once a better packing can be achived.
-//See get_next_free_handle
-@(require_results)
-atlas_add_multi :: proc (using atlas : ^Atlas, pixel_cnts : map[Atlas_handle][2]i32, loc := #caller_location) -> (rects : map[Atlas_handle][4]i32, success : bool) {
-	//TODO sort by heigth and do atlas_add
-	
-	rects = make(map[Atlas_handle][4]i32, len(pixel_cnts));
-	
-	Handle_sorting :: struct {
-		handle : Atlas_handle,
-		heigth : i32,
-	}
-	
-	//Used to sort the array
-	sort_proc :: proc (a : Handle_sorting, b : Handle_sorting) -> bool {
-		return a.heigth < b.heigth;
-	}
-	
-	sorted := make([]Handle_sorting, len(pixel_cnts));
-	defer delete(sorted);
-	
-	i : int = 0;
-	for h, pixel_cnt in pixel_cnts {
-		sorted[i] = Handle_sorting{h, pixel_cnt.y};
-		i += 1;
-	}
-	
-	//The sort, it sorts from heighest to lowest quad height.
-	slice.reverse_sort_by(sorted, sort_proc);
-	
-	for h in sorted {
-		fmt.assertf(!(h.handle in atlas.handles), "The handle %v is already in use", h.handle, loc = loc);
-		pixel_cnt := pixel_cnts[h.handle];
-		handle, rect, ok := atlas_add(atlas, pixel_cnt, h.handle, loc);
-		if !ok {
-			//We failed in adding all the rects and so we will undo our steps and return failure.
-			for h, r in rects {
-				_ = atlas_remove(atlas, h);
-			}
-			delete(rects);
-			return nil, false;
-		}
-		rects[h.handle] = rect;
-	}
-	
-	return rects, true;
 }
 
 //Uploads a texture into the atlas and returns a handle.
@@ -353,6 +302,61 @@ atlas_remove :: proc(using atlas : ^Atlas, handle : Atlas_handle, loc := #caller
 	return entry.rect;
 }
 
+//Returns a free atlas handle, this will also consume the atlas handle space.
+get_next_free_handle :: proc (using atlas : ^Atlas) -> (h : Atlas_handle) {
+	h = atlas.current_handle_counter;
+	atlas.current_handle_counter += 1;
+	return h;
+}
+
+//If multiple textures are added to the atlas at once a better packing can be achived.
+//See get_next_free_handle
+@(require_results)
+atlas_add_multi :: proc (using atlas : ^Atlas, pixel_cnts : map[Atlas_handle][2]i32, loc := #caller_location) -> (rects : map[Atlas_handle][4]i32, success : bool) {
+	//TODO sort by heigth and do atlas_add
+	
+	rects = make(map[Atlas_handle][4]i32, len(pixel_cnts));
+	
+	Handle_sorting :: struct {
+		handle : Atlas_handle,
+		heigth : i32,
+	}
+	
+	//Used to sort the array
+	sort_proc :: proc (a : Handle_sorting, b : Handle_sorting) -> bool {
+		return a.heigth < b.heigth;
+	}
+	
+	sorted := make([]Handle_sorting, len(pixel_cnts));
+	defer delete(sorted);
+	
+	i : int = 0;
+	for h, pixel_cnt in pixel_cnts {
+		sorted[i] = Handle_sorting{h, pixel_cnt.y};
+		i += 1;
+	}
+	
+	//The sort, it sorts from heighest to lowest quad height.
+	slice.reverse_sort_by(sorted, sort_proc);
+	
+	for h in sorted {
+		fmt.assertf(!(h.handle in atlas.handles), "The handle %v is already in use", h.handle, loc = loc);
+		pixel_cnt := pixel_cnts[h.handle];
+		handle, rect, ok := atlas_add(atlas, pixel_cnt, h.handle, loc);
+		if !ok {
+			//We failed in adding all the rects and so we will undo our steps and return failure.
+			for h, r in rects {
+				_ = atlas_remove(atlas, h);
+			}
+			delete(rects);
+			return nil, false;
+		}
+		rects[h.handle] = rect;
+	}
+	
+	return rects, true;
+}
+
 atlas_destroy :: proc (using atlas : Atlas) {
 	
 	for r in rows {
@@ -366,17 +370,156 @@ atlas_destroy :: proc (using atlas : Atlas) {
 
 
 /////////////////////////////////////////////////// Client side atlas ///////////////////////////////////////////////////
+//This a wrapper around the atlas algo it handles pixel coping for you and add resize functionality //
 
+Client_atlas :: struct {
+	using impl : Atlas,
+	channel_cnt : i32,
+	component_size : i32,
+	pixels : []u8,
+	max_size : i32,
+}
 
+//channel_cnt is how many channels the texture has, this should likely be 1,2,3 or 4.
+//component_size is the number of bytes per channel, this should likely be 1.
+//init_size specifies the initial texture atlas size, it will automagicly change size when needed. The atlas is always a sqaure.
+//max size is the atlas texture size limit. 
+//margin specifies the distance between textures, it is effectively doubled as the margin is applied on all sides for each texture.
+@(require_results)
+client_atlas_make :: proc (#any_int channel_cnt, component_size, init_size, max_size, margin : i32, loc := #caller_location) -> (atlas : Client_atlas) {
+	
+	atlas = Client_atlas{
+		impl = atlas_make(init_size, margin, loc),
+		component_size = component_size,
+		channel_cnt = channel_cnt,
+		pixels = make([]u8, component_size * channel_cnt * init_size * init_size),
+		max_size = max_size,
+	}
+	
+	return;
+}
 
+//Finds space for a new texture and allocates the space. Data is pixel data.
+@(require_results)
+client_atlas_add :: proc (atlas : ^Client_atlas, pixel_cnt : [2]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_handle, quad : [4]i32, success : bool) {
+	
+	handle, quad, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+	
+	for !success { //if we fail, then we grow then prune at max size.
+		grew := client_atlas_grow(atlas);
+		handle, quad, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+		if !grew {
+			pruned := client_atlas_prune(atlas);
+			handle, quad, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+			break;
+		}
+	}
+	
+	if success {
+		copy_pixels(atlas.channel_cnt * atlas.component_size, quad.z, quad.w, 0, 0, data, atlas.size, atlas.size, quad.x, quad.y, atlas.pixels, quad.z, quad.w, loc = loc);
+	}
+		
+	return handle, quad, success;
+}
 
+//Finds space for a new texture and allocates the space. Data is pixel data.
+//This will unlike client_atlas_add, not take any data in, instead a pointer to the data is returned, this allows the user to add the data themselfs.
+@(require_results)
+client_atlas_add_no_data :: proc (atlas : ^Client_atlas, pixel_cnt : [2]i32, loc := #caller_location) -> (handle : Atlas_handle, quad : [4]i32, all_pixels : []u8, success : bool) {
+	
+	handle, quad, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+	
+	for !success { //if we fail, then we grow then prune at max size.
+		grew := client_atlas_grow(atlas);
+		handle, quad, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+		if !grew {
+			pruned := client_atlas_prune(atlas);
+			handle, quad, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+			break;
+		}
+	}
+	
+	return handle, quad, atlas.pixels, success;
+}
 
+//Returns the texture coordinates in (0,0) -> (1,1) coordinates. 
+//The coordinates are kept until the atlas is resized or destroy.
+//resized refers to client_atlas_shirnk, client_atlas_grow and client_atlas_add.
+@(require_results)
+client_atlas_get_coords :: proc (atlas : Client_atlas, handle : Atlas_handle) -> [4]i32 {
+	return atlas_get_coords(atlas.impl, handle);
+}
 
+//Return the quad to remove from the atlas.
+@(require_results)
+client_atlas_remove :: proc(atlas : ^Client_atlas, handle : Atlas_handle) -> (erase_quad : [4]i32) {
+	return atlas_remove(&atlas.impl, handle);
+}
 
+//We reorder the atlas for better packing
+client_atlas_prune :: proc (atlas : ^Client_atlas, loc := #caller_location) -> (success : bool) {
+	return client_atlas_transfer(atlas, atlas.size);
+}
 
+//Will double the size (in each dimension) of the atlas, the old rects will be repacked in a smart way to increase the packing ratio.
+//Retruns false if the GPU texture size limit is reached.
+client_atlas_grow :: proc (using atlas : ^Client_atlas, loc := #caller_location) -> (success : bool) {
+	if size * 2 > max_size {
+		return false;
+	}
+	return client_atlas_transfer(atlas, atlas.size * 2);
+}
 
+//Will try and shrink the atlas to half the size, returns true if success, returns false if it could not shrink.
+//To shrink as much as possiable do "for client_atlas_shirnk(atlas) {};"
+client_atlas_shirnk :: proc (atlas : ^Client_atlas) -> (success : bool) {
+	return client_atlas_transfer(atlas, math.max(1, atlas.size / 2));
+}
 
+//Destroys the client atlas
+client_atlas_destroy :: proc (using atlas : Client_atlas) {
+	delete(atlas.pixels);
+	atlas_destroy(atlas);
+}
 
+//used internally
+@(private="file")
+client_atlas_transfer :: proc (atlas : ^Client_atlas, new_size : i32, loc := #caller_location) -> (success : bool) {
+	new_atlas : Client_atlas = client_atlas_make(atlas.channel_cnt, atlas.component_size, new_size, atlas.max_size, atlas.margin);
+	
+	handle_map := make(map[Atlas_handle][2]i32);
+	defer delete(handle_map);
+	for h, v in atlas.impl.handles {
+		handle_map[h] = v.rect.zw;
+	}
+	
+	rects, ok := atlas_add_multi(&new_atlas, handle_map, loc = loc);
+	defer delete(rects);
+	
+	if !ok {
+		client_atlas_destroy(new_atlas);
+		return false;
+	}
+	
+	used_height : i32 = 0;
+	
+	for h, v in atlas.impl.handles {
+		assert(h in handle_map, "internal error, h is not in handle_map");
+		
+		src_quad := atlas_get_coords(atlas, h);
+		dst_quad := rects[h];
+		assert(dst_quad.zw == src_quad.zw, "internal error");
+		copy_pixels(atlas.channel_cnt * atlas.component_size, atlas.size, atlas.size, src_quad.x, src_quad.y, atlas.pixels,
+							new_atlas.size, new_atlas.size, dst_quad.x, dst_quad.y, new_atlas.pixels, dst_quad.z, dst_quad.w);
+		
+		used_height = math.max(used_height, dst_quad.y + dst_quad.w);
+	}
+	
+	atlas^, new_atlas = new_atlas, atlas^;
+	client_atlas_destroy(new_atlas);
+	
+	return true;
+}
 
 
 

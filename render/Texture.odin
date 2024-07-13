@@ -511,24 +511,25 @@ Texture2D_atlas_data :: struct {
 //Resize might not be fast.
 Texture2D_atlas :: struct {
 	using impl : utils.Atlas,
-	using data : ^Texture2D_atlas_data,
+	using data : Texture2D_atlas_data,
 }
 
+@(require_results)
 texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Texture_desc = {.clamp_to_edge, .linear, false, .RGBA8},
 								#any_int margin : i32 = 0, #any_int init_size : i32 = 128, loc := #caller_location) -> (atlas : Texture2D_atlas) {
 	
 	assert(upload_format != nil, "upload_format may not be nil", loc);
 	//TODO remove assert(gl.upload_format_channel_cnt(upload_format) == 4, "upload_format channel count must be 4", loc);
 
-	data := new(Texture2D_atlas_data);
-	
-	data.backing = texture2D_make_desc(desc, init_size, init_size, upload_format, nil, loc = loc);
-	data.upload_format = upload_format;
-	data.pixels = make([]u8, init_size * init_size * cast(i32)gl.upload_format_channel_cnt(upload_format));
+	data := Texture2D_atlas_data {
+		backing = texture2D_make_desc(desc, init_size, init_size, upload_format, nil, loc = loc),
+		upload_format = upload_format,
+		pixels = make([]u8, init_size * init_size * cast(i32)gl.upload_format_channel_cnt(upload_format)),
+	}
 	
 	atlas = Texture2D_atlas{
 		data = data,
-		impl = utils.atlas_make(margin, init_size, data, loc),
+		impl = utils.atlas_make(init_size, margin, loc),
 	}
 	
 	return;
@@ -612,12 +613,8 @@ texture2D_atlas_shirnk :: proc (atlas : ^Texture2D_atlas) -> (success : bool) {
 }
 
 texture2D_atlas_destroy :: proc (using atlas : Texture2D_atlas) {
-
-	tex := cast(^Texture2D_atlas_data)atlas;
-	texture2D_destroy(tex.backing);
-	delete(tex.pixels);
-	free(tex);
 	
+	delete(atlas.pixels);	
 	utils.atlas_destroy(atlas.impl);
 	texture2D_destroy(atlas.backing);
 }
