@@ -126,6 +126,7 @@ atlas_add :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, handle_index : Mayb
 		}
 	}
 	
+	//This consumes the free rect
 	if found_row != -1 {
 		assert(found_row_name != -1, "internal error");
 		assert(found_index != -1, "internal error");
@@ -177,7 +178,12 @@ atlas_add :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, handle_index : Mayb
 		return current_handle_counter - 1, rect, true;
 	}
 	
-	/////// A free rect was not found, check if we can add a new row, otherwise return ok = false; ///////
+	/////// A free rect was not found, check if th row heigth can grow in order to accommodate the larger rect. ///////
+	
+	//Check if there is enough horizontal space, if yes, also check vertical, if yes then grow the heigth.
+	//If any fail goto next otherwise just increase the hiegth og the last row to the size of the quad and then 
+	
+	/////// There was not enough horizontal space, check if we can add a new row, otherwise return ok = false; ///////
 	current_height : i32;
 	for r in rows {
 		current_height += r.height;
@@ -210,8 +216,10 @@ atlas_add :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, handle_index : Mayb
 //The coordinates until the atlas is resized or destroy.
 //resized refers to atlas_shirnk, atlas_grow and atlas_upload.
 @(require_results)
-atlas_get_coords :: proc (atlas : Atlas, handle : Atlas_handle) -> [4]i32 {
-	return atlas.handles[handle].rect;
+atlas_get_coords :: proc (atlas : Atlas, handle : Atlas_handle, loc := #caller_location) -> [4]f32 {
+	assert(handle in atlas.handles, "invalid handle", loc);
+	r := atlas.handles[handle].rect;
+	return [4]f32{f32(r.x), f32(r.y), f32(r.z), f32(r.w)} / cast(f32)atlas.size;
 }
 
 @(require_results)
@@ -446,7 +454,7 @@ client_atlas_add_no_data :: proc (atlas : ^Client_atlas, pixel_cnt : [2]i32, loc
 //The coordinates are kept until the atlas is resized or destroy.
 //resized refers to client_atlas_shirnk, client_atlas_grow and client_atlas_add.
 @(require_results)
-client_atlas_get_coords :: proc (atlas : Client_atlas, handle : Atlas_handle) -> [4]i32 {
+client_atlas_get_coords :: proc (atlas : Client_atlas, handle : Atlas_handle) -> [4]f32 {
 	return atlas_get_coords(atlas.impl, handle);
 }
 
@@ -508,7 +516,6 @@ client_atlas_transfer :: proc (atlas : ^Client_atlas, new_size : i32, loc := #ca
 		
 		src_quad := atlas_get_coords(atlas, h);
 		dst_quad := rects[h];
-		assert(dst_quad.zw == src_quad.zw, "internal error");
 		copy_pixels(atlas.channel_cnt * atlas.component_size, atlas.size, atlas.size, src_quad.x, src_quad.y, atlas.pixels,
 							new_atlas.size, new_atlas.size, dst_quad.x, dst_quad.y, new_atlas.pixels, dst_quad.z, dst_quad.w);
 		

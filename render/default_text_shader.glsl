@@ -35,16 +35,16 @@ void main() {
 	//texture_coords = (texcoord * instance_texcoord.zw) + instance_texcoord.xy;
 	
 	if (gl_VertexID == 0) {
-		texture_coords = instance_tex_pos_scale.xy;
+		texture_coords = instance_tex_pos_scale.xy + vec2(0, instance_tex_pos_scale.w);
 	}
 	if (gl_VertexID == 1) {
-		texture_coords = instance_tex_pos_scale.zy;
+		texture_coords = instance_tex_pos_scale.xy + vec2(instance_tex_pos_scale.z, instance_tex_pos_scale.w);
 	}
 	if (gl_VertexID == 2) {
-		texture_coords = instance_tex_pos_scale.zw;
+		texture_coords = instance_tex_pos_scale.xy + vec2(instance_tex_pos_scale.z, 0);
 	}
 	if (gl_VertexID == 3) {
-		texture_coords = instance_tex_pos_scale.xw;
+		texture_coords = instance_tex_pos_scale.xy;
 	}
 	
     gl_Position = mvp * vec4((position * instance_scale) + instance_position, 1.0);

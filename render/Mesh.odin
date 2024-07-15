@@ -430,10 +430,10 @@ upload_instance_data_single :: proc(mesha : ^Mesh_single, #any_int start_index :
 
 //Internal use only
 @(private)
-remake_resource :: proc (old_res : gl.Resource, new_size : int) -> gl.Resource {
+remake_resource :: proc (old_res : gl.Resource, new_size : int, loc := #caller_location) -> gl.Resource {
 	new_desc := old_res.desc;
 	new_desc.bytes_count = new_size;
-	new_res := gl.make_resource_desc(new_desc, nil);
+	new_res := gl.make_resource_desc(new_desc, nil, loc = loc);
 
 	is_streaming : bool = old_res.usage == .stream_host_only ||old_res.usage == .stream_read || old_res.usage == .stream_read_write || old_res.usage == .stream_write;
 
@@ -507,7 +507,7 @@ mesh_resize_instance_single :: proc(mesh : ^Mesh_single, instance_size : int, lo
 		instanced_attrib_info := get_attribute_info_from_typeid(instance.data_type, loc);
 		defer delete(instanced_attrib_info);
 
-		instance.data = remake_resource(instance.data, instance_size * reflect.size_of_typeid(instance.data_type));
+		instance.data = remake_resource(instance.data, instance_size * reflect.size_of_typeid(instance.data_type), loc = loc);
 		gl.associate_buffer_with_vao(mesh.vao, instance.data.buffer, instanced_attrib_info, 1, loc);
 		
 		instance.data_points = instance_size;
@@ -561,7 +561,7 @@ mesh_draw_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt :
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	assert(mesh.instance_data != nil, "This is an not an instanced mesh", loc);
 	assert(mesh.primitive != nil);
-
+	
 	start : int = 0;
 	vertex_count := mesh.vertex_count;
 	index_count := mesh.index_count;
@@ -570,7 +570,7 @@ mesh_draw_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt :
 		vertex_count = r.y - r.x;
 		index_count = r.y - r.x;
 	}
-
+	
 	set_uniform(state.bound_shader, .color_diffuse, [4]f32{1,1,1,1});
 	model_matrix : matrix[4,4]f32 = 1;
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
@@ -1013,10 +1013,10 @@ setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_in
 	attrib_info := get_attribute_info_from_typeid(mesh.data_type, loc);
 	defer delete(attrib_info);
 
-	mesh.vao = gl.gen_vertex_array();
+	mesh.vao = gl.gen_vertex_array(loc);
 
 	//The vertex data
-	mesh.vertex_data = gl.make_resource_desc(desc, init_vertex_data);
+	mesh.vertex_data = gl.make_resource_desc(desc, init_vertex_data, loc);
 	gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, 0, loc);
 
 	//The indicies
@@ -1042,7 +1042,7 @@ setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_in
 				buffer_type = .element_array_buffer,
 				bytes_count = mesh.index_count * s,
 			}
-			indices_buf := gl.make_resource_desc(index_desc, init_index_data);
+			indices_buf := gl.make_resource_desc(index_desc, init_index_data, loc);
 
 			gl.associate_index_buffer_with_vao(mesh.vao, indices_buf.buffer);
 			mesh.indices_buf = indices_buf;

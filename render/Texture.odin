@@ -308,8 +308,13 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
+
 	id : gl.Tex2d_id = gl.gen_texture2D(loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
+	
+	if upload_format != .no_upload {
+		assert(data != nil, "Data must not be nil if upload_format is not .no_upload", loc = loc);
+	}
 
     gl.wrapmode_texture2D(id, desc.wrapmode);
 	gl.filtermode_texture2D(id, desc.filtermode, mipmaps);
@@ -317,13 +322,30 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	size_per_component, channels : int;
 	size_per_component = gl.upload_format_component_size(upload_format);
 	channels = gl.upload_format_channel_cnt(upload_format);
-
-	gl.setup_texure_2D(id, mipmaps, width, height, format);
+	
+	gl.setup_texture_2D(id, mipmaps, width, height, format);
 	
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
 		if cc, ok := clear_color.([4]f32); ok {
-			gl.clear_texture_2D(id, cc, upload_format, loc);
+			
+			channels := gl.internal_format_channel_cnt(desc.format);
+			
+			if channels == 1 {
+				gl.clear_texture_2D(id, [1]f32{cc.x}, loc);
+			}
+			else if channels == 2 {
+				gl.clear_texture_2D(id, cc.xy, loc);
+			}
+			else if channels == 3 {
+				gl.clear_texture_2D(id, cc.xyz, loc);
+			}
+			else if channels == 4 {
+				gl.clear_texture_2D(id, cc.xyzw, loc);
+			}
+			else {
+				panic("!?!?");
+			}
 		}
 	}
 	else {
@@ -570,7 +592,7 @@ texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, da
 //The coordinates until the atlas is resized or destroy.
 //resized refers to texture2D_atlas_shirnk, texture2D_atlas_grow and texture2D_atlas_add.
 @(require_results)
-texture2D_atlas_get_coords :: proc (atlas : Texture2D_atlas, handle : Atlas_handle) -> [4]i32 {
+texture2D_atlas_get_coords :: proc (atlas : Texture2D_atlas, handle : Atlas_handle) -> [4]f32 {
 	return utils.atlas_get_coords(atlas.impl, handle);
 }
 
@@ -646,7 +668,6 @@ texture2D_atlas_transfer :: proc (atlas : ^Texture2D_atlas, new_size : i32, loc 
 		
 		src_quad := utils.atlas_get_coords(atlas, h);
 		dst_quad := rects[h];
-		assert(dst_quad.zw == src_quad.zw, "internal error");
 		utils.copy_pixels(gl.upload_format_channel_cnt(atlas.upload_format), atlas.size, atlas.size, src_quad.x, src_quad.y, atlas.pixels,
 							new_atlas.size, new_atlas.size, dst_quad.x, dst_quad.y, new_atlas.pixels, dst_quad.z, dst_quad.w);
 		

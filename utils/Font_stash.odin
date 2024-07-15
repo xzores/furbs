@@ -11,6 +11,7 @@ package utils;
 //Use font_iter_next to draw each character.
 //(0,0) is placed at the lower left of the image, positive x is right and positive y is up.
 //It it able to handle multiple fonts.
+//This uses a single channel 8bit texture.
 
 /*
 Font Metrics Overview, below is a description of each key font metric:
@@ -79,6 +80,7 @@ import "core:path/filepath"
 import "core:reflect"
 import "core:strings"
 import "core:unicode/utf8"
+import "core:slice"
 import tt "vendor:stb/truetype"
 
 import "vendor:fontstash"
@@ -104,6 +106,7 @@ Font_context :: struct {
 	
 	atlas : Client_atlas, //Client refers to the fact that the pixels are stored client side (CPU)
 	fonts : map[Font]tt.fontinfo,
+	owned_font_data : [dynamic][]u8,
 	glyphs : map[Glyph]Atlas_handle, //This is a bit stupid as the map transfers from Glyph->Atlas_index->AtlasPosition, instead of Glyph->AtlasPosition
 }
 
@@ -164,6 +167,7 @@ font_init :: proc(max_texture_size : i32, loc := #caller_location) -> (ctx : Fon
 		atlas = client_atlas_make(1, 1, 512, max_texture_size, 1),
 		font_stack = make([dynamic]Font),
 		fonts = make(map[Font]tt.fontinfo),
+		owned_font_data = make([dynamic][]u8),
 		glyphs = make(map[Glyph]Atlas_handle),
 	};
 	
@@ -173,8 +177,13 @@ font_init :: proc(max_texture_size : i32, loc := #caller_location) -> (ctx : Fon
 //Destroy the context
 font_destroy :: proc(ctx: ^Font_context) {
 	delete(ctx.font_stack);
+	for d in ctx.owned_font_data {
+		delete(d);
+	}
+	delete(ctx.owned_font_data);
 	delete(ctx.fonts);
 	delete(ctx.glyphs);
+	delete(ctx.quads_to_upload);
 	client_atlas_destroy(ctx.atlas);
 }
 
@@ -182,14 +191,14 @@ font_destroy :: proc(ctx: ^Font_context) {
 //This is well suited for loading tff files, and not so much for otf, as otf can include multiple fonts.
 add_font_path_single :: proc (ctx: ^Font_context, path : string, loc := #caller_location) -> Font {
 	data, ok := os.read_entire_file_from_filename(path, loc = loc);
-	defer delete(data);
 	assert(ok, "failed to load file", loc);
-	return add_font_mem_single(ctx, data, loc = loc);
+	return add_font_mem_single(ctx, data, true, loc = loc);
 };
 
 //This will load a font, the font file must only contain one font, some font files can contain multiple fonts, to load multiple font see add_font_mem_multi
 //This is well suited for loading tff files, and not so much for otf, as otf can include multiple fonts.
-add_font_mem_single :: proc (ctx: ^Font_context, data : []u8, loc := #caller_location) -> (res : Font) {
+//if take_data_ownership, then the data is deleted by the lib, if false then the user must delete the data themselfs.
+add_font_mem_single :: proc (ctx: ^Font_context, data : []u8, take_data_ownership : bool, loc := #caller_location) -> (res : Font) {
 	
 	font_cnt := tt.GetNumberOfFonts(&data[0]);
 	assert(font_cnt == 1, "add_font_path_single can only load files containing a single font, for loading multiple fonts, use add_font_path_multi or add_font_mem_multi", loc = loc);
@@ -200,11 +209,12 @@ add_font_mem_single :: proc (ctx: ^Font_context, data : []u8, loc := #caller_loc
 	ok := tt.InitFont(&fi, &data[0], offset);
 	assert(bool(ok), "tt failed to load font, is the font valid?", loc = loc);
 	
-	fmt.printf("loaded font : %#v\n", fi);
-	
 	//now add the font
 	index := cast(Font)len(ctx.fonts);
 	ctx.fonts[index] = fi;
+	if take_data_ownership {
+		append(&ctx.owned_font_data, data);
+	}
 	
 	return index;
 };
@@ -215,15 +225,12 @@ add_font_mem_single :: proc (ctx: ^Font_context, data : []u8, loc := #caller_loc
 //The filename is used as the name if no name is found
 //Hint: you could pass the temp_allocator in alloc, and not have to free the result.
 add_font_path_multi :: proc (ctx: ^Font_context, path : string, alloc := context.allocator, loc := #caller_location) ->  map[string]Font {
-	context.allocator = alloc;
 	
-	name := filepath.stem(path);
-	defer delete(name);
+	name := filepath.stem(path); //This is just a view. No delete
 	
 	data, ok := os.read_entire_file_from_filename(path, loc = loc);
-	defer delete(data);
 	assert(ok, "failed to load file", loc);
-	return add_font_mem_multi(ctx, data, alloc, name, loc = loc);
+	return add_font_mem_multi(ctx, data, true, alloc, name, loc = loc);
 };
 
 //This will load a font file containing a single or multiple fonts, the fonts will be return in a map where the name of the font matches the font entry.
@@ -231,12 +238,12 @@ add_font_path_multi :: proc (ctx: ^Font_context, path : string, alloc := context
 //The name extractions is sketchy, please report bug if you find any.
 //"unknown" is used as the name if no name is found. (you can change it)
 //Hint: you could pass the temp_allocator in alloc, and not have to free the result.
-add_font_mem_multi :: proc (ctx: ^Font_context, data : []u8, alloc := context.allocator, fallback_name := "unknown", loc := #caller_location) -> (res : map[string]Font) {
-	context.allocator = alloc;
+//if take_data_ownership, then the data is deleted by the lib, if false then the user must delete the data themselfs.
+add_font_mem_multi :: proc (ctx: ^Font_context, data : []u8, take_data_ownership : bool, alloc := context.allocator, fallback_name := "unknown", loc := #caller_location) -> (res : map[string]Font) {
 	
 	font_cnt := tt.GetNumberOfFonts(&data[0]);
 	
-	res = make(map[string]Font);
+	res = make(map[string]Font, allocator = alloc);
 	
 	for i : i32 = 0; i < font_cnt; i+=1 {
 		offset := tt.GetFontOffsetForIndex(&data[0], i);
@@ -249,11 +256,14 @@ add_font_mem_multi :: proc (ctx: ^Font_context, data : []u8, alloc := context.al
 		//now add the font
 		index := cast(Font)len(ctx.fonts);
 		ctx.fonts[index] = fi;
+		if take_data_ownership {
+			append(&ctx.owned_font_data, data);
+		}
 		
-		font_name : string = _get_font_field(&fi, 4);
+		font_name : string = _get_font_field(&fi, 4, alloc);
 		
 		if font_name == "" {
-			font_name = strings.clone(fallback_name);
+			font_name = strings.clone(fallback_name, alloc);
 		}
 		
 		assert(!(font_name in res), "font is already added, this is an internal error contact devs", loc = loc); //This failes if there is a single file with multiple font, but no names for them.
@@ -269,9 +279,10 @@ add_font_multi :: proc { add_font_path_multi, add_font_mem_multi }
 //Hint: you could pass the temp_allocator in alloc, and not have to free the result.
 //For ttf formats this is empty, it only works with otf formats.
 //This can be an expensive function
-get_font_info :: proc (ctx: ^Font_context, font : Font, alloc := context.allocator) -> Font_info {
+get_font_info :: proc (ctx: ^Font_context, font : Font, alloc := context.allocator, loc := #caller_location) -> Font_info {
 	context.allocator = alloc;
 	
+	assert(font in ctx.fonts, "Font is not valid", loc);
 	fi := &ctx.fonts[font];
 	
 	info : Font_info;
@@ -308,13 +319,14 @@ push_font :: proc (ctx: ^Font_context, font : Font, loc := #caller_location) {
 pop_font :: proc (ctx: ^Font_context,loc := #caller_location) {
 	assert(len(ctx.font_stack) != 0, "You popped one to many fonts there Buddy!", loc);
 	pop(&ctx.font_stack);
+	ctx.scale = 0;
 }
 
 //requires_reupload and get_next_quad_upload must be called before calling font_iter_next and after calling make_font_iter
-make_font_iter :: proc (ctx: ^Font_context, text : string) -> Font_iter {
-	
+make_font_iter :: proc (ctx: ^Font_context, text : string, alloc := context.allocator, loc := #caller_location) -> Font_iter {
+	assert(len(ctx.font_stack) != 0, "No font is set", loc = loc);
+	assert(ctx.scale != 0, "Size is zero, set size first", loc = loc);
 	top := ctx.font_stack[len(ctx.font_stack)-1]; //The top font
-	fi := ctx.fonts[top];
 	
 	for r in text {
 		
@@ -325,55 +337,102 @@ make_font_iter :: proc (ctx: ^Font_context, text : string) -> Font_iter {
 		}
 		
 		if !(glyph in ctx.glyphs) {
-			_load_glyph(ctx, glyph);
+			_load_glyph(ctx, glyph, loc);
 		}
 	}
 	
 	iter : Font_iter = {
-		runes = utf8.string_to_runes(text),
+		runes = utf8.string_to_runes(text, alloc),
 		current_index = 0,
 	}
 	
 	return iter;
 };
 
+//Get the dimensions of the bitmap
+get_bitmap_dimension :: proc (using ctx: ^Font_context) -> (dim : [2]i32) {
+	return {atlas.size, atlas.size};
+}
+
+//get the bitmap data, also see get_bitmap_dimension.
+get_bitmap :: proc (using ctx: ^Font_context) -> (data :[]u8) {
+	return atlas.pixels;
+}
+
 //A reupload encompasses a resize of the texture, this means you create a new texture with the given size.
-requires_reupload :: proc (using ctx: ^Font_context) -> (required : bool, new_size : [2]i32) {
+requires_reupload :: proc (using ctx: ^Font_context) -> (new_size : [2]i32, required : bool) {
 	
 	if atlas.size != uploaded_size {
 		uploaded_size = atlas.size;
-		return true, atlas.size
+		return atlas.size, true;
 	}
 	
-	return false, atlas.size;
+	return atlas.size, false;
 }
 
 //Repeatatly call this untill done is true, this tell you what part of the texture should be uploaded to the gpu.
 //To get the texture, call get_texture
-get_next_quad_upload :: proc (ctx: ^Font_context) -> (quad : [4]i32, done : bool) {
+//The call after the last quad will return done = true. So you shall ignore the quad if done is true.
+get_next_quad_upload :: proc (ctx: ^Font_context, loc := #caller_location) -> (quad : [4]i32, done : bool) {
+	assert(len(ctx.font_stack) != 0, "No font is set", loc = loc);
+	
+	if len(ctx.quads_to_upload) == 0 {
+		return {}, true;
+	}
+	
 	quad = pop(&ctx.quads_to_upload);
-	return quad, len(ctx.quads_to_upload) == 0;
+	return quad, false;
 }
 
 //Use this to draw the quads
 //requires_reupload and get_next_quad_upload must be called before calling font_iter_next and after calling make_font_iter
 //This will allow you to first specify the glyphs needed whereafter they can be uploaded and then used/drawn by font_iter_next
-font_iter_next :: proc (ctx: ^Font_context, iter : ^Font_iter, loc := #caller_location) -> (quad : [4]i32) {
+font_iter_next :: proc (ctx: ^Font_context, iter : ^Font_iter, loc := #caller_location) -> (quad, text_coords : [4]f32, go_on : bool) {
 	assert(ctx.atlas.size == ctx.uploaded_size, "You must do requires_reupload before calling font_iter_next", loc = loc);
 	assert(len(ctx.quads_to_upload) == 0, "You must do get_next_quad_upload until there are no more upload required before calling font_iter_next", loc = loc);
 	
-	cur_rune  := iter.runes[iter.current_index];
+	if iter.current_index == len(iter.runes) {
+		go_on = false;
+		return {}, {}, go_on;
+	}
+	else {
+		go_on = true;
+	}
+	
+	top := ctx.font_stack[len(ctx.font_stack)-1]; //The top font
+	fi := &ctx.fonts[top];
+	
+	cur_rune := iter.runes[iter.current_index];
 	iter.current_index += 1;
 	
-	//Get kerning
+	x0, y0, x1, y1 : i32;
+	tt.GetCodepointBitmapBox(fi, cur_rune, ctx.scale, ctx.scale, &x0, &y0, &x1, &y1);
+	
+	width, height := f32(x1-x0), f32(y1-y0);
+	
+	advance_width, left_side_bearing : i32;
+	tt.GetCodepointHMetrics(fi, cur_rune, &advance_width, &left_side_bearing);
+	//fmt.printf("codepoint : %v advance_width : %v\n", cur_rune, advance_width);
+	
+	ascent_i, descent_i, line_gap_i : i32;
+	tt.GetFontVMetrics(fi, &ascent_i, &descent_i, &line_gap_i);
+	
+	glyph : Glyph = {
+		codepoint = cur_rune,
+		size = ctx.scale,
+		font = top,
+	}
+	
+	atlas_handle := ctx.glyphs[glyph];
+	text_coords = atlas_get_coords(ctx.atlas, atlas_handle);
+	
+	iter.x_offset += ctx.scale * cast(f32)tt.GetCodepointKernAdvance(fi, iter.last_rune, cur_rune);
+	rect := [4]f32{ctx.scale * f32(left_side_bearing) + iter.x_offset + width/2, -f32(y1) + height/2, width, height};
+	iter.x_offset += ctx.scale * f32(advance_width); //
 	
 	iter.last_rune = cur_rune;
 	
-	//Get kerning
-	
-	//iter.x_offset += something;
-	
-	return 
+	return rect, text_coords, go_on;
 };
 
 //Used to destroy the font_iter from make_font_iter
@@ -388,65 +447,61 @@ clear_atlas :: proc () {
 
 //Set the size of the EM square size, which is the traditoinal way to set the size, but it is a little abstract instead set_max_height_size can be used.
 //Units in pixels
-set_em_size :: proc(ctx: ^Font_context, size: f32) {
+set_em_size :: proc(ctx: ^Font_context, size: f32, loc := #caller_location) {
+	assert(len(ctx.font_stack) != 0, "You must set a font before setting the size.", loc);
 	top := ctx.font_stack[len(ctx.font_stack)-1];
 	ctx.scale = tt.ScaleForMappingEmToPixels(&ctx.fonts[top], size);
 }
 
 //Set the size of the glyphs ymax height, all charactors will vertically fit inside the size given.
-//This effectively the cap height + the size of the descender.
 //Units in pixels
-set_max_height_size :: proc(ctx: ^Font_context, size: f32) {
+set_max_height_size :: proc(ctx: ^Font_context, size: f32, loc := #caller_location) {
+	assert(len(ctx.font_stack) != 0, "You must set a font before setting the size.", loc);
 	top := ctx.font_stack[len(ctx.font_stack)-1];
 	ctx.scale = tt.ScaleForPixelHeight(&ctx.fonts[top], size);
+}
+
+get_codepoint_horizontal_metrics :: proc () {
+	//tt.GetCodepointHMetrics();
 }
 
 //////////////////// get non-specifc character information ////////////////////
 
 //Get ascent, descent, line_gap for the current text size and font.
-get_vertical_metrics :: proc(ctx: ^Font_context) -> (ascent, descent, line_gap : f32) {
+get_vertical_metrics :: proc(ctx: ^Font_context, loc := #caller_location) -> (ascent, descent, line_gap : f32) {
+	assert(len(ctx.font_stack) != 0, "There is not font, set a font first.", loc = loc);
 	top := ctx.font_stack[len(ctx.font_stack)-1]; //The top font
-	fi := ctx.fonts[top];
+	fi := &ctx.fonts[top];
 	
 	ascent_i, descent_i, line_gap_i : i32;
 	
-	tt.GetFontVMetrics(&fi, &ascent_i, &descent_i, &line_gap_i);
+	tt.GetFontVMetrics(fi, &ascent_i, &descent_i, &line_gap_i);
 	
 	return ctx.scale * f32(ascent_i), ctx.scale * f32(descent_i), ctx.scale * f32(line_gap_i);
 }
 
 //Units in pixels, get line gap for the current size and font.
-get_ascent :: proc(ctx: ^Font_context) -> f32 {
-	ascent, _, _ := get_vertical_metrics(ctx);
+get_ascent :: proc(ctx: ^Font_context, loc := #caller_location) -> f32 {
+	ascent, _, _ := get_vertical_metrics(ctx, loc);
 	return ascent;
 }
 
 //Units in pixels, get line gap for the current size and font.
-get_descent :: proc(ctx: ^Font_context) -> f32 {
-	_, descent, _ := get_vertical_metrics(ctx);
+get_descent :: proc(ctx: ^Font_context, loc := #caller_location) -> f32 {
+	_, descent, _ := get_vertical_metrics(ctx, loc);
 	return descent;
 }
 
 //Units in pixels, get line gap for the current size and font.
-get_line_gap :: proc(ctx: ^Font_context) -> f32 {
-	_, _, gap := get_vertical_metrics(ctx);
+get_line_gap :: proc(ctx: ^Font_context, loc := #caller_location) -> f32 {
+	_, _, gap := get_vertical_metrics(ctx, loc);
 	return gap;
 }
 
-//Returns ymax for the current text size and font.
-get_bounds :: proc (ctx: ^Font_context) -> (x_min, y_min, x_max, y_max : f32) {
-	top := ctx.font_stack[len(ctx.font_stack)-1]; //The top font
-	fi := ctx.fonts[top];
-	
-	x0, y0, x1, y1 : i32;
-	tt.GetFontBoundingBox(&fi, &x0, &y0, &x1, &y1);
-	return ctx.scale * f32(x0), ctx.scale * f32(y0), ctx.scale * f32(x1), ctx.scale * f32(y1);
-}
-
 //Total max height in pixels for any character at the current text size and font.
-get_max_height :: proc (ctx: ^Font_context) -> f32 {
-	x_min, y_min, x_max, y_max := get_bounds(ctx);
-	return y_max - y_min;
+get_max_height :: proc (ctx: ^Font_context, loc := #caller_location) -> f32 {
+	ascent, descent, _ := get_vertical_metrics(ctx, loc);
+	return -descent + ascent;
 }
 
 //////////////////// get specifc character/string information ////////////////////
@@ -475,29 +530,24 @@ get_outer_text_bounds :: proc(ctx: ^Font_context, text : string) -> [4]f32 {
 GetGlyphHMetrics    :: proc(info: ^fontinfo, glyph_index: c.int, advanceWidth, leftSideBearing: ^c.int) ---
 GetGlyphKernAdvance :: proc(info: ^fontinfo, glyph1, glyph2: c.int) -> c.int ---
 GetGlyphBox         :: proc(info: ^fontinfo, glyph_index: c.int, x0, y0, x1, y1: ^c.int) -> c.int ---
-
-
-set_spacing :: proc(ctx: ^FontContext, spacing: f32) {
-
-}
-
-set_align_horizontal :: proc(ctx: ^FontContext, ah: AlignHorizontal) {
-
-}
-
-set_align_vertical :: proc(ctx: ^FontContext, av: AlignVertical) {
-
-}
-
-//What would this do?
-set_blur :: proc(ctx: ^FontContext, blur: f32) {
-
-}
 */
 
+//Returns the bounding box around all possible characters (in a weird format)
 //Internal use
-_load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph) -> (success : bool) {
+_get_bounds :: proc (ctx: ^Font_context, loc := #caller_location) -> (x_min, y_min, x_max, y_max : f32) {
+	assert(len(ctx.font_stack) != 0, "There is not font, set a font first.", loc = loc);
+	top := ctx.font_stack[len(ctx.font_stack)-1]; //The top font
+	fi := ctx.fonts[top];
+	
+	x0, y0, x1, y1 : i32;
+	tt.GetFontBoundingBox(&fi, &x0, &y0, &x1, &y1);
+	return ctx.scale * f32(x0), ctx.scale * f32(y0), ctx.scale * f32(x1), ctx.scale * f32(y1);
+}
 
+//Internal use
+_load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph, loc := #caller_location) -> (success : bool) {
+	assert(ctx.scale != 0, "The scale is zero, you must set size first", loc);
+	
 	//This is not too nice, as we have to allocate space for the result 
 	//and then copy the result to the atlas, I dont think there is a work around with stb_truetype. 
 	/*verts : [^]tt.vertex;
@@ -519,14 +569,18 @@ _load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph) -> (success : bool
 	tt.GetGlyphBitmapBox(fi, tt_glyph, ctx.scale, ctx.scale, &ix0, &iy0, &ix1, &iy1);
 	width := ix1-ix0;
 	height := iy1-iy0;
+	assert(width != 0, "width is zero, internal error", loc);
+	assert(height != 0, "height is zero, internal error", loc);
+	
 	result := make([]u8, width * height);
+	defer delete(result);
 	tt.MakeGlyphBitmap(fi, &result[0], width, height, width, ctx.scale, ctx.scale, tt_glyph); //TODO we can razterize directly into the atlas instead. 
 	//TODO Use client_atlas_add_no_data
 	
 	//Add to atlas
 	handle, quad, ok := client_atlas_add(&atlas, {width, height}, result);
 	
-	if do_clear, _ := requires_reupload(ctx); do_clear {
+	if atlas.size != uploaded_size {
 		clear(&quads_to_upload);
 	}
 	
@@ -541,14 +595,9 @@ _load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph) -> (success : bool
 }
 
 //Internal use
-_get_glyph :: proc (using ctx: ^Font_context, glyph : Glyph) -> [4]i32 {
-	assert(glyph in ctx.glyphs, "glyph not found");
-	atlas_handle : Atlas_handle = ctx.glyphs[glyph];
-	return client_atlas_get_coords(ctx.atlas, atlas_handle);
-}
-
-//Internal use
-_get_font_field :: proc (fi : ^tt.fontinfo, #any_int field_index : i32) -> string {
+_get_font_field :: proc (fi : ^tt.fontinfo, #any_int field_index : i32, alloc := context.allocator, loc := #caller_location) -> string {
+	
+	context.allocator = alloc;
 	
 	platform : tt.PLATFORM_ID = .PLATFORM_ID_MAC;
 	lang : i32 = tt.MAC_LANG_ENGLISH; //tt.UNICODE_EID_UNICODE_1_0 = 0 and tt.MAC_LANG_ENGLISH = 0
@@ -593,7 +642,7 @@ _get_font_field :: proc (fi : ^tt.fontinfo, #any_int field_index : i32) -> strin
 		return "";
 	}
 	
-	field := strings.clone_from_cstring_bounded(field_c, int(name_length));
+	field := strings.clone_from_cstring_bounded(field_c, int(name_length), loc = loc);
 	
 	return field;
 }

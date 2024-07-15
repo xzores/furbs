@@ -232,7 +232,7 @@ set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : Unifor
 	}
 
 	u_loc : i32 = cast(i32) shader.uniform_locations[uniform].location;
-
+	
 	switch &v in value {
 		case f32:
 			Uniform1f(u_loc, v);

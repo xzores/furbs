@@ -603,7 +603,8 @@ Pixel_format_internal :: enum i32 {
 	RG16 = gl.RG16,
 	RGB16 = gl.RGB16,
 	RGBA16 = gl.RGBA16,
-
+	
+	//These are hints and will fallback to R8, RG8, RGB8, RGBA8 (TODO)
 	compressed_R8 = gl.COMPRESSED_RED,
 	compressed_RG8 = gl.COMPRESSED_RG,
 	compressed_RGB8 = gl.COMPRESSED_RGB,
@@ -681,20 +682,48 @@ Pixel_format_upload :: enum i32 {
 	RG32,
 	RGB32,
 	RGBA32,
-
-	RGBA32_float,
+	
+	//No half floats only full floats
+	R32_float,
+	RG32_float,
+	RGB32_float,
+	RGBA32_float, 
 }
 
+@(require_results)
+internal_format_channel_cnt :: proc (f : Pixel_format_internal, loc := #caller_location) -> (channels : int) {
+
+	switch f {
+		case .R8, .R16, .compressed_R8, .depth_component16, .depth_component24, .depth_component32, .R8_int, .R16_int, .R32_int, .R8_uint, .R16_uint, .R32_uint, .R16_float, .R32_float:
+			return 1;
+		
+		case .RG8, .RG16, .compressed_RG8, .RG8_int, .RG16_int, .RG32_int, .RG8_uint, .RG16_uint, .RG32_uint, .RG16_float, .RG32_float:
+			return 2;
+		
+		case .RGB4, .RGB8, .RGB16, .compressed_RGB8, .S_RGB8, .RGB8_int, .RGB32_int, .RGB8_uint, .RGB16_int, .RGB16_uint, .RGB32_uint, .RGB16_float, .RGB32_float:
+			return 3;
+		
+		case .RGBA4, .RGBA8, .RGBA16, .compressed_RGBA8, .S_RGBA8, .RGB5_A1, .RGBA8_int, .RGBA16_int, .RGBA32_int, .RGBA8_uint, .RGBA16_uint, .RGBA32_uint, .RGBA16_float, .RGBA32_float:
+			return 4;
+			
+		case .invalid:
+			panic("Invalid format", loc);
+		case:
+			panic("Invalid format", loc);
+	}
+
+	unreachable();
+}
 
 @(require_results)
 upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) {
-
+	
 	switch f {
-		case .R8, .R16, .R32:
+		case .R8, .R16, .R32, .R32_float:
 			return 1;
-		case .RG8, .RG16, .RG32:
+		case .RG8, .RG16, .RG32, .RG32_float:
 			return 2;
-		case .RGB8, .RGB16, .RGB32:
+		case .RGB8, .RGB16, .RGB32, .RGB32_float:
 			return 3;
 		case .RGBA8, .RGBA16, .RGBA32, .RGBA32_float:
 			return 4;
@@ -709,13 +738,13 @@ upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) 
 
 @(require_results)
 upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components : gl.GLenum) {
-
+	
 	switch f {
-		case .R8, .R16, .R32:
+		case .R8, .R16, .R32, .R32_float:
 			return .RED;
-		case .RG8, .RG16, .RG32:
+		case .RG8, .RG16, .RG32, .RG32_float:
 			return .RG;
-		case .RGB8, .RGB16, .RGB32:
+		case .RGB8, .RGB16, .RGB32, .RGB32_float:
 			return .RGB;
 		case .RGBA8, .RGBA16, .RGBA32, .RGBA32_float:
 			return .RGBA;
@@ -738,7 +767,7 @@ upload_format_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 			return .UNSIGNED_SHORT;
 		case .R32, .RG32, .RGB32, .RGBA32:
 			return .UNSIGNED_INT;
-		case .RGBA32_float:
+		case .R32_float, .RG32_float, .RGB32_float, .RGBA32_float:
 			return .FLOAT;
 		case .no_upload:
 			return nil;
@@ -758,7 +787,7 @@ upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes
 			return 1;
 		case .R16, .RG16, .RGB16, .RGBA16:
 			return 2;
-		case .R32, .RG32, .RGB32, .RGBA32, .RGBA32_float:
+		case .R32, .RG32, .RGB32, .RGBA32, .R32_float, .RG32_float, .RGB32_float, .RGBA32_float:
 			return 4;
 		case .no_upload:
 			return 0;
@@ -1156,7 +1185,7 @@ when RECORD_DEBUG {
 			//record_mutex does not need initialization
 			queue.init(&record_queue);
 			queue.init(&record_queue_2);
-			record_thread = thread.create_and_start(record_thread_loop, self_cleanup = true);
+			record_thread = thread.create_and_start(record_thread_loop, self_cleanup = false);
 		}
 	}
 	
@@ -1171,7 +1200,7 @@ when RECORD_DEBUG {
 			}
 			sync.unlock(&record_mutex_showdown);
 			record_should_close_completly = true;
-			thread.join(record_thread); record_thread = {};
+			thread.join(record_thread); free(record_thread); record_thread = {};
 			queue.destroy(&record_queue);
 			queue.destroy(&record_queue_2);
 			delete(record_filename);
@@ -2844,11 +2873,12 @@ gen_texture1D :: proc (loc := #caller_location) -> (tex : Tex1d_id) {
 
 delete_texture1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
 
-	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
-		for t in textures {
-			if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id) t {
-				gl.BindTexture(.TEXTURE_1D, 0);
-				cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	for texture in textures {
+		for bound_tex, slot in gpu_state.bound_texture {
+			//If the texture being deleted is bound to any texture slot then set the set the texture slot to zero 
+			if bound_tex == cast(Texg_id)texture {
+				cpu_state.bound_texture[slot] = 0;
+				gpu_state.bound_texture[slot] = 0;
 			}
 		}
 	}
@@ -2865,11 +2895,12 @@ delete_texture1Ds :: proc (textures : []Tex1d_id, loc := #caller_location) {
 delete_texture1D :: proc (texture : Tex1d_id, loc := #caller_location) {
 	texture := texture;
 
-	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
-		if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)texture {
-				gl.BindTexture(.TEXTURE_1D, 0);
-				cpu_state.bound_texture[cpu_state.texture_slot] = 0;
-			}
+	for bound_tex, slot in gpu_state.bound_texture {
+		//If the texture being deleted is bound to any texture slot then set the set the texture slot to zero 
+		if bound_tex == cast(Texg_id)texture {
+			cpu_state.bound_texture[slot] = 0;
+			gpu_state.bound_texture[slot] = 0;
+		}
 	}
 
 	gl.DeleteTextures(1, cast([^]u32)&texture);
@@ -3059,18 +3090,19 @@ gen_texture2D :: proc (loc := #caller_location) -> (tex : Tex2d_id) {
 }
 
 delete_texture2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
-
-	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
-		for t in textures {
-			if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)t {
-				gl.BindTexture(.TEXTURE_2D, 0);
-				gpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	
+	for texture in textures {
+		for bound_tex, slot in gpu_state.bound_texture {
+			//If the texture being deleted is bound to any texture slot then set the set the texture slot to zero 
+			if bound_tex == cast(Texg_id)texture {
+				cpu_state.bound_texture[slot] = 0;
+				gpu_state.bound_texture[slot] = 0;
 			}
 		}
 	}
-
+	
 	gl.DeleteTextures(auto_cast len(textures), cast([^]u32) raw_data(textures));
-
+	
 	when RENDER_DEBUG {
 		for t in textures {
 			delete_key(&debug_state.tex2ds, t);
@@ -3078,16 +3110,17 @@ delete_texture2Ds :: proc (textures : []Tex2d_id, loc := #caller_location) {
 	}
 }
 
-delete_texture2D :: proc (texture : Tex2d_id, loc := #caller_location) {
+delete_texture2D :: proc (texture : Tex2d_id, loc := #caller_location) {	
 	texture := texture;
-
-	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
-		if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)texture {
-			gl.BindTexture(.TEXTURE_2D, 0);
-			gpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	
+	for bound_tex, slot in gpu_state.bound_texture {
+		//If the texture being deleted is bound to any texture slot then set the set the texture slot to zero 
+		if bound_tex == cast(Texg_id)texture {
+			cpu_state.bound_texture[slot] = 0;
+			gpu_state.bound_texture[slot] = 0;
 		}
 	}
-
+	
 	gl.DeleteTextures(1, cast([^]u32)&texture);
 
 	when RENDER_DEBUG {
@@ -3096,7 +3129,7 @@ delete_texture2D :: proc (texture : Tex2d_id, loc := #caller_location) {
 }
 
 bind_texture2D :: proc(tex : Tex2d_id, loc := #caller_location) {
-
+	
 	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 	
 	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
@@ -3137,9 +3170,9 @@ write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, wid
 	else {
 		panic("???");
 	}
-
-	if cpu_state.gl_version >= .opengl_4_5 { 
-		gl.TextureSubImage2D(cast(u32)tex, level, xoffset, yoffset, width, height, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.TextureSubImage2D(auto_cast tex, level, xoffset, yoffset, width, height, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 	}
 	else {
 		bind_texture2D(tex);
@@ -3149,7 +3182,7 @@ write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, wid
 }
 
 //This will for opengl 4.2 or below not generate mip maps, and they must be generated by generate_mip_maps_XD or the mipmap level must be set directly
-setup_texure_2D :: proc (tex : Tex2d_id, mipmaps : bool, width, height : gl.GLsizei, format : Pixel_format_internal, loc := #caller_location) {
+setup_texture_2D :: proc (tex : Tex2d_id, mipmaps : bool, width, height : gl.GLsizei, format : Pixel_format_internal, loc := #caller_location) {
 	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
 
 	levels : i32 = 1;
@@ -3267,12 +3300,21 @@ active_bind_texture2D :: proc (tex : Tex2d_id, slot : i32) {
 
 //Clear mipmap level 0 of a texture
 //TODO this does not support integer and GL_DEPTH_COMPONENT, GL_STENCIL_INDEX, or GL_DEPTH_STENCIL textures, see https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearTexImage.xhtml
-clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, format : Pixel_format_upload, loc := #caller_location) {
-	bind_texture2D(tex); //TODO should we bind for the active texture? we could also always just use texture slot 0, but that might slower.
+clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, loc := #caller_location) {
 	//assert(cpu_state.bound_texture[cpu_state.texture_slot] == 0, "There cannot be a bound texture, while clearing a texture", loc);
-	assert(N == upload_format_channel_cnt(format), "The clear_color does not have the same amount of channels as the format", loc);
+	format : Pixel_format_internal;
 	
-	if cpu_state.gl_version >= .opengl_4_4 {
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
+	} else {
+		bind_texture2D(tex); //TODO should we bind for the active texture? we could also always just use texture slot 0, but that might slower.
+		gl.GetTexLevelParameteriv(.TEXTURE_2D, 0, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
+		unbind_texture2D();
+	}
+	
+	assert(N == internal_format_channel_cnt(format), "The clear_color does not have the same amount of channels as the format", loc = loc);
+	
+	if cpu_state.gl_version >= .opengl_4_4 && false{
 		clear_color := clear_color;
 		t : gl.GLenum;
 
@@ -3301,21 +3343,67 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, format : Pixel_f
 			#panic("Unsupported type");
 		}
 
-		gl.ClearTexImage(auto_cast tex, 0, .RGBA, t, &clear_color[0]);
+		upload_format : gl.GLenum;
+		
+		when N == 1 {
+			upload_format = .RED;
+		}
+		else when N == 2 {
+			upload_format = .RG;
+		}
+		else when N == 3 {
+			upload_format = .RGB;
+		}
+		else when N == 4 {
+			upload_format = .RGBA;
+		}
+		else {
+			#panic("Unsupported type");
+		}
+		
+		gl.ClearTexImage(auto_cast tex, 0, upload_format, t, &clear_color[0]);
 	}
 	else {
 		width, height : i32;
-		gl.GetTexLevelParameteriv(.TEXTURE_2D, 0, .TEXTURE_WIDTH, &width);
-		gl.GetTexLevelParameteriv(.TEXTURE_2D, 0, .TEXTURE_HEIGHT, &height);
-
+		if cpu_state.gl_version >= .opengl_4_5 {
+			gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_WIDTH, &width);
+			gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_HEIGHT, &height);
+		} else {
+			bind_texture2D(tex);
+			gl.GetTexLevelParameteriv(.TEXTURE_2D, 0, .TEXTURE_WIDTH, &width);
+			gl.GetTexLevelParameteriv(.TEXTURE_2D, 0, .TEXTURE_HEIGHT, &height);
+			unbind_texture2D();
+		}
+		
+		upload_format : Pixel_format_upload;
+		
+		when N == 1 {
+			upload_format = .R32_float;
+		}
+		else when N == 2 {
+			upload_format = .RG32_float;
+		}
+		else when N == 3 {
+			upload_format = .RGB32_float;
+		}
+		else when N == 4 {
+			upload_format = .RGBA32_float;
+		}
+		else {
+			#panic("Unsupported type");
+		}
+		
+		assert(width != 0, "width is zero, internal error");
+		assert(height != 0, "height is zero, internal error");
 		pixels := make([][N]T, width * height);
 		defer delete(pixels);
 		
 		for &p in pixels {
 			p = clear_color;
 		}
-
-		write_texure_data_2D(tex, 0, 0, 0, width, height, .RGBA32_float, slice.reinterpret([]u8, pixels), loc);
+		
+		assert(pixels != nil, "fallback pixels are nil, internal error");
+		write_texure_data_2D(tex, 0, 0, 0, width, height, upload_format, slice.reinterpret([]u8, pixels));
 	}
 }
 
@@ -3391,11 +3479,12 @@ gen_texture3D :: proc (loc := #caller_location) -> (tex : Tex3d_id) {
 
 delete_texture3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 
-	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
-		for t in textures {
-			if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)t {
-				gl.BindTexture(.TEXTURE_3D, 0);
-				gpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	for texture in textures {
+		for bound_tex, slot in gpu_state.bound_texture {
+			//If the texture being deleted is bound to any texture slot then set the set the texture slot to zero 
+			if bound_tex == cast(Texg_id)texture {
+				cpu_state.bound_texture[slot] = 0;
+				gpu_state.bound_texture[slot] = 0;
 			}
 		}
 	}
@@ -3406,6 +3495,23 @@ delete_texture3Ds :: proc (textures : []Tex3d_id, loc := #caller_location) {
 		for t in textures {
 			delete_key(&debug_state.tex3ds, t);
 		}
+	}
+}
+
+delete_texture3D :: proc (texture : Tex3d_id, loc := #caller_location) {
+	texture := texture;
+
+	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
+		if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)texture {
+			gl.BindTexture(.TEXTURE_3D, 0);
+			gpu_state.bound_texture[cpu_state.texture_slot]= 0;
+		}
+	}
+
+	gl.DeleteTextures(1, cast([^]u32)&texture);
+
+	when RENDER_DEBUG {
+		delete_key(&debug_state.tex3ds, texture);
 	}
 }
 
@@ -3551,23 +3657,6 @@ filtermode_texture3D :: proc(tex_id : Tex3d_id, mode : Filtermode, using_mipmaps
 		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
 		gl.TexParameteri(.TEXTURE_3D, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
 		unbind_texture3D();
-	}
-}
-
-delete_texture3D :: proc (texture : Tex3d_id, loc := #caller_location) {
-	texture := texture;
-
-	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
-		if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)texture {
-			gl.BindTexture(.TEXTURE_3D, 0);
-			gpu_state.bound_texture[cpu_state.texture_slot]= 0;
-		}
-	}
-
-	gl.DeleteTextures(1, cast([^]u32)&texture);
-
-	when RENDER_DEBUG {
-		delete_key(&debug_state.tex3ds, texture);
 	}
 }
 

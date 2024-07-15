@@ -65,6 +65,5 @@ void main() {
     float illumination = max(dot(normals, lightDir), 0.0);
 
     FragColor = color_diffuse * tex_color;
-	FragColor.xyz = FragColor.xyz;
 }
 
