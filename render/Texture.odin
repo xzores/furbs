@@ -19,6 +19,7 @@ import "core:image/png"
 import "gl"
 
 import "../utils"
+import fs "../fontstash"
 
 Pixel_format_internal 	:: gl.Pixel_format_internal;
 Wrapmode 				:: gl.Wrapmode;
@@ -299,15 +300,11 @@ texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 //Clear color is only used if data is nil
 @(require_results)
 texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture2D {
-
-	/*
 	assert(wrapmode != nil, "wrapmode is nil", loc);
 	assert(filtermode != nil, "filtermode is nil", loc);
 	assert(format != nil, "format is nil", loc);
-	*/
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
-
 
 	id : gl.Tex2d_id = gl.gen_texture2D(loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
@@ -315,10 +312,10 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	if upload_format != .no_upload {
 		assert(data != nil, "Data must not be nil if upload_format is not .no_upload", loc = loc);
 	}
-
+	
     gl.wrapmode_texture2D(id, desc.wrapmode);
 	gl.filtermode_texture2D(id, desc.filtermode, mipmaps);
-
+	
 	size_per_component, channels : int;
 	size_per_component = gl.upload_format_component_size(upload_format);
 	channels = gl.upload_format_channel_cnt(upload_format);
@@ -519,7 +516,7 @@ texture3D_upload_data :: proc(tex : ^Texture3D, pixel_offset : [3]i32, pixel_cnt
 /////////////////////////////////// Texture 2D Atlas ///////////////////////////////////
 
 //Refers to a quad in the atlas, there are returned from texture2D_atlas_add
-Atlas_handle :: utils.Atlas_handle;
+Atlas_handle :: fs.Atlas_handle;
 
 @(private="file")
 Texture2D_atlas_data :: struct {
@@ -532,7 +529,7 @@ Texture2D_atlas_data :: struct {
 //It might not work well for very large differences in quad sizes.
 //Resize might not be fast.
 Texture2D_atlas :: struct {
-	using impl : utils.Atlas,
+	using impl : fs.Atlas,
 	using data : Texture2D_atlas_data,
 }
 
@@ -551,7 +548,7 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 	
 	atlas = Texture2D_atlas{
 		data = data,
-		impl = utils.atlas_make(init_size, margin, loc),
+		impl = fs.atlas_make(init_size, margin, loc),
 	}
 	
 	return;
@@ -564,14 +561,14 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_handle, success : bool) {
 	fmt.assertf(cast(i32)len(data) == cast(i32)gl.upload_format_channel_cnt(atlas.upload_format) * pixel_cnt.x * pixel_cnt.y, "upload size must match, data len : %v, but size resulted in %v", len(data), pixel_cnt.x * pixel_cnt.y * 4, loc = loc);
 	quad : [4]i32;
-	handle, quad, success = utils.atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+	handle, quad, success = fs.atlas_add(&atlas.impl, pixel_cnt, loc = loc);
 	
 	for !success { //if we fail, we prune and try again.
 		grew := texture2D_atlas_grow(atlas);
-		handle, quad, success = utils.atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+		handle, quad, success = fs.atlas_add(&atlas.impl, pixel_cnt, loc = loc);
 		if !grew {
 			pruned := texture2D_atlas_prune(atlas);
-			handle, quad, success = utils.atlas_add(&atlas.impl, pixel_cnt, loc = loc);
+			handle, quad, success = fs.atlas_add(&atlas.impl, pixel_cnt, loc = loc);
 			break;
 		}
 	}
@@ -581,7 +578,7 @@ texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, da
 		fmt.assertf(quad.w == pixel_cnt.y, "quad heigth does not match pixel count: %v, %v", quad, pixel_cnt);
 		
 		//TODO make it not store pixels client side and just do an GPU-GPU copy.
-		utils.copy_pixels(gl.upload_format_channel_cnt(atlas.upload_format), quad.z, quad.w, 0, 0, data, atlas.backing.width, atlas.backing.height, quad.x, quad.y, atlas.pixels, quad.z, quad.w);
+		fs.copy_pixels(gl.upload_format_channel_cnt(atlas.upload_format), quad.z, quad.w, 0, 0, data, atlas.backing.width, atlas.backing.height, quad.x, quad.y, atlas.pixels, quad.z, quad.w);
 		texture2D_upload_data(&atlas.backing, atlas.upload_format, quad.xy, quad.zw, data);
 	}
 	
@@ -593,12 +590,12 @@ texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, da
 //resized refers to texture2D_atlas_shirnk, texture2D_atlas_grow and texture2D_atlas_add.
 @(require_results)
 texture2D_atlas_get_coords :: proc (atlas : Texture2D_atlas, handle : Atlas_handle) -> [4]f32 {
-	return utils.atlas_get_coords(atlas.impl, handle);
+	return fs.atlas_get_coords(atlas.impl, handle);
 }
 
 texture2D_atlas_remove :: proc(atlas : ^Texture2D_atlas, handle : Atlas_handle) {
 	//TODO add a list of deleted quads and then try those before increasing the row widht/height.
-	quad := utils.atlas_remove(&atlas.impl, handle);
+	quad := fs.atlas_remove(&atlas.impl, handle);
 	
 	assert(quad.z != 0);
 	assert(quad.w != 0);
@@ -637,7 +634,7 @@ texture2D_atlas_shirnk :: proc (atlas : ^Texture2D_atlas) -> (success : bool) {
 texture2D_atlas_destroy :: proc (using atlas : Texture2D_atlas) {
 	
 	delete(atlas.pixels);	
-	utils.atlas_destroy(atlas.impl);
+	fs.atlas_destroy(atlas.impl);
 	texture2D_destroy(atlas.backing);
 }
 
@@ -647,13 +644,13 @@ texture2D_atlas_transfer :: proc (atlas : ^Texture2D_atlas, new_size : i32, loc 
 	
 	new_atlas : Texture2D_atlas = texture2D_atlas_make(atlas.upload_format, atlas.backing.desc, atlas.margin, new_size);
 	
-	handle_map := make(map[utils.Atlas_handle][2]i32);
+	handle_map := make(map[fs.Atlas_handle][2]i32);
 	defer delete(handle_map);
 	for h, v in atlas.impl.handles {
 		handle_map[h] = v.rect.zw;
 	}
 	
-	rects, ok := utils.atlas_add_multi(&new_atlas, handle_map, loc = loc);
+	rects, ok := fs.atlas_add_multi(&new_atlas, handle_map, loc = loc);
 	defer delete(rects);
 	
 	if !ok {
@@ -666,9 +663,9 @@ texture2D_atlas_transfer :: proc (atlas : ^Texture2D_atlas, new_size : i32, loc 
 	for h, v in atlas.impl.handles {
 		assert(h in handle_map, "internal error, h is not in handle_map");
 		
-		src_quad := utils.atlas_get_coords(atlas, h);
+		src_quad := fs.atlas_get_coords(atlas, h);
 		dst_quad := rects[h];
-		utils.copy_pixels(gl.upload_format_channel_cnt(atlas.upload_format), atlas.size, atlas.size, src_quad.x, src_quad.y, atlas.pixels,
+		fs.copy_pixels(gl.upload_format_channel_cnt(atlas.upload_format), atlas.size, atlas.size, src_quad.x, src_quad.y, atlas.pixels,
 							new_atlas.size, new_atlas.size, dst_quad.x, dst_quad.y, new_atlas.pixels, dst_quad.z, dst_quad.w);
 		
 		used_height = math.max(used_height, dst_quad.y + dst_quad.w);

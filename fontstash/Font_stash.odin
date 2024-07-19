@@ -1,4 +1,4 @@
-package utils;
+package furbs_fontstash;
 
 //////////////////////////////////////////////////////////////////////////////////////
 //	Written by Jakob Furbo Enevoldsen, as an alternative to the original fontstash	//
@@ -101,6 +101,7 @@ Font_context :: struct {
 	scale : f32,
 	font_stack : [dynamic]Font, //The current font
 	
+	uploaded : bool,
 	uploaded_size : i32,
 	quads_to_upload : [dynamic][4]i32,
 	
@@ -114,7 +115,7 @@ Font_context :: struct {
 Font_iter :: struct {
 	runes : []rune,
 	current_index : int, //This is the byte index
-	last_rune : rune,
+	last_glyph : i32,
 	x_offset : f32,
 }
 
@@ -164,7 +165,7 @@ font_init :: proc(max_texture_size : i32, loc := #caller_location) -> (ctx : Fon
 	ctx = Font_context {
 		scale = 0,
 		uploaded_size = 0,
-		atlas = client_atlas_make(1, 1, 512, max_texture_size, 1),
+		atlas = client_atlas_make(1, 1, 128, max_texture_size, 1),
 		font_stack = make([dynamic]Font),
 		fonts = make(map[Font]tt.fontinfo),
 		owned_font_data = make([dynamic][]u8),
@@ -326,17 +327,42 @@ pop_font :: proc (ctx: ^Font_context,loc := #caller_location) {
 make_font_iter :: proc (ctx: ^Font_context, text : string, alloc := context.allocator, loc := #caller_location) -> Font_iter {
 	assert(len(ctx.font_stack) != 0, "No font is set", loc = loc);
 	assert(ctx.scale != 0, "Size is zero, set size first", loc = loc);
-	top := ctx.font_stack[len(ctx.font_stack)-1]; //The top font
 	
 	for r in text {
+		
+		font_stack_index := len(ctx.font_stack)-1;
+		font := ctx.font_stack[font_stack_index]; //The top font
+		fi := &ctx.fonts[font];
 		
 		glyph : Glyph = {
 			codepoint = r,
 			size = ctx.scale,
-			font = top,
+			font = font,
 		}
 		
-		if !(glyph in ctx.glyphs) {
+		for g, h in ctx.glyphs {
+			assert(g.codepoint != ' ');	
+		}
+		
+		tt_glyph := tt.FindGlyphIndex(fi, r);
+		for tt_glyph == 0 {
+			assert(font_stack_index != -1);
+			font_stack_index -= 1;
+			if font_stack_index == -1 {
+				//If we dont find it reset to top
+				font_stack_index = len(ctx.font_stack)-1;
+				font = ctx.font_stack[font_stack_index];
+				fi = &ctx.fonts[font];
+				glyph = {codepoint = r, size = ctx.scale, font = font};
+				break;
+			}
+			font = ctx.font_stack[font_stack_index];
+			fi = &ctx.fonts[font];
+			tt_glyph = tt.FindGlyphIndex(fi, r);
+			glyph = Glyph{codepoint = r, size = ctx.scale * _calculate_relative_scaling(ctx, fi), font = font};
+		}
+		
+		if !(glyph in ctx.glyphs) && !tt.IsGlyphEmpty(fi, tt_glyph) {
 			_load_glyph(ctx, glyph, loc);
 		}
 	}
@@ -344,6 +370,10 @@ make_font_iter :: proc (ctx: ^Font_context, text : string, alloc := context.allo
 	iter : Font_iter = {
 		runes = utf8.string_to_runes(text, alloc),
 		current_index = 0,
+	}
+	
+	for r in iter.runes {
+		assert(r != auto_cast 0, "rune is nil");
 	}
 	
 	return iter;
@@ -372,22 +402,22 @@ requires_reupload :: proc (using ctx: ^Font_context) -> (new_size : [2]i32, requ
 
 //Repeatatly call this untill done is true, this tell you what part of the texture should be uploaded to the gpu.
 //To get the texture, call get_texture
-//The call after the last quad will return done = true. So you shall ignore the quad if done is true.
-get_next_quad_upload :: proc (ctx: ^Font_context, loc := #caller_location) -> (quad : [4]i32, done : bool) {
+//The call after the last rect will return done = true. So you shall ignore the rect if done is true.
+get_next_quad_upload :: proc (ctx: ^Font_context, loc := #caller_location) -> (rect : [4]i32, done : bool) {
 	assert(len(ctx.font_stack) != 0, "No font is set", loc = loc);
 	
 	if len(ctx.quads_to_upload) == 0 {
 		return {}, true;
 	}
 	
-	quad = pop(&ctx.quads_to_upload);
-	return quad, false;
+	rect = pop(&ctx.quads_to_upload);
+	return rect, false;
 }
 
-//Use this to draw the quads
+//Use this to draw the rects
 //requires_reupload and get_next_quad_upload must be called before calling font_iter_next and after calling make_font_iter
 //This will allow you to first specify the glyphs needed whereafter they can be uploaded and then used/drawn by font_iter_next
-font_iter_next :: proc (ctx: ^Font_context, iter : ^Font_iter, loc := #caller_location) -> (quad, text_coords : [4]f32, go_on : bool) {
+font_iter_next :: proc (ctx: ^Font_context, iter : ^Font_iter, loc := #caller_location) -> (rect, text_coords : [4]f32, go_on : bool) {
 	assert(ctx.atlas.size == ctx.uploaded_size, "You must do requires_reupload before calling font_iter_next", loc = loc);
 	assert(len(ctx.quads_to_upload) == 0, "You must do get_next_quad_upload until there are no more upload required before calling font_iter_next", loc = loc);
 	
@@ -399,38 +429,66 @@ font_iter_next :: proc (ctx: ^Font_context, iter : ^Font_iter, loc := #caller_lo
 		go_on = true;
 	}
 	
-	top := ctx.font_stack[len(ctx.font_stack)-1]; //The top font
-	fi := &ctx.fonts[top];
-	
 	cur_rune := iter.runes[iter.current_index];
 	iter.current_index += 1;
 	
+	font_stack_index := len(ctx.font_stack)-1;
+	font := ctx.font_stack[font_stack_index]; //The top font
+	fi := &ctx.fonts[font];
+	
+	scale := ctx.scale;
+	
+	tt_glyph := tt.FindGlyphIndex(fi, cur_rune);
+	
+	for tt_glyph == 0 {
+		font_stack_index -= 1;
+		
+		if font_stack_index == -1 {
+			//If we dont find it reset to top
+			font_stack_index = len(ctx.font_stack)-1;
+			font = ctx.font_stack[font_stack_index];
+			fi = &ctx.fonts[font];
+			tt_glyph = 0;
+			scale = ctx.scale;
+			break;
+		}
+		
+		font = ctx.font_stack[font_stack_index];
+		fi = &ctx.fonts[font];
+		tt_glyph = tt.FindGlyphIndex(fi, cur_rune);
+		scale = ctx.scale * _calculate_relative_scaling(ctx, fi);
+	}
+	
 	x0, y0, x1, y1 : i32;
-	tt.GetCodepointBitmapBox(fi, cur_rune, ctx.scale, ctx.scale, &x0, &y0, &x1, &y1);
+	tt.GetGlyphBitmapBox(fi, tt_glyph, scale, scale, &x0, &y0, &x1, &y1);
 	
 	width, height := f32(x1-x0), f32(y1-y0);
 	
 	advance_width, left_side_bearing : i32;
-	tt.GetCodepointHMetrics(fi, cur_rune, &advance_width, &left_side_bearing);
-	//fmt.printf("codepoint : %v advance_width : %v\n", cur_rune, advance_width);
+	tt.GetGlyphHMetrics(fi, tt_glyph, &advance_width, &left_side_bearing);
 	
 	ascent_i, descent_i, line_gap_i : i32;
 	tt.GetFontVMetrics(fi, &ascent_i, &descent_i, &line_gap_i);
 	
 	glyph : Glyph = {
 		codepoint = cur_rune,
-		size = ctx.scale,
-		font = top,
+		size = scale,
+		font = font,
 	}
 	
+	iter.x_offset += scale * cast(f32)tt.GetGlyphKernAdvance(fi, iter.last_glyph, tt_glyph);
+	rect = [4]f32{scale * f32(left_side_bearing) + iter.x_offset + width/2, -f32(y1) + height/2, width, height};
+	iter.x_offset += scale * f32(advance_width);
+	
+	if tt.IsGlyphEmpty(fi, tt_glyph) {
+		return {}, {}, true;
+	}
+	
+	assert(glyph in ctx.glyphs, "invalid glyph index");
 	atlas_handle := ctx.glyphs[glyph];
 	text_coords = atlas_get_coords(ctx.atlas, atlas_handle);
 	
-	iter.x_offset += ctx.scale * cast(f32)tt.GetCodepointKernAdvance(fi, iter.last_rune, cur_rune);
-	rect := [4]f32{ctx.scale * f32(left_side_bearing) + iter.x_offset + width/2, -f32(y1) + height/2, width, height};
-	iter.x_offset += ctx.scale * f32(advance_width); //
-	
-	iter.last_rune = cur_rune;
+	iter.last_glyph = tt_glyph;
 	
 	return rect, text_coords, go_on;
 };
@@ -441,8 +499,15 @@ destroy_font_iter :: proc (iter : Font_iter) {
 }
 
 //clears the texture, removings any old rasterized font glyphs.
-clear_atlas :: proc () {
-	panic("TODO");
+clear_atlas :: proc (ctx: ^Font_context) {
+	margin := ctx.atlas.margin;
+	max_size := ctx.atlas.max_size;
+	client_atlas_destroy(ctx.atlas);
+	ctx.atlas = client_atlas_make(1, 1, 128, max_size, margin);
+	
+	ctx.uploaded_size = 0;
+	clear(&ctx.quads_to_upload);
+	clear(&ctx.glyphs);
 }
 
 //Set the size of the EM square size, which is the traditoinal way to set the size, but it is a little abstract instead set_max_height_size can be used.
@@ -461,8 +526,115 @@ set_max_height_size :: proc(ctx: ^Font_context, size: f32, loc := #caller_locati
 	ctx.scale = tt.ScaleForPixelHeight(&ctx.fonts[top], size);
 }
 
-get_codepoint_horizontal_metrics :: proc () {
-	//tt.GetCodepointHMetrics();
+get_codepoint_horizontal_metrics :: proc (ctx: ^Font_context, codepoint : rune, loc := #caller_location) -> (advance_width, left_side_bearing : f32) {
+	assert(len(ctx.font_stack) != 0, "There is not font, set a font first.", loc = loc);
+	top := ctx.font_stack[len(ctx.font_stack)-1]; //The top font
+	fi := &ctx.fonts[top];
+	
+	advance_width_i, left_side_bearing_i : i32;
+	tt.GetCodepointHMetrics(fi, codepoint, &advance_width_i, &left_side_bearing_i);
+	
+	return ctx.scale * f32(advance_width_i), ctx.scale * f32(left_side_bearing_i);
+}
+
+//////////////////// get specifc character/string information ////////////////////
+
+//x_offset, y_offset, width and height in pixels.
+//This returns the text bound of the text, where the y components is not dependent on the text passed.
+//The horizontal x components will change based on the text.
+//relative to the baseline
+get_text_bounds :: proc(ctx: ^Font_context, text : string) -> [4]f32 {
+	
+	if len(text) == 0 {
+		return {};
+	}
+	
+	font_stack_index := len(ctx.font_stack)-1;
+	font := ctx.font_stack[font_stack_index]; //The top font
+	fi := &ctx.fonts[font];
+	
+	total_width : f32 = 0;
+	last_glyph : i32 = 0;
+	
+	rune_cnt := utf8.rune_count_in_string(text);
+	for r, i in text {
+		tt_glyph := tt.FindGlyphIndex(fi, r);
+		
+		advance_width, left_side_bearing : i32;
+		tt.GetGlyphHMetrics(fi, tt_glyph, &advance_width, &left_side_bearing);
+		
+		total_width += ctx.scale * f32(advance_width);
+		if (i != rune_cnt - 1){
+			total_width += ctx.scale * cast(f32)tt.GetGlyphKernAdvance(fi, last_glyph, tt_glyph);
+		}
+		
+		last_glyph = tt_glyph;
+	}	
+	
+	x_min, y_min, x_max, y_max := _get_bounds(ctx);
+	rect : [4]f32 = {0, y_min, total_width, y_max - y_min};
+	
+ 	return rect;
+}
+
+//x_offset, y_offset, width and height in pixels.
+//This returns the visuable text bounds of the text, this is dependent of what the text containes.
+//relative to the baseline
+get_visible_text_bounds :: proc(ctx: ^Font_context, text : string) -> [4]f32 {
+	
+	if len(text) == 0 {
+		return {};
+	}
+	
+	font_stack_index := len(ctx.font_stack)-1;
+	font := ctx.font_stack[font_stack_index]; //The top font
+	fi := &ctx.fonts[font];
+	
+	total_width : f32 = 0;
+	last_glyph : i32 = 0;
+	
+	first_advance_width, first_left_side_bearing : i32;
+	tt.GetCodepointHMetrics(fi, utf8.rune_at(text, 0), &first_advance_width, &first_left_side_bearing);
+	
+	y0, y1: f32;
+	
+	rune_cnt := utf8.rune_count_in_string(text);
+	for r, i in text {
+		tt_glyph := tt.FindGlyphIndex(fi, r);
+		
+		advance_width, left_side_bearing : i32;
+		tt.GetGlyphHMetrics(fi, tt_glyph, &advance_width, &left_side_bearing);
+		
+		ix0, iy0, ix1, iy1: i32;
+		tt.GetGlyphBitmapBox(fi, tt_glyph, ctx.scale, ctx.scale, &ix0, &iy0, &ix1, &iy1);
+		
+		if f32(iy0) < y0 {
+			y0 = f32(iy0);
+		}
+		
+		if f32(iy1) > y1 {
+			y1 = f32(iy1);
+		}
+		
+		if (i == rune_cnt - 1) {
+			total_width += f32(ix1);
+			total_width += ctx.scale * cast(f32)tt.GetGlyphKernAdvance(fi, last_glyph, tt_glyph);
+		}
+		else {
+			total_width += ctx.scale * f32(advance_width);
+			total_width += ctx.scale * cast(f32)tt.GetGlyphKernAdvance(fi, last_glyph, tt_glyph);
+		}
+		
+		last_glyph = tt_glyph;
+	}
+	
+	height := y1-y0;
+	
+	flsb := ctx.scale * f32(first_left_side_bearing);
+	
+	rect : [4]f32 = {flsb, -y1, total_width - flsb, height};
+	
+ 	return rect;
 }
 
 //////////////////// get non-specifc character information ////////////////////
@@ -498,39 +670,34 @@ get_line_gap :: proc(ctx: ^Font_context, loc := #caller_location) -> f32 {
 	return gap;
 }
 
+//Get the maximum width of any charater
+get_max_width :: proc (ctx: ^Font_context, loc := #caller_location) -> f32 {
+	x_min, y_min, x_max, y_max := _get_bounds(ctx, loc);
+	return x_max - x_min;
+}
+
 //Total max height in pixels for any character at the current text size and font.
+//relative to base line, Units in pixels
 get_max_height :: proc (ctx: ^Font_context, loc := #caller_location) -> f32 {
-	ascent, descent, _ := get_vertical_metrics(ctx, loc);
-	return -descent + ascent;
+	x_min, y_min, x_max, y_max := _get_bounds(ctx, loc);
+	return y_max - y_min;
 }
 
-//////////////////// get specifc character/string information ////////////////////
-
-/*
-//x_offset, y_offset, width and height in pixels, this will not include the desender and ascender.
-//It will meassure the distance to the cap height or x-height if only lower case characters is used.
-//It will not include the Left Bearing and Right Bearing.
-get_inner_text_bounds :: proc(ctx: ^Font_context, text : string) -> [4]f32 {
-	tt.FindGlyphIndex();
+//Relative to baseline, result is negative, Units in pixels
+//This might be lower then the descender for charactors like "," or @
+get_lowest_point :: proc (ctx: ^Font_context, loc := #caller_location) -> f32 {
+	x_min, y_min, x_max, y_max := _get_bounds(ctx, loc);
+	return y_min;
 }
 
-//x_offset, y_offset, width and height in pixels.
-//Same as get_inner_text_bounds but includes the desender.
-get_visible_text_bounds :: proc(ctx: ^Font_context, text : string) -> [4]f32 {
-	
+//Relative to baseline, Units in pixels
+//This might be higher then the ascender for some fonts, it can be because of charaters like Ä or É.
+get_highest_point :: proc (ctx: ^Font_context, loc := #caller_location) -> f32 {
+	x_min, y_min, x_max, y_max := _get_bounds(ctx, loc);
+	return y_max;
 }
 
-//x_offset, y_offset, width and height in pixels.
-//This includes everything. x_offset and y_offset will always be (0,0)
-get_outer_text_bounds :: proc(ctx: ^Font_context, text : string) -> [4]f32 {
-	
-}
-
-// as above, but takes one or more glyph indices for greater efficiency
-GetGlyphHMetrics    :: proc(info: ^fontinfo, glyph_index: c.int, advanceWidth, leftSideBearing: ^c.int) ---
-GetGlyphKernAdvance :: proc(info: ^fontinfo, glyph1, glyph2: c.int) -> c.int ---
-GetGlyphBox         :: proc(info: ^fontinfo, glyph_index: c.int, x0, y0, x1, y1: ^c.int) -> c.int ---
-*/
+////////////////////// INTERNAL USE ONLY //////////////////////////
 
 //Returns the bounding box around all possible characters (in a weird format)
 //Internal use
@@ -560,9 +727,8 @@ _load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph, loc := #caller_loc
 	//Find the glyph
 	fi := &ctx.fonts[glyph.font];
 	tt_glyph := tt.FindGlyphIndex(fi, glyph.codepoint);
-	if tt.IsGlyphEmpty(fi, tt_glyph) {
-		return false; //We could not load it
-	}
+	assert(!tt.IsGlyphEmpty(fi, tt_glyph), "Cannot load empty glyph");
+	assert(glyph.codepoint != auto_cast 0, "codepoint is nil");
 	
 	//Razterize
 	ix0, iy0, ix1, iy1: i32;
@@ -572,15 +738,10 @@ _load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph, loc := #caller_loc
 	assert(width != 0, "width is zero, internal error", loc);
 	assert(height != 0, "height is zero, internal error", loc);
 	
-	result := make([]u8, width * height);
-	defer delete(result);
-	tt.MakeGlyphBitmap(fi, &result[0], width, height, width, ctx.scale, ctx.scale, tt_glyph); //TODO we can razterize directly into the atlas instead. 
-	//TODO Use client_atlas_add_no_data
+	handle, rect, pixels, resized, ok := client_atlas_add_no_data(&atlas, {width, height});
+	tt.MakeGlyphBitmap(fi, pixels, width, height, atlas.size, ctx.scale, ctx.scale, tt_glyph);
 	
-	//Add to atlas
-	handle, quad, ok := client_atlas_add(&atlas, {width, height}, result);
-	
-	if atlas.size != uploaded_size {
+	if resized {
 		clear(&quads_to_upload);
 	}
 	
@@ -589,7 +750,9 @@ _load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph, loc := #caller_loc
 	}
 	
 	glyphs[glyph] = handle;
-	append(&quads_to_upload, quad);
+	if atlas.size == uploaded_size {
+		append(&quads_to_upload, rect);
+	}
 	
 	return true;
 }
@@ -645,4 +808,21 @@ _get_font_field :: proc (fi : ^tt.fontinfo, #any_int field_index : i32, alloc :=
 	field := strings.clone_from_cstring_bounded(field_c, int(name_length), loc = loc);
 	
 	return field;
+}
+
+//Calculates the relative scaling needed between the top font and another font.
+//Note, this currently does scalign based on ascender, which mean the library might return some charaters that are greater then max_height if the charater is not in the top font.
+//This is very rare, and if we scale to max_height it does not look good. I think this is the mest solution.
+//Internal use
+_calculate_relative_scaling :: proc (using ctx: ^Font_context, other_fi : ^tt.fontinfo) -> f32 {
+	
+	ori_height := get_ascent(ctx) - get_descent(ctx);//get_max_height(ctx);
+	
+	//x0, y0, x1, y1 : i32;
+	//tt.GetFontBoundingBox(other_fi, &x0, &y0, &x1, &y1);
+	
+	ascent, descent, gap : i32;
+	tt.GetFontVMetrics(other_fi, &ascent, &descent, &gap);
+	
+	return ori_height / (ctx.scale * f32(ascent - descent));
 }

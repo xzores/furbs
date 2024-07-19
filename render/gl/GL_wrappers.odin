@@ -799,6 +799,7 @@ upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes
 }
 
 Wrapmode :: enum i32 {
+	invalid = 0,
 	repeat = gl.REPEAT,
 	clamp_to_edge = gl.CLAMP_TO_EDGE,
 	clamp_to_border = gl.CLAMP_TO_BORDER,
@@ -807,6 +808,7 @@ Wrapmode :: enum i32 {
 }
 
 Filtermode :: enum {
+	invalid = 0,
 	nearest,
 	linear,
 }
@@ -989,7 +991,7 @@ GL_info :: struct {
 }
 
 init_state :: proc () -> GL_states_comb {
-
+	
 	log.infof("initializing gl_states");
 
 	state : GL_states_comb;
@@ -1019,13 +1021,13 @@ debug_callback : gl.debug_proc_t : proc "c" (source: gl.GLenum, type: gl.GLenum,
 
 	#partial switch severity {
 		case .DEBUG_SEVERITY_NOTIFICATION:
-			log.debugf("From %v, OpenGL Debug Message: %.*s", source, length, message);
+			log.debugf("From %v, OpenGL Debug Message: %.*s", source, message);
 	 	case .DEBUG_SEVERITY_LOW:
-    		log.infof("From %v, OpenGL Debug Message: %.*s", source, length, message);
+    		log.infof("From %v, OpenGL Debug Message: %.*s", source, message);
 		case .DEBUG_SEVERITY_MEDIUM:
-			log.warnf("From %v, OpenGL Debug Message: %.*s", source, length, message);
+			log.warnf("From %v, OpenGL Debug Message: %.*s", source, message);
 		case .DEBUG_SEVERITY_HIGH:
-			log.errorf("From %v, OpenGL Debug Message: %.*s", source, length, message);
+			log.errorf("From %v, OpenGL Debug Message: %.*s", source, message);
 		case:
 			fmt.panicf("Unhandled severity : %v", severity);
 	}
@@ -1078,6 +1080,9 @@ init :: proc(gl_context := context) {
 
 	info = fetch_gl_info();
 	log.debugf("System info : %#v", info);
+	
+	gl.PixelStorei(.UNPACK_ALIGNMENT, 1); //TODO should this be here?
+	//It seesm to affect all the textures correctly. 
 }
 
 destroy :: proc(loc := #caller_location) -> (leaks : int) {
@@ -3038,6 +3043,8 @@ filtermode_texture1D :: proc(tex_id : Tex1d_id, mode : Filtermode, using_mipmaps
 			}
 
 			mag_mode = .LINEAR;
+		case .invalid:
+			panic("invalid");
 	}
 	
 	
@@ -3157,11 +3164,13 @@ unbind_texture2D  :: proc() {
 
 write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, width, height : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
 	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
-
+	
 	data_ptr : rawptr;
 	
 	if d, ok := data.([]u8); ok {
+		assert(len(d) == upload_format_component_size(format) * upload_format_channel_cnt(format) * int(width) * int(height), "Data len does not match format, width and height");
 		assert(d != nil, "Data is nil", loc);
+		
 		data_ptr = raw_data(d);
 	}
 	else if d, ok := data.(Resource); ok {
@@ -3170,6 +3179,7 @@ write_texure_data_2D :: proc (tex : Tex2d_id, level, xoffset, yoffset : i32, wid
 	else {
 		panic("???");
 	}
+	
 	
 	if cpu_state.gl_version >= .opengl_4_5 {
 		gl.TextureSubImage2D(auto_cast tex, level, xoffset, yoffset, width, height, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
@@ -3263,6 +3273,8 @@ filtermode_texture2D :: proc(tex_id : Tex2d_id, mode : Filtermode, using_mipmaps
 			}
 
 			mag_mode = .LINEAR;
+		case .invalid:
+			panic("invalid");
 	}
 	
 	if cpu_state.gl_version >= .opengl_4_5 { 
@@ -3314,7 +3326,7 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, loc := #caller_l
 	
 	assert(N == internal_format_channel_cnt(format), "The clear_color does not have the same amount of channels as the format", loc = loc);
 	
-	if cpu_state.gl_version >= .opengl_4_4 && false{
+	if cpu_state.gl_version >= .opengl_4_4 {
 		clear_color := clear_color;
 		t : gl.GLenum;
 
@@ -3646,6 +3658,8 @@ filtermode_texture3D :: proc(tex_id : Tex3d_id, mode : Filtermode, using_mipmaps
 			}
 
 			mag_mode = .LINEAR;
+		case .invalid:
+			panic("invalid");
 	}
 
 	if cpu_state.gl_version >= .opengl_4_5 { 
