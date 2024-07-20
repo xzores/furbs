@@ -690,10 +690,34 @@ Pixel_format_upload :: enum i32 {
 	RGBA32_float, 
 }
 
-@(require_results)
-internal_format_channel_cnt :: proc (f : Pixel_format_internal, loc := #caller_location) -> (channels : int) {
+Texture_type :: enum {
+	invalid,
+	color,
+	depth,
+	stencil_index,
+	stencil_depth,
+}
 
-	switch f {
+internal_format_to_texture_type :: proc (format : Pixel_format_internal, loc := #caller_location) -> Texture_type {
+
+	#partial switch format {
+		case .depth_component16, .depth_component24, .depth_component32:
+			return .depth;
+			
+		case .invalid:
+			panic("Invalid format", loc);
+		
+		case:
+			return .color;
+	}
+
+	unreachable();
+}
+
+@(require_results)
+internal_format_channel_cnt :: proc (format : Pixel_format_internal, loc := #caller_location) -> (channels : int) {
+
+	switch format {
 		case .R8, .R16, .compressed_R8, .depth_component16, .depth_component24, .depth_component32, .R8_int, .R16_int, .R32_int, .R8_uint, .R16_uint, .R32_uint, .R16_float, .R32_float:
 			return 1;
 		
@@ -3311,8 +3335,8 @@ active_bind_texture2D :: proc (tex : Tex2d_id, slot : i32) {
 }
 
 //Clear mipmap level 0 of a texture
-//TODO this does not support integer and GL_DEPTH_COMPONENT, GL_STENCIL_INDEX, or GL_DEPTH_STENCIL textures, see https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearTexImage.xhtml
-clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, loc := #caller_location) {
+//TODO this does not support GL_DEPTH_COMPONENT, GL_STENCIL_INDEX, or GL_DEPTH_STENCIL textures, see https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearTexImage.xhtml
+clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : Texture_type, loc := #caller_location) {
 	//assert(cpu_state.bound_texture[cpu_state.texture_slot] == 0, "There cannot be a bound texture, while clearing a texture", loc);
 	format : Pixel_format_internal;
 	
@@ -3354,11 +3378,25 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, loc := #caller_l
 		else {
 			#panic("Unsupported type");
 		}
-
+		
 		upload_format : gl.GLenum;
 		
 		when N == 1 {
-			upload_format = .RED;
+			if texture_type == .color {
+				upload_format = .RED;
+			}
+			else if texture_type == .depth {
+				upload_format = .DEPTH_COMPONENT;
+			}
+			else if texture_type == .stencil_index {
+				upload_format = .STENCIL_INDEX;
+			}
+			else if texture_type == .stencil_depth {
+				upload_format = .DEPTH_STENCIL;
+			}
+			else {
+				panic("Unimplemented");
+			}
 		}
 		else when N == 2 {
 			upload_format = .RG;

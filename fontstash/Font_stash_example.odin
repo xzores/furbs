@@ -86,7 +86,6 @@ package furbs_fontstash;
 		dims := fs.get_bitmap_dimension(&font_ctx);
 		fs.copy_pixels(1, dims.x, dims.y, rect.x, rect.y, fs.get_bitmap(&font_ctx), rect.z, rect.w, 0, 0, extracted_data, rect.z, rect.w);
 		texture2D_upload_data(&texture, .R8, {rect.x, rect.y}, rect.zw, extracted_data);
-		fmt.printf("Rect : %v\n", rect);
 		
 		rect, done = fs.get_next_quad_upload(&font_ctx);
 	}

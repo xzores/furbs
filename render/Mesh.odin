@@ -186,13 +186,13 @@ mesh_draw :: proc (mesh : Mesh_ptr, model_matrix : matrix[4,4]f32, color : [4]f3
 	}
 }
 
-mesh_draw_instanced :: proc (mesh : Mesh_ptr, #any_int instance_cnt : int, loc := #caller_location) {
+mesh_draw_instanced :: proc (mesh : Mesh_ptr, #any_int instance_cnt : int, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	switch v in mesh {
 		case ^Mesh_single:
-			mesh_draw_single_instanced(v, instance_cnt, nil, loc);
+			mesh_draw_single_instanced(v, instance_cnt, color, nil, loc);
 		case ^Mesh_buffered:
 			i := mesh_buffered_next_draw_source(v);
-			draw_mesh_buffered_instanced(v, instance_cnt, i, nil, loc);
+			draw_mesh_buffered_instanced(v, instance_cnt, i, color, nil, loc);
 		case ^Mesh_shared:
 			panic("TODO");
 	}
@@ -557,7 +557,7 @@ mesh_draw_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, co
 	}
 }
 
-mesh_draw_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt : i32, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
+mesh_draw_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt : i32, color : [4]f32 = {1,1,1,1}, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	assert(mesh.instance_data != nil, "This is an not an instanced mesh", loc);
 	assert(mesh.primitive != nil);
@@ -571,7 +571,7 @@ mesh_draw_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt :
 		index_count = r.y - r.x;
 	}
 	
-	set_uniform(state.bound_shader, .color_diffuse, [4]f32{1,1,1,1});
+	set_uniform(state.bound_shader, .color_diffuse, color);
 	model_matrix : matrix[4,4]f32 = 1;
 	set_uniform(state.bound_shader, .model_mat, model_matrix);
 	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
@@ -827,7 +827,7 @@ draw_mesh_buffered :: proc (mesh_buffer : ^Mesh_buffered, model_matrix : matrix[
 	}
 }
 
-draw_mesh_buffered_instanced :: proc (mesh_buffer : ^Mesh_buffered, #any_int instance_cnt : int, draw_source : int, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
+draw_mesh_buffered_instanced :: proc (mesh_buffer : ^Mesh_buffered, #any_int instance_cnt : int, draw_source : int, color : [4]f32 = {1,1,1,1}, draw_range : Maybe([2]int) = nil, loc := #caller_location) {
 	assert(state.bound_shader != nil, "you must first begin the pipeline with begin_pipeline", loc);
 	
 	mesh := &mesh_buffer.backing[draw_source];
@@ -844,7 +844,7 @@ draw_mesh_buffered_instanced :: proc (mesh_buffer : ^Mesh_buffered, #any_int ins
 		}
 	}
 	
-	mesh_draw_single_instanced(mesh, instance_cnt, draw_range, loc);
+	mesh_draw_single_instanced(mesh, instance_cnt, color, draw_range, loc);
 	
 	if len(mesh_buffer.backing) != 1 && mesh.usage != .stream_use {
 		gl.discard_fence(&mesh.read_fence);

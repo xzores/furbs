@@ -334,7 +334,7 @@ begin_frame :: proc() {
 			assert(w.framebuffer.color_format != nil, "window.framebuffer.color_format is nil");
 			w.framebuffer = frame_buffer_make_render_buffers(1, sw, sh, w.framebuffer.samples, w.framebuffer.color_format, w.framebuffer.depth_format);
 			w.width, w.height = sw, sh;
-
+			
 			_make_context_current(w);
 			gl.delete_frame_buffer(w.context_framebuffer.id);
 			w.context_framebuffer = {}; //set it to zero, before recreation, not required atm.
@@ -349,7 +349,6 @@ begin_frame :: proc() {
 	}
 
 	input_begin();
-	text_begin();
 	
 	_make_context_current(nil);
 	gl.bind_frame_buffer(0);
@@ -393,7 +392,6 @@ end_frame :: proc(loc := #caller_location) {
 	_swap_buffers(loc, state.owner_context);
 	glfw.PollEvents();
 	
-	text_end();
 	input_end();
 
 	state.is_begin_frame = false;

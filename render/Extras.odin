@@ -62,7 +62,7 @@ draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offs
 		near 			= -10,
 		far 			= 10,
 	};
-
+	
 	target_begin(target, nil);
 		aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 		pipeline_begin(state.overlay_pipeline, cam);
@@ -76,18 +76,18 @@ draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offs
 draw_fps_overlay :: proc (target : Render_target, offset : [2]f32 = {0,0}, scale : f32 = 1) {
 	
 	//A low pass filter XD
-	smoothing : f32 = 0.92; // larger=more smoothing
+	smoothing : f32 = 0.94; // larger=more smoothing
 	state.fps_measurement = (state.fps_measurement * smoothing) + (state.delta_time * (1.0-smoothing))
 	
-	t := fmt.aprintf("fps : %i", cast(int)(1.0 / state.fps_measurement));
+	t := fmt.aprintf("FPS : %i", cast(int)(1.0 / state.fps_measurement));
 	defer delete(t);
-
+	
 	color : [4]f32 = {1,1,1,1};
 	
-	size := scale * 50;
-	text_dim := text_get_dimensions(t, size, 0);
+	size := scale * 40;
+	text_bounds := text_get_bounds(t, get_default_fonts().normal, size);
 
 	target_begin(target, nil);
-		text_draw_simple(t, {offset.x, state.target_pixel_height - text_dim.y - offset.y}, size, 0, color);
+		text_draw_simple(t, {offset.x, state.target_pixel_height - text_bounds.w - offset.y - text_bounds.y}, size, color, {{0,0,0,1}, {2,-2}});
 	target_end();
 }

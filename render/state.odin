@@ -4,7 +4,7 @@ import "core:container/queue"
 import "base:runtime"
 
 import "vendor:glfw"
-import fs "vendor:fontstash"
+import fs "../fontstash"
 
 import "core:time"
 import "gl"
@@ -98,7 +98,7 @@ State :: struct {
 	current_target : Render_target,
 
 	//Text stuff
-	font_context : fs.FontContext,
+	font_context : fs.Font_context,
 	
 	char_mesh : Mesh_single,
 	font_texture : Texture2D,

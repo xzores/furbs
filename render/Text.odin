@@ -7,9 +7,9 @@ import "core:slice"
 import "core:math/linalg"
 import "core:log"
 
-import fs "vendor:fontstash"
+import fs "../fontstash"
 
-Font :: distinct int;
+Font :: fs.Font;
 
 Fonts :: struct {
 	normal : Font,
@@ -19,37 +19,9 @@ Fonts :: struct {
 }
 
 @(private)
-text_resize_atlas :: proc (data: rawptr, w, h: int) {
-	text_reupload_texture();
-}
-
-@(private)
-text_upload_atlas :: proc (data: rawptr, dirtyRect: [4]f32, textureData: rawptr) {
-	text_reupload_texture();
-}
-
-@(private)
-text_reupload_texture :: proc () {
-	using state;
-
-	//TODO bad slow way, reupload instead (and subBufferData if there is no resize)
-	//If the texture is there then unload it.
-	if font_texture != {} {
-		texture2D_destroy(font_texture);
-	}
-	
-	assert(len(font_context.textureData) != 0, "font_context.textureData length is 0")
-	
-	font_texture = texture2D_make_desc(font_tex_desc, auto_cast font_context.width, auto_cast font_context.height, .R8, font_context.textureData);
-	log.infof("Reuploaded font texture, new size is %v, %v", font_context.width, font_context.height);
-}
-
-@(private)
 text_init :: proc () {
-
-	state.font_context.callbackResize = text_resize_atlas;
-	state.font_context.callbackUpdate = text_upload_atlas;
-	fs.Init(&state.font_context, 1, 1, .BOTTOMLEFT);	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
+	
+	state.font_context = fs.font_init(8192);	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
 
 	//If we want fontstash to handle loading the font
 	//my_font_index := AddFontPath(font_context, name: string, path: string);
@@ -99,11 +71,11 @@ text_init :: proc () {
 	font_RB_data 	:= #load("font/LinLibertine_RB.ttf", []u8);
 	font_RI_data 	:= #load("font/LinLibertine_RI.ttf", []u8);
 	font_RBI_data 	:= #load("font/LinLibertine_RBI.ttf", []u8);
-
-	font_norm 		:= cast(Font) fs.AddFontMem(&state.font_context, "LinLibertine_R", font_norm_data, false);
-	font_RB 		:= cast(Font) fs.AddFontMem(&state.font_context, "LinLibertine_RB", font_RB_data, false);
-	font_RI 		:= cast(Font) fs.AddFontMem(&state.font_context, "LinLibertine_RI", font_RI_data, false);
-	font_RBI 		:= cast(Font) fs.AddFontMem(&state.font_context, "LinLibertine_RBI", font_RBI_data, false);
+	
+	font_norm 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_norm_data, false);
+	font_RB 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RB_data, false);
+	font_RI 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RI_data, false);
+	font_RBI 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RBI_data, false);
 	
 	state.default_fonts = Fonts {
 		normal 		= font_norm,
@@ -128,21 +100,11 @@ text_init :: proc () {
 }
 
 @(private)
-text_begin :: proc() {
-	fs.BeginState(&state.font_context);
-}
-
-@(private)
-text_end :: proc() {
-	fs.EndState(&state.font_context);
-}
-
-@(private)
 text_destroy :: proc () {
 
 	state.default_fonts = {};
-
-	fs.Destroy(&state.font_context); state.font_context = {};
+	
+	fs.font_destroy(&state.font_context); state.font_context = {};
 
 	mesh_destroy_single(&state.char_mesh); state.char_mesh = {};
 	texture2D_destroy(state.font_texture); state.font_texture = {};
@@ -154,129 +116,102 @@ get_default_fonts :: proc (loc := #caller_location) -> Fonts {
 }
 
 @(require_results)
-load_font_from_path :: proc(font_name : string, path : string) -> Font {
-	return auto_cast fs.AddFontPath(&state.font_context, font_name, path);
+load_font_from_path :: proc(path : string) -> Font {
+	return auto_cast fs.add_font_path_single(&state.font_context, path);
 }
 
 @(require_results)
-load_font_from_memory :: proc(font_name : string, data : []u8) -> Font {
-
+load_font_from_memory :: proc(data : []u8) -> Font {
 	data_cpy := slice.clone(data);
-
-	return auto_cast fs.AddFontMem(&state.font_context, font_name, data_cpy, false);
+	return auto_cast fs.add_font_mem_single(&state.font_context, data_cpy, true);
 }
 
 @(require_results)
-text_get_dimensions :: proc(text : string, size : f32, spacing : f32 = 0, font : Font = state.default_fonts.normal) -> [2]f32 {
+text_get_dimensions :: proc(text : string, size : f32, font : Font = state.default_fonts.normal) -> [2]f32 {
+	using state;
 	
-	fs.SetFont(&state.font_context, auto_cast font);
-	fs.SetSize(&state.font_context, size);
-	fs.SetSpacing(&state.font_context, spacing);
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
 	
-	bounds : [4]f32;
-	fs.TextBounds(&state.font_context, text, 0, 0, &bounds);
+	_set_font_size(false, size);
+	
+	return fs.get_text_bounds(&state.font_context, text).zw;
+}
 
-	return bounds.zw;
+@(require_results)
+text_get_lowest_point :: proc(text : string, size : f32, font : Font = state.default_fonts.normal) -> f32 {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(false, size);
+	
+	return fs.get_lowest_point(&font_context);
 }
 
 @(require_results)
 text_get_max_height :: proc(font : Font, size : f32) -> f32 {
+	using state;
 	
-	fs.SetFont(&state.font_context, auto_cast font);
-	fs.SetSize(&state.font_context, size);
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(false, size);
+	
+	return fs.get_max_height(&state.font_context);
+}
 
-	min, max := fs.LineBounds(&state.font_context, 0);
-	return max + min;
+
+@(require_results)
+text_get_size_from_max_height :: proc(font : Font, max_height : f32) -> f32 {
+	using state;
+	
+	cur_max := text_get_max_height(font, 1000);
+	
+	return cur_max / max_height / 1000;
 }
 
 @(require_results)
-text_get_bounds :: proc(text : string, position : [2]f32, font : Font, size : f32, spacing : f32 = 0) -> (bounds : [4]f32) {
-	
-	fs.SetFont(&state.font_context, auto_cast font);
-	fs.SetSize(&state.font_context, size);
-	fs.SetSpacing(&state.font_context, spacing);
-
-	fs.TextBounds(&state.font_context, text, 0, 0, &bounds);
-	bounds.xy = position;
-
-	return;
-}
-
-font_tex_desc :: Texture_desc {
-	wrapmode = .clamp_to_border,
-	filtermode = .nearest,
-	mipmaps = false,
-	format	= .R8,
-}
-
-//used internally
-@require_results
-text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, spacing : f32 = 0, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
+text_get_bounds :: proc(text : string, font : Font, size : f32) -> (bounds : [4]f32) {
 	using state;
-
-	get_text_quads :: proc (text : string, position : [2]f32, instance_data : ^[dynamic]Default_instance_data) {
-		using state;
-
-		//TODO there seem to be a bug in fontstash that makes it so it only shows letter that can fit in the uploaded texture (it does not resize on the first upload).
-		it : fs.TextIter = fs.TextIterInit(&font_context, position.x, position.y, text);
-		quad : fs.Quad;
-
-		for fs.TextIterNext(&font_context, &it, &quad) {
-
-			//This is weird
-			pos : linalg.Vector3f32 = {quad.x1 + (quad.x0 - quad.x1)/2, quad.y0 + (quad.y1 - quad.y0)/2, 0}; 	//this is position of single quad
-			scale : linalg.Vector3f32 = {-(quad.x1 - quad.x0), (quad.y1 - quad.y0), 0};							//scale of the quad
-			
-			//using quad;
-			//texcoords : [4][2]f32 = {{s1, t0}, {s0, t0}, {s1, t1}, {s0, t1}};
-			append(instance_data, Default_instance_data { //These are apply for all 4 verticies.
-				instance_position 	= pos,
-				instance_scale 		= scale,
-				instance_tex_pos_scale	= {quad.s1, quad.t0, quad.s0, quad.t1},
-			});
-		}
-	}
-
-	fs.SetFont(&font_context, auto_cast font);
-	fs.SetSize(&font_context, size);
-	fs.SetSpacing(&font_context, spacing);
-	//fs.SetAlignHorizontal(&font_context, .LEFT);
-	//fs.SetAlignVertical(&font_context, .BASELINE);
 	
-	_ensure_shapes_loaded();
-
-	instance_data = make([dynamic]Default_instance_data, 0, len(text));
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
 	
-	get_text_quads(text, position, &instance_data);
-
-	should_reupload : bool = false;
-
-	dirtyRect : [4]f32;
+	_set_font_size(false, size);
 	
-	for fs.ValidateTexture(&font_context, &dirtyRect) {
-		clear_dynamic_array(&instance_data);
-		get_text_quads(text, position, &instance_data);
-		should_reupload = true;
-	}
-	
-	if should_reupload {
-		//Upload texture again.
-		text_reupload_texture();
-	}
+	return fs.get_text_bounds(&state.font_context, text);
+}
 
-	return;
+@(require_results)
+text_get_visible_bounds :: proc(text : string, font : Font, size : f32) -> (bounds : [4]f32) {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(false, size);
+	
+	return fs.get_visible_text_bounds(&state.font_context, text);
+}
+
+//Hint you can make an outline with a backdrop.
+Text_backdrop :: struct {
+	color : [4]f32,
+	offset : [2]f32,
 }
 
 //Has its own pipeline call outisde of a pipeline, but inside a target.
 //This will be drawn in pixel space.
-text_draw_simple :: proc (text : string, position : [2]f32, size : f32, spacing : f32 = 0, color : [4]f32 = {1,1,1,1},
+text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : [4]f32 = {1,1,1,1}, backdrop : Text_backdrop = {},
 							font : Font = state.default_fonts.normal, shader := state.default_text_shader, loc := #caller_location) {
 	
 	assert(shader != nil, "shader may not be nil", loc);
 	assert(state.current_pipeline == {}, "A pipeline is already bound, text must be drawn outside of pipeline begin/end.", loc);
 	assert(state.current_target != nil, "A render target is not bound.", loc);
 	
-	instance_data : [dynamic]Default_instance_data = text_get_draw_instance_data(text, position, size, spacing, font);
+	instance_data : [dynamic]Default_instance_data = text_get_draw_instance_data(text, position, size, font);
 	defer delete(instance_data);
 
 	pipeline := pipeline_make(shader, .blend, false, false, .fill, culling = .back_cull);
@@ -292,24 +227,105 @@ text_draw_simple :: proc (text : string, position : [2]f32, size : f32, spacing 
 		panic("!?!?!");
 	}
 	
-	upload_instance_data_single(&state.char_mesh, 0, instance_data[:]);
-	
 	cam := camera_get_pixel_space(state.current_target);
 
 	pipeline_begin(pipeline, cam);
-	set_uniform(shader, .color_diffuse, color);
 	set_texture(.texture_diffuse, state.font_texture);
-	mesh_draw_instanced(&state.char_mesh, len(instance_data));
+	
+	if backdrop.offset != {0,0} {
+		//Reuse the instance_data and make the backdrop from that.
+		backdrop_data := make([]Default_instance_data, len(instance_data));
+		defer delete(backdrop_data);
+		
+		for data, i in instance_data {
+			b : Default_instance_data = {
+				instance_position 		= data.instance_position + {backdrop.offset.x, backdrop.offset.y, 0},
+				instance_scale 			= data.instance_scale,
+				instance_rotation 		= data.instance_rotation,
+				instance_tex_pos_scale 	= data.instance_tex_pos_scale,
+			}
+			backdrop_data[i] = b;
+		}
+		
+		upload_instance_data_single(&state.char_mesh, 0, backdrop_data);
+		mesh_draw_instanced(&state.char_mesh, len(backdrop_data), backdrop.color);
+	}
+	
+	upload_instance_data_single(&state.char_mesh, 0, instance_data[:]);
+	mesh_draw_instanced(&state.char_mesh, len(instance_data), color);
+	
 	pipeline_end();
 }
 
-text_draw :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, spacing : f32 = 0,
-							color : [4]f32 = {0,0,0,1}, font : Fonts = state.default_fonts, shader := state.default_text_shader, loc := #caller_location) {
+text_draw :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, color : [4]f32 = {0,0,0,1}, backdrop : Text_backdrop = {}, font : Fonts = state.default_fonts, shader := state.default_text_shader, loc := #caller_location) {
 	font := text_get_font_from_fonts(bold, italic, font);
-	text_draw_simple(text, position, size, spacing, color, font, shader, loc);
+	text_draw_simple(text, position, size, color, backdrop, font, shader, loc);
 }
 
-text_get_font_from_fonts :: proc ( bold, italic : bool, font : Fonts = state.default_fonts) -> Font{
+font_tex_desc :: Texture_desc {
+	wrapmode = .clamp_to_border,
+	filtermode = .nearest,
+	mipmaps = false,
+	format	= .R8,
+}
+
+//used internally
+@require_results
+text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(false, size);
+	iter := fs.make_font_iter(&font_context, text);
+	defer fs.destroy_font_iter(iter);
+	
+	if new_size, ok := fs.requires_reupload(&font_context); ok {
+		fmt.printf("reuploading font texture : %v\n", new_size);
+		texture2D_destroy(state.font_texture);
+		state.font_texture = texture2D_make(false, .repeat, .nearest, .R8, new_size.x, new_size.y, .R8, fs.get_bitmap(&font_context));
+	}
+	
+	rect, done := fs.get_next_quad_upload(&font_context);
+	for !done {
+		//Here the atlas data is extracted from the atlas, alternatively the entire atlas can be uploaded.
+		extracted_data := make([]u8, rect.z * rect.w);
+		defer delete(extracted_data);
+		
+		dims := fs.get_bitmap_dimension(&font_context);
+		fs.copy_pixels(1, dims.x, dims.y, rect.x, rect.y, fs.get_bitmap(&font_context), rect.z, rect.w, 0, 0, extracted_data, rect.z, rect.w);
+		texture2D_upload_data(&state.font_texture, .R8, {rect.x, rect.y}, rect.zw, extracted_data);
+		
+		rect, done = fs.get_next_quad_upload(&font_context);
+	}
+	
+	instance_data = make([dynamic]Default_instance_data);
+	
+	for q, coords in fs.font_iter_next(&font_context, &iter) {
+		append(&instance_data, Default_instance_data {
+			instance_position 	= {q.x + position.x, q.y + position.y, 0},
+			instance_scale 		= {q.z, q.w, 1},
+			instance_rotation 	= {0, 0, 0}, //Euler rotation
+			instance_tex_pos_scale 	= coords,
+		});
+	}
+	
+	if i_data, ok := char_mesh.instance_data.?; ok {
+		if i_data.data_points < len(instance_data) {
+			mesh_resize_instance_single(&char_mesh, len(instance_data));
+			log.infof("Resized text instance data. New length : %v", len(instance_data));
+		}
+	}
+	else {
+		panic("!?!?!");
+	}
+	
+	return;
+}
+
+//Internal_use 
+text_get_font_from_fonts :: proc (bold, italic : bool, font : Fonts = state.default_fonts) -> Font {
 
 	if bold && italic {
 		return font.italic_bold;
@@ -322,5 +338,16 @@ text_get_font_from_fonts :: proc ( bold, italic : bool, font : Fonts = state.def
 	}
 	else {
 		return font.normal;
+	}
+}
+
+//Internal_use 
+_set_font_size :: proc (use_em_size : bool, size : f32) {
+	
+	if use_em_size {
+		fs.set_em_size(&state.font_context, size);
+	}
+	else {
+		fs.set_max_height_size(&state.font_context, size);
 	}
 }

@@ -9,15 +9,31 @@ import "base:intrinsics"
 import "core:strconv"
 import "core:mem"
 
+import "core:time" //Temp
+
 import render "../render"
 import utils "../utils"
 
 
 ////////////////// TYPES ////////////////////
 
+Font_appearance :: struct {
+	
+	text_anchor : Anchor_point,	//Text placement inside the parent gui element.
+	text_size : f32, 			//It is in unit space (aka 0-1 ish) likely in the 0.01 to 0.1 range.
+	
+	bold, italic : bool, 		
+ 	fonts : render.Fonts, 		// Used if the element contains text
+	
+	limit_by_width, limit_by_height : bool, //These tell if size shoud be limited by the parent gui element.
+	
+	text_backdrop_offset : [2]f32, //This is for makeing a backdrop / shadow. This is in screen space, likely something like 0.001
+	text_backdrop_color : [4]f32, //This is the color of the backdrop / shadow
+}
 
 Colored_appearance :: struct {
-
+	using _ : Font_appearance,
+	
 	// Color of elements drawn
 	bg_color : [4]f32,		// This is the background color
 	
@@ -25,15 +41,11 @@ Colored_appearance :: struct {
 	mid_color : [4]f32,		// This is the color that on the element placed on top of the background.
 	mid_margin : f32,		// may be negative
 
-	// Front are the active elements, like the _ when writing or the color of the text.
 	front_color : [4]f32,	// Color of text, line or alike.
 	front_margin : f32,		// may be negative
-	bold, italic : bool,
 
 	// This is how lines are drawn and are often tied to front_color and margin.
 	line_width : f32,
-	
- 	fonts : render.Fonts, // Used if the element contains text
 	
 	// Some elements can also be rounded
 	// Some cannot like the radio button as it is already round.
@@ -42,8 +54,9 @@ Colored_appearance :: struct {
 
 // A single texture is passed, and the borders are defined from that.
 Patched_appearance :: struct {
- 	// TODO
-	
+	using _ : Font_appearance,
+ 	
+	// TODO
 	// Repeat, or stretch? or both?
 }
 
@@ -51,27 +64,39 @@ Patched_appearance :: struct {
 // This does not look good on dynamically sized objects, see Patch_appearance or Colored_appearance.
 // But is it simple to set up.
 Textured_appearance :: struct {
+	using _ : Font_appearance,
+	
 	// TODO
 }
 
 // Determines how GUI elements look.
 // Can be applied to everything, per type, or per instance.
+//An appearance controls the appearance of the elements, it is a collection of render settings.
+//There are 3 types of appearance, Colored_appearance, Patched_appearance and Textured_appearance.
+//The Colored_appearance is a minimalistic way a drawing, thing are only drawn in colors controlled by the appearance.
+//Patched_appearance is the most common as it is able to draw *any* width/heigth of a gui element while *not* steching any textures.
+//** = only true sometimes.
+//It works by using 9 textures, 4 for the corners, 4 for the edges and 1 for the center.
+//The Textured_appearance is a simple texture drawn. It should only be used are sure you don't want to scale things.
 Appearance :: union {
 	Colored_appearance,
 	Patched_appearance,
 	Textured_appearance,
 }
 
-// A collection of appearances.
+// A collection of appearances, these are applied per element or as a type, a default backing style can also be set.
 Style :: struct {
 	default : Appearance,
 	hover : Maybe(Appearance),
 	active : Maybe(Appearance),
 }
 
+//The theme maps
 Theme :: struct {
-	styles : map[typeid]Style,
+	styles : map[typeid]Style, //Maps from the element to the style.
 }
+
+////////////////////////////////////////////////////////////
 
 Anchor_point :: enum {
 	bottom_left,
@@ -86,17 +111,19 @@ Anchor_point :: enum {
 }
 
 //Common for all elements, determines screen position in a 0-1 range.
-//Well the range is 0-1 for a square screen
+//The range is 0-1 for a square screen
 //For a non-square screen the range will extend in the longest direction propertionally to the width/heigth or heigth/width ratio.
-//This ensures that all elements allways are placed correct relativly to each other.
+//This ensures that all elements always are placed correct relativly to each other.
 Destination :: struct {
     anchor : Anchor_point, // This decides where 0,0 is on the screen
     self_anchor : Anchor_point, // This decides at which point on element is anchored to 0,0
     rect : [4]f32,
 }
 
-//These are the all the GUI elements
-Element :: distinct i32;
+////////////////////////////////////////////////////////////
+
+//These are the all the GUI elements, these are wrappers around the Element type, they are there so that their typeid can be used to index into Theme.styles
+Element :: distinct i64;
 
 //These are GUI primitives handles
 Rect :: struct { e : Element, };
@@ -126,6 +153,16 @@ Screen_panel :: struct { e : Element, };	//This takes up the entire screen, used
 Horizontal_bar :: struct { e : Element, }; //These fill the entire screen in a dimension and act as a panel
 Vertical_bar :: struct { e : Element, };	//These fill the entire screen in a dimension and act as a panel
 
+////////////////////////////////////////////////////////////
+// The *_info holds the instance data of the gui elements.
+
+//These hold the information about each element
+Element_info :: union {
+	Rect_info,
+	Button_info,
+}
+
+
 Rect_info :: struct {
 	
 }
@@ -141,6 +178,8 @@ Button_info :: struct {
 	down : bool,
 }
 
+////////////////////////////////////////////////////////////
+
 //A tooltip can be both a string or a Panel
 //If it is a string then it will be displayed when hovering
 //If it is a panel than it will be displayed when hovering
@@ -149,11 +188,7 @@ Tooltip :: union {
 	Panel,
 }
 
-//These hold the information about each element
-Element_info :: union {
-	Rect_info,
-	Button_info,
-}
+////////////////////////////////////////////////////////////
 
 //Common contiainer for all elements.
 Element_container :: struct {
@@ -197,7 +232,6 @@ pixel_space_stack : [20][4]f32; //MAX 20 styles
 panel_stack_len : int;
 */
 
-
 Gui_state :: struct {
 
 	default_style : Style,
@@ -205,39 +239,48 @@ Gui_state :: struct {
 
 	target : render.Render_target,
 	
-	active_elements : map[i32]Element_container,
+	active_elements : map[Element]Element_container,
 	
 	unit_size : f32,
 	
 	gui_pipeline : render.Pipeline,
 }
 
-current_element_index : i32;
+current_element_index : Element;
 bound_state : ^Gui_state;
 
 ////////////////// USER FUNCTIONS ////////////////////
 
+default_appearance : Colored_appearance = {
+	
+	text_anchor = .center_center,
+	text_size = 0.1,
+	bold = false,
+	italic = false,	
+ 	fonts = render.state.default_fonts,
+	limit_by_width = true,
+	limit_by_height = true,
+	text_backdrop_offset = {0.002, -0.002},
+	text_backdrop_color = {0,0,0,1},
+	
+	bg_color = {0.3, 0.3, 0.3, 0.9},
+	mid_color = {0.6, 0.6, 0.6, 1},
+	mid_margin = 0.02,
+	front_color = {1,1,1,1},
+	front_margin = 0.02,
+	line_width = 0.01,
+	rounded = false,
+}
+
 @(require_results)
-init :: proc (loc := #caller_location) -> (state : Gui_state) {
+init :: proc (fallback_appearance := default_appearance, loc := #caller_location) -> (state : Gui_state) {
 	using state;
 	
-	active_elements = make(map[i32]Element_container);
+	active_elements = make(map[Element]Element_container);
 	gui_pipeline = render.pipeline_make(render.get_default_shader(), .blend, false, false);
-
+	
 	default_style = {
-		default = Colored_appearance{
-			bg_color = {0.3,0.3,0.3,1},
-
-			mid_color = {0.6,0.6,0.6,1},
-			mid_margin = 0.01,
-
-			front_color = {0,0,0,1},	
-			front_margin = 0.015,
-			line_width = 0.03,
-			
-			fonts = render.get_default_fonts(),
-			rounded = false,
-		},
+		default = default_appearance,
 		hover = nil,
 		active = nil,
 	}
@@ -282,7 +325,6 @@ end :: proc (using state : ^Gui_state, loc := #caller_location) {
 
 	//Draw
 	for k, e in active_elements {
-
 		element_draw(auto_cast k, appear, loc);
 	}
 	render.pipeline_end();
@@ -293,7 +335,7 @@ end :: proc (using state : ^Gui_state, loc := #caller_location) {
 }
 
 //Common for all elements, only use if you are doing a custom element.
-element_make :: proc (state : ^Gui_state, container : Element_container, loc := #caller_location) -> i32 {
+element_make :: proc (state : ^Gui_state, container : Element_container, loc := #caller_location) -> Element {
 	assert(state != nil, "The bound state is nil", loc)
 	using state;
 
@@ -305,8 +347,8 @@ element_make :: proc (state : ^Gui_state, container : Element_container, loc := 
 
 //Common for all elements
 element_destroy :: proc (using state : ^Gui_state, handle : Element, loc := #caller_location) {
-	assert(cast(i32)handle in active_elements, "The handle is not valid", loc);
-	key, container := delete_key(&active_elements, cast(i32)handle);
+	assert(handle in active_elements, "The handle is not valid", loc);
+	key, container := delete_key(&active_elements, handle);
 	element_cleanup(container);
 }
 
@@ -315,7 +357,7 @@ element_destroy :: proc (using state : ^Gui_state, handle : Element, loc := #cal
 //The text is copied, so you can delete it when wanted.
 button_make :: proc (state : ^Gui_state, dest : Destination, text : string, clicked : ^bool, show : bool = true, tooltip : Tooltip = nil, user_data : rawptr = nil,
 					style : Maybe(Style) = nil, hover_style : Maybe(Style) = nil, active_style : Maybe(Style) = nil, loc := #caller_location) -> Button {
-
+	
 	element : Button_info = {
 		clicked = clicked,
 		text = strings.clone(text),
@@ -352,37 +394,91 @@ button_is_released :: proc (button : Button, loc := #caller_location) -> bool {
 
 ////////////////// Private Functions ////////////////////
 
+//returns what it drew in screen space coordinates.
 draw_quad :: proc (anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]f32, color : [4]f32, loc := #caller_location) -> [4]f32 {
 	
-	w, h := render.get_render_target_size(bound_state.target);
-	rect := get_screen_space_position_rect(anchor, self_anchor, rect, {0,0,cast(f32)w,cast(f32)h}, bound_state.unit_size);
+	rect := get_screen_space_position_rect(anchor, self_anchor, rect, get_screen_rect(), bound_state.unit_size);
 	render.draw_quad_rect(rect, 0, color, loc);
-
+	
 	return rect;
 }
 
-//position, size and spacing is in unit size coordinates (0-1 ish)
-//place_rect is in screen size coordinates (0-2000 ish)
-draw_text :: proc (text : string, position : [2]f32, size : f32, place_rect : [4]f32, bold, italic : bool, spacing : f32, color : [4]f32, fonts : render.Fonts) {
-
+//position, size and bounds is in unit size coordinates (0-1 ish)
+//limit_by_width makes it so the text will not extend over the bounds.
+//TODO anchors
+draw_text_param :: proc (text : string, bounds : [4]f32, size : f32, anchor : Anchor_point, bold, italic : bool, color : [4]f32, fonts : render.Fonts,
+ 						backdrop_color : [4]f32, backdrop_offset : [2]f32, limit_by_height : bool = true, limit_by_width : bool = true, loc := #caller_location) {
+	
+	if text == "" {
+		return;
+	}
+	assert(size != 0, "text size may not be zero", loc = loc);
+	
 	unit_size := bound_state.unit_size;
 	font := render.text_get_font_from_fonts(bold, italic, fonts);
-
-	//fmt.printf("position : %v\n", render.text_get_max_height());
-
-	rect := get_screen_space_position_rect(.center_center, .center_center, render.text_get_bounds(text, position, font, size), place_rect, unit_size);
-
-	fmt.printf("rect : %v\n", rect);
-
+	
+	//This is the rect in pixels which the text should be drawn within.
+	rect := get_screen_space_position_rect(.center_center, .center_center, bounds, get_screen_rect(), unit_size);
+	
+	text_target_size := size * unit_size; 
+	
+	if limit_by_height {
+		text_target_size = math.min(rect.w, text_target_size);
+	}	
+	
+	text_width := render.text_get_bounds(text, font, text_target_size).z;
+	
+	limiter : f32 = 1;
+	if limit_by_width { 
+		limiter = math.min(1, rect.z / text_width);
+	}
+	
+	text_size := text_target_size * limiter;
+	text_bounds := render.text_get_bounds(text, font, text_size);
+	
+	//This is a little hacky but it works.
+	rect = get_screen_space_position_rect(anchor, anchor, {0,0,text_bounds.z, text_bounds.w} / unit_size, rect, unit_size);
+	
 	render.pipeline_end();
-	render.text_draw(text, rect.xy, rect.w, bold, italic, spacing, color, fonts);
+	render.text_draw(text, rect.xy - {text_bounds.x, text_bounds.y}, rect.w, bold, italic, color, {color = backdrop_color, offset = backdrop_offset * unit_size}, fonts);
 	render.pipeline_begin(bound_state.gui_pipeline, render.camera_get_pixel_space(bound_state.target));
+}
+
+draw_text_appearance :: proc (text : string, bounds : [4]f32, color : [4]f32, margin : f32, appearance : Appearance, loc := #caller_location) {
+	
+	switch a in appearance {
+		
+		case Colored_appearance:
+			draw_text_param(text, bounds, a.text_size, a.text_anchor, a.bold, a.italic, a.front_color, a.fonts,
+							a.text_backdrop_color, a.text_backdrop_offset, a.limit_by_height, a.limit_by_width, loc);
+		
+		case Patched_appearance:
+			//draw_text_param(text, bounds, a.text_size, a.text_anchor, a.bold, a.italic, a.front_color, a.fonts, a.limit_by_height, a.limit_by_width, loc);
+			panic("TODO");
+			
+		case Textured_appearance:
+			//draw_text_param(text, bounds, a.text_size, a.text_anchor, a.bold, a.italic, a.front_color, a.fonts, a.limit_by_height, a.limit_by_width, loc);
+			panic("TODO");
+	}
+}
+
+draw_text :: proc {draw_text_param, draw_text_appearance}
+
+get_screen_rect :: proc () -> [4]f32 {
+	w, h := render.get_render_target_size(bound_state.target);
+	return {0,0,cast(f32)w,cast(f32)h};
 }
 
 get_unit_size :: proc (width, height : f32) -> f32 {
 	return math.min(width, height);
 }
 
+//Takes in unit space coordinates (0-1 ish)
+//Returns screen space coordinates (0-2000 ish)
+//anchor: where is the rect anchored
+//self_anchor: which part of the rect is the origin (anchored place)
+//anchor_rect_pixel is a parent rect given in pixels space (0-2000 ish), will redifine what "the screen" is.
+//Unit size is the unit_size (0-2000 ish), see get_unit_size
 get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]f32, anchor_rect_pixel : [4]f32, unit_size : f32) -> [4]f32 {
 	
     offset : [2]f32;
@@ -471,31 +567,33 @@ get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anch
     return rectangle;
 }
 
+///////////// Very private functions /////////////
+
 @(private)
 element_draw :: proc (handle : Element, appear : Appearance, loc := #caller_location) {
 	using bound_state;
-	container := active_elements[cast(i32)handle];
-	dest := container.dest;
-
+	container := active_elements[handle];
+	dest := container.dest; //Dest is in unit space (0 to 1)
+	
 	switch e in container.element {
 		case Rect_info: 
 			//TODO
 		
 		case Button_info:
-
+			
 			switch a in appear {
-
+				
 				case Textured_appearance:
-
+				
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
 					draw_quad(dest.anchor, dest.self_anchor, dest.rect, a.bg_color, loc);
+					
 					mid_dest := dest.rect - {0,0,a.mid_margin,a.mid_margin};
-					cont_rect := draw_quad(dest.anchor, dest.self_anchor, mid_dest, a.mid_color, loc);
-					//TODO text anchor,
-					font_dest : [2]f32 = mid_dest.xy + {a.front_margin, a.front_margin};
-					draw_text(e.text, font_dest, 0.1, cont_rect, a.bold, a.italic, 0, a.front_color, a.fonts);
+					draw_quad(dest.anchor, dest.self_anchor, mid_dest, a.mid_color, loc);
+					
+					draw_text(e.text, mid_dest, a.front_color, a.front_margin, a, loc);
 					//{a.mid_margin/2, a.mid_margin/2, -2*a.mid_margin, -2*a.mid_margin}
 
 				case Patched_appearance:
@@ -508,14 +606,13 @@ element_draw :: proc (handle : Element, appear : Appearance, loc := #caller_loca
 @(private)
 element_get :: proc (handle : Element, $T : typeid, loc := #caller_location) -> T {
 	using bound_state;
-	assert(cast(i32)handle in active_elements, "The handle is not valid", loc);
-	contrainer := active_elements[cast(i32)handle];
+	assert(handle in active_elements, "The handle is not valid", loc);
+	contrainer := active_elements[handle];
 
 	e, ok := contrainer.element.(T);
 	fmt.assertf(ok, "The handle %v is not of type %v. Handle data : %v", handle, type_info_of(T), contrainer.element);
 	return e;
 }
-
 
 @(private)
 element_cleanup :: proc(container : Element_container) {

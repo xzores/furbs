@@ -543,7 +543,8 @@ get_codepoint_horizontal_metrics :: proc (ctx: ^Font_context, codepoint : rune, 
 //This returns the text bound of the text, where the y components is not dependent on the text passed.
 //The horizontal x components will change based on the text.
 //relative to the baseline
-get_text_bounds :: proc(ctx: ^Font_context, text : string) -> [4]f32 {
+get_text_bounds :: proc(ctx: ^Font_context, text : string, loc := #caller_location) -> [4]f32 {
+	assert(len(ctx.font_stack) != 0, "You must set a font before setting the size.", loc);
 	
 	if len(text) == 0 {
 		return {};

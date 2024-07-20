@@ -324,21 +324,24 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
+		
+		//TODO I dont like this way to clear, make it simpler at some point.
 		if cc, ok := clear_color.([4]f32); ok {
 			
 			channels := gl.internal_format_channel_cnt(desc.format);
+			tex_type := gl.internal_format_to_texture_type(desc.format);
 			
 			if channels == 1 {
-				gl.clear_texture_2D(id, [1]f32{cc.x}, loc);
+				gl.clear_texture_2D(id, [1]f32{cc.x}, tex_type, loc);
 			}
 			else if channels == 2 {
-				gl.clear_texture_2D(id, cc.xy, loc);
+				gl.clear_texture_2D(id, cc.xy, tex_type, loc);
 			}
 			else if channels == 3 {
-				gl.clear_texture_2D(id, cc.xyz, loc);
+				gl.clear_texture_2D(id, cc.xyz, tex_type, loc);
 			}
 			else if channels == 4 {
-				gl.clear_texture_2D(id, cc.xyzw, loc);
+				gl.clear_texture_2D(id, cc.xyzw, tex_type, loc);
 			}
 			else {
 				panic("!?!?");
