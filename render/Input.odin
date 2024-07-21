@@ -253,7 +253,7 @@ Mouse_input_event :: struct {
 }
 
 //constantly down, button means mouse
-is_button_down :: proc(button : Mouse_code) -> bool {
+button_down :: proc(button : Mouse_code) -> bool {
 	return state.button_down[button];
 }
 

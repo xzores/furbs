@@ -14,7 +14,6 @@ import "core:time" //Temp
 import render "../render"
 import utils "../utils"
 
-
 ////////////////// TYPES ////////////////////
 
 Font_appearance :: struct {
@@ -136,7 +135,7 @@ Float_field :: struct { e : Element, };
 Text_field :: struct { e : Element, };
 Text_area :: struct { e : Element, };
 Radio_buttons :: struct { e : Element, };
-Dropdown :: struct { e : Element, };
+Dropactive :: struct { e : Element, };
 
 //There are kinda special, used mainly in games
 Progess_bar :: struct { e : Element, };
@@ -162,7 +161,6 @@ Element_info :: union {
 	Button_info,
 }
 
-
 Rect_info :: struct {
 	
 }
@@ -172,10 +170,6 @@ Button_info :: struct {
 	//Set by user
 	text : string,
 	clicked : ^bool,
-
-	//Internal use
-	last_down : bool,
-	down : bool,
 }
 
 ////////////////////////////////////////////////////////////
@@ -203,7 +197,12 @@ Element_container :: struct {
     is_showing : bool,
 
 	//This is used by some types when using mouse and most types when using controller (TODO controller)
-	is_selected : bool,
+	is_selected : bool,	//TODO is this not the smae as active?
+	
+	//These are the states
+	last_active : bool,
+	active : bool,
+	hover : bool,
 	
 	//What will be displayed when hovering the elements (optional) may be nil
 	tooltip : Tooltip,
@@ -214,9 +213,9 @@ Element_container :: struct {
 	user_data : rawptr,
 	
 	//If any of these are set, they will override the style for the specific element.
-	style : Maybe(Style),
-	hover_style : Maybe(Style),
-	active_style : Maybe(Style),
+	appearance : Maybe(Appearance),
+	hover_appearance : Maybe(Appearance),
+	active_appearance : Maybe(Appearance),
 }
 
 ////////////////// CONTEXT //////////////////
@@ -272,19 +271,65 @@ default_appearance : Colored_appearance = {
 	rounded = false,
 }
 
+default_hover_appearance : Colored_appearance = {
+	
+	text_anchor = .center_center,
+	text_size = 0.1,
+	bold = false,
+	italic = false,	
+ 	fonts = render.state.default_fonts,
+	limit_by_width = true,
+	limit_by_height = true,
+	text_backdrop_offset = {0.002, -0.002},
+	text_backdrop_color = {0,0,0,1},
+	
+	bg_color = {0.2, 0.2, 0.2, 0.9},
+	mid_color = {0.8, 0.8, 0.8, 1},
+	mid_margin = 0.02,
+	front_color = {1,1,1,1},
+	front_margin = 0.02,
+	line_width = 0.01,
+	rounded = false,
+}
+
+default_active_appearance : Colored_appearance = {
+	
+	text_anchor = .center_center,
+	text_size = 0.1,
+	bold = false,
+	italic = false,	
+ 	fonts = render.state.default_fonts,
+	limit_by_width = true,
+	limit_by_height = true,
+	text_backdrop_offset = {0.002, -0.002},
+	text_backdrop_color = {0,0,0,1},
+	
+	bg_color = {0.5, 0.5, 0.5, 0.9},
+	mid_color = {0.9, 0.9, 0.9, 1},
+	mid_margin = 0.02,
+	front_color = {1,1,1,1},
+	front_margin = 0.02,
+	line_width = 0.01,
+	rounded = false,
+}
+
 @(require_results)
 init :: proc (fallback_appearance := default_appearance, loc := #caller_location) -> (state : Gui_state) {
-	using state;
 	
-	active_elements = make(map[Element]Element_container);
-	gui_pipeline = render.pipeline_make(render.get_default_shader(), .blend, false, false);
-	
-	default_style = {
-		default = default_appearance,
-		hover = nil,
-		active = nil,
+	state = {
+		active_elements = make(map[Element]Element_container),
+		gui_pipeline = render.pipeline_make(render.get_default_shader(), .blend, false, false),
+		default_style = {
+			default = default_appearance,
+			hover = default_appearance,
+			active = default_appearance,
+		},
 	}
-
+	
+	fmt.printf("default_style : %#v\n", state.default_style);
+	//state.default_style.hover = default_appearance; //This makes the bug go away.
+	assert(state.default_style.hover != nil); //This assertion fails.
+	
 	return;
 }
 
@@ -294,7 +339,7 @@ destroy :: proc (using state : ^Gui_state) {
 		element_cleanup(e);
 		delete_key(&active_elements, k);
 	}
-
+	
 	delete(active_elements); active_elements = {};
 	
 	render.pipeline_destroy(gui_pipeline);
@@ -321,11 +366,14 @@ end :: proc (using state : ^Gui_state, loc := #caller_location) {
 	render.pipeline_begin(gui_pipeline, render.camera_get_pixel_space(target));
 
 	style : Style = state.default_style;
-	appear : Appearance = style.default;
-
+	
+	for k, e in active_elements {
+		element_update(auto_cast k, loc);
+	}
+	
 	//Draw
 	for k, e in active_elements {
-		element_draw(auto_cast k, appear, loc);
+		element_draw(auto_cast k, style, loc);
 	}
 	render.pipeline_end();
 	render.target_end();
@@ -356,7 +404,23 @@ element_destroy :: proc (using state : ^Gui_state, handle : Element, loc := #cal
 //Clicked may be nil
 //The text is copied, so you can delete it when wanted.
 button_make :: proc (state : ^Gui_state, dest : Destination, text : string, clicked : ^bool, show : bool = true, tooltip : Tooltip = nil, user_data : rawptr = nil,
-					style : Maybe(Style) = nil, hover_style : Maybe(Style) = nil, active_style : Maybe(Style) = nil, loc := #caller_location) -> Button {
+					appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Button {
+	
+	appearance := appearance;
+	hover_appearance := hover_appearance;
+	active_appearance := active_appearance;
+	
+	if a, ok := &appearance.?; ok {
+		appearance = state.default_style.default;
+	}
+	
+	if a, ok := &hover_appearance.?; ok {
+		hover_appearance = state.default_style.hover;
+	}
+	
+	if a, ok := &active_appearance.?; ok {
+		active_appearance = state.default_style.active;
+	}
 	
 	element : Button_info = {
 		clicked = clicked,
@@ -369,27 +433,32 @@ button_make :: proc (state : ^Gui_state, dest : Destination, text : string, clic
 		is_showing = show,
 		is_selected = false,
 		tooltip = tooltip,
-		style = style,
-		hover_style = hover_style,
-		active_style = active_style,
+		appearance = appearance,
+		hover_appearance = hover_appearance,
+		active_appearance = active_appearance,
 	}
 
 	return {auto_cast element_make(state, container, loc)};
 }
 
-button_is_down :: proc (button : Button, loc := #caller_location) -> bool {
-	info := element_get(button.e, Button_info, loc);
-	return info.down;
+button_is_hover :: proc (button : Button, loc := #caller_location) -> bool {
+	info, container := element_get(button.e, Button_info, loc);
+	return container.hover;
+}
+
+button_is_active :: proc (button : Button, loc := #caller_location) -> bool {
+	info, container := element_get(button.e, Button_info, loc);
+	return container.active;
 }
 
 button_is_pressed :: proc (button : Button, loc := #caller_location) -> bool {
-	info := element_get(button.e, Button_info, loc);
-	return !info.last_down && info.down;
+	info, container := element_get(button.e, Button_info, loc);
+	return !container.last_active && container.active;
 }
 
 button_is_released :: proc (button : Button, loc := #caller_location) -> bool {
-	info := element_get(button.e, Button_info, loc);
-	return info.last_down && !info.down;
+	info, container := element_get(button.e, Button_info, loc);
+	return container.last_active && !container.active;
 }
 
 ////////////////// Private Functions ////////////////////
@@ -418,7 +487,7 @@ draw_text_param :: proc (text : string, bounds : [4]f32, size : f32, anchor : An
 	font := render.text_get_font_from_fonts(bold, italic, fonts);
 	
 	//This is the rect in pixels which the text should be drawn within.
-	rect := get_screen_space_position_rect(.center_center, .center_center, bounds, get_screen_rect(), unit_size);
+	rect := get_screen_space_position_rect(.center_center, .center_center, bounds, get_screen_rect(), bound_state.unit_size);
 	
 	text_target_size := size * unit_size; 
 	
@@ -567,13 +636,70 @@ get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anch
     return rectangle;
 }
 
+// Function to check if a point is inside a rectangle
+point_rect_collision :: proc(point: [2]f32, rect: [4]f32) -> bool {
+	return point.x >= rect.x &&
+	       point.x <= rect.x + rect.z &&
+	       point.y >= rect.y &&
+	       point.y <= rect.y + rect.w;
+}
+
+is_hovered :: proc (container : Element_container) -> bool {
+	
+	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
+	
+	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, get_screen_rect(), bound_state.unit_size);
+	
+	return point_rect_collision(render.mouse_pos(), rect);
+}
+
+is_activated :: proc (container : Element_container) -> bool {
+	
+	return is_hovered(container) && render.button_released(.mouse_button_1);
+}
+
 ///////////// Very private functions /////////////
 
+
+
 @(private)
-element_draw :: proc (handle : Element, appear : Appearance, loc := #caller_location) {
+element_update :: proc (handle : Element, loc := #caller_location) {
 	using bound_state;
-	container := active_elements[handle];
-	dest := container.dest; //Dest is in unit space (0 to 1)
+	container : ^Element_container = &active_elements[handle];
+	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
+	
+	
+	if is_activated(container^) {
+		container.active = true;
+	}
+	if is_hovered(container^) {
+		container.hover = true;
+	}
+	
+	switch e in container.element {
+		case Rect_info:
+			
+		case Button_info:
+			
+	}
+}
+
+@(private)
+element_draw :: proc (handle : Element, style : Style, loc := #caller_location) {
+	using bound_state;
+	
+	container : Element_container = active_elements[handle];
+	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
+	
+	appear : Appearance = style.default;
+	if act, ok := style.active.?; ok && container.active {
+		appear = act;
+	}
+	else if  hov, ok := style.hover.?; ok && container.hover {
+		appear = hov;
+	}
+	
+	fmt.printf("style.hover : %v\n", style.hover);
 	
 	switch e in container.element {
 		case Rect_info: 
@@ -584,7 +710,7 @@ element_draw :: proc (handle : Element, appear : Appearance, loc := #caller_loca
 			switch a in appear {
 				
 				case Textured_appearance:
-				
+					
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
@@ -592,10 +718,9 @@ element_draw :: proc (handle : Element, appear : Appearance, loc := #caller_loca
 					
 					mid_dest := dest.rect - {0,0,a.mid_margin,a.mid_margin};
 					draw_quad(dest.anchor, dest.self_anchor, mid_dest, a.mid_color, loc);
-					
-					draw_text(e.text, mid_dest, a.front_color, a.front_margin, a, loc);
-					//{a.mid_margin/2, a.mid_margin/2, -2*a.mid_margin, -2*a.mid_margin}
 
+					draw_text(e.text, mid_dest, a.front_color, a.front_margin, a, loc);
+					
 				case Patched_appearance:
 
 			}
@@ -604,14 +729,16 @@ element_draw :: proc (handle : Element, appear : Appearance, loc := #caller_loca
 }
 
 @(private)
-element_get :: proc (handle : Element, $T : typeid, loc := #caller_location) -> T {
+element_get :: proc (handle : Element, $T : typeid, loc := #caller_location) -> (element : T, contrainer : Element_container) {
+	
 	using bound_state;
+	
 	assert(handle in active_elements, "The handle is not valid", loc);
-	contrainer := active_elements[handle];
-
+	contrainer = active_elements[handle];
+	
 	e, ok := contrainer.element.(T);
 	fmt.assertf(ok, "The handle %v is not of type %v. Handle data : %v", handle, type_info_of(T), contrainer.element);
-	return e;
+	return e, contrainer;
 }
 
 @(private)
