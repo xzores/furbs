@@ -220,7 +220,6 @@ text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : 
 	if i_data, ok := state.char_mesh.instance_data.?; ok {
 		if i_data.data_points < len(text) {
 			mesh_resize_instance_single(&state.char_mesh, len(text));
-			log.infof("Resized text instance data. New length : %v", len(text));
 		}
 	}
 	else {
@@ -314,7 +313,6 @@ text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f3
 	if i_data, ok := char_mesh.instance_data.?; ok {
 		if i_data.data_points < len(instance_data) {
 			mesh_resize_instance_single(&char_mesh, len(instance_data));
-			log.infof("Resized text instance data. New length : %v", len(instance_data));
 		}
 	}
 	else {

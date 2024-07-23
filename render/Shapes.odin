@@ -95,6 +95,34 @@ draw_quad_rect:: proc(rect : [4]f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, lo
 
 draw_quad :: proc {draw_quad_mat, draw_quad_rect};
 
+//Draw as quad between two points presented as a line.
+draw_line_2D :: proc (p1 : [2]f32, p2 : [2]f32, width : f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+   
+    // Calculate the difference vector and its length
+    diff := p2 - p1;
+    length := linalg.length(diff);
+    
+    // Calculate the angle of rotation needed
+    angle := math.atan2(diff.y, diff.x);
+    
+    // Create the transformation matrix
+    translation := linalg.matrix4_translate_f32({p1.x, p1.y, z});
+    rotation := linalg.matrix4_from_quaternion_f32(linalg.quaternion_from_pitch_yaw_roll_f32(0, 0, angle));
+    scale := linalg.matrix4_scale_f32({length, width, 1});
+    
+    // Offset the quad, so we draw from the x-left, y-center.
+    offset := linalg.matrix4_translate_f32({0.5, 0, 0});
+    
+    // Combine the transformations in the correct order
+    mat := translation * rotation * scale * offset;
+	
+	draw_quad_mat(mat, color);
+}
+
+//TODO
+//draw_line_3D :: proc () {}
+
+//TODO not needed, should it be deleted?
 draw_char :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
 	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_char);

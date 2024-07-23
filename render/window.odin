@@ -137,9 +137,8 @@ Antialiasing :: enum {
 }
 
 Resize_behavior :: enum {
-	dont_allow,
-	resize_backbuffer,
-	//scale_backbuffer, //This stopped working for some reason
+	dont_allow_resize,
+	allow_resize,
 }
 
 Monitor :: glfw.MonitorHandle;
@@ -182,7 +181,7 @@ Fullscreen_mode :: enum {
 	windowed,
 }
 
-window_make :: proc(width, height : i32, title : string, resize_behavior : Resize_behavior = .resize_backbuffer, antialiasing : Antialiasing = .none, loc := #caller_location) -> (window : ^Window){
+window_make :: proc(width, height : i32, title : string, resize_behavior : Resize_behavior = .allow_resize, antialiasing : Antialiasing = .none, loc := #caller_location) -> (window : ^Window){
 	
 	desc : Window_desc = {
 		width = width,
@@ -236,7 +235,7 @@ setup_window_no_backbuffer :: proc(desc : Window_desc, window : ^Window) {
 	window.current_fullscreen = .windowed;
 	window.decorated = true;
 
-	if desc.resize_behavior == .dont_allow {
+	if desc.resize_behavior == .dont_allow_resize {
 		glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE);
 	}
 	else {

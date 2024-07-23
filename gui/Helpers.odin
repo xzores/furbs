@@ -179,7 +179,7 @@ display_fields :: proc (target_panel : ^Element_container, to_display : any, sho
                     element = {
                 
                         anchor = .top_left,
-
+						
                         element = Checkbox {
                             border = 0.003,
                             color_outer = {150,150,150,255},

@@ -14,6 +14,86 @@ import "core:time" //Temp
 import render "../render"
 import utils "../utils"
 
+/////////////////////////////////////////////////////////////// AT STARTUP /////////////////////////////////////////////////////////////// 
+
+@(require_results)
+init :: proc (fallback_appearance := default_appearance, loc := #caller_location) -> (state : Gui_state) {
+	
+	state = {
+		gui_pipeline = render.pipeline_make(render.get_default_shader(), .blend, false, false),
+		default_style = {
+			default = default_appearance,
+			hover = default_appearance,
+			active = default_appearance,
+		},
+	}
+	
+	state.default_style.hover = default_hover_appearance;
+	state.default_style.selected = default_selected_appearance;
+	state.default_style.active = default_active_appearance;
+	
+	return;
+}
+
+destroy :: proc (using state : ^Gui_state) {
+
+	for k in owned_elements {
+		e := active_elements[k];
+		element_cleanup(e);
+		delete_key(&active_elements, k);
+	}
+	
+	delete(owned_elements); owned_elements = {};
+	
+	if len(active_elements) == 0 {
+		delete(active_elements); active_elements = {};
+	}
+	
+	render.pipeline_destroy(gui_pipeline);
+}
+
+/////////////////////////////////////////////////////////////// PER FRAME ///////////////////////////////////////////////////////////////
+
+begin :: proc (state : ^Gui_state, target_window : ^render.Window, loc := #caller_location) {
+	assert(bound_state == nil, "begin has already been called.", loc);
+	assert(render.state.is_begin_frame == true, "regui's begin must be called after render's begin_frame", loc);
+	assert(render.state.current_target != nil, "You must set the target with render.target_begin(some_window) before calling gui.begin", loc);
+	
+	bound_state = state;
+	
+	state.window = target_window;
+	w, h := render.get_render_target_size(state.window);
+	state.unit_size = get_unit_size(cast(f32)w, cast(f32)h);
+	
+	style : Style = state.default_style;
+	
+	for k in state.owned_elements {
+		e : ^Element_container = &active_elements[k];
+		element_update(e, style, get_screen_rect(), loc);
+	}
+}
+
+end :: proc (state : ^Gui_state, loc := #caller_location) {
+	assert(bound_state != nil, "begin has not been called.", loc);
+	assert(bound_state == state, "The passed gui state does not match the begin's statement.", loc);
+	assert(render.state.is_begin_frame == true, "regui's begin must be called before render's end_frame", loc);
+	
+	style : Style = state.default_style;
+	
+	render.pipeline_begin(state.gui_pipeline, render.camera_get_pixel_space( state.window));
+	
+	//Draw
+	for k in state.owned_elements {
+		e : Element_container = active_elements[k];
+		element_draw(auto_cast e, style, get_screen_rect(), loc);
+	}
+	
+	render.pipeline_end();
+
+	state.window = nil;
+	bound_state = nil;
+}
+
 ////////////////// TYPES ////////////////////
 
 Font_appearance :: struct {
@@ -45,6 +125,13 @@ Colored_appearance :: struct {
 
 	// This is how lines are drawn and are often tied to front_color and margin.
 	line_width : f32,
+	line_margin : f32,
+	
+	//Additional varies from element to element.
+	additional_show : bool, 	//Mark the discrete points
+	additional_color : [4]f32, 	//The color of the marks.
+	additional_line_width : f32,
+	additional_margin : f32,
 	
 	// Some elements can also be rounded
 	// Some cannot like the radio button as it is already round.
@@ -87,6 +174,7 @@ Appearance :: union {
 Style :: struct {
 	default : Appearance,
 	hover : Maybe(Appearance),
+	selected : Maybe(Appearance),
 	active : Maybe(Appearance),
 }
 
@@ -130,18 +218,20 @@ Button :: struct { e : Element, };
 Checkbox :: struct { e : Element, };
 Label :: struct { e : Element, };
 Slider :: struct { e : Element, };
-Int_field :: struct { e : Element, };
-Float_field :: struct { e : Element, };
+Int_slider :: struct { e : Element, };
 Text_field :: struct { e : Element, };
-Text_area :: struct { e : Element, };
+Int_field :: struct { e : Element, }; 	//TODO
+Float_field :: struct { e : Element, };	//TODO
+Text_area :: struct { e : Element, };	
 Radio_buttons :: struct { e : Element, };
-Dropactive :: struct { e : Element, };
+Dropdown :: struct { e : Element, };
 
 //There are kinda special, used mainly in games
-Progess_bar :: struct { e : Element, };
+Bar :: struct { e : Element, };
 Slot :: struct { e : Element, };
 Color_picker :: struct { e : Element, };
 Gradient_picker :: struct { e : Element, };
+Text_editor :: struct { e : Element, };
 Custom :: struct { e : Element, };
 
 //These panels handles 
@@ -151,26 +241,6 @@ Accordion :: struct { e : Element, };		//This can be opened to revieal more (kin
 Screen_panel :: struct { e : Element, };	//This takes up the entire screen, used to bundle elements together that needs to be hidden/shown. Good for menus
 Horizontal_bar :: struct { e : Element, }; //These fill the entire screen in a dimension and act as a panel
 Vertical_bar :: struct { e : Element, };	//These fill the entire screen in a dimension and act as a panel
-
-////////////////////////////////////////////////////////////
-// The *_info holds the instance data of the gui elements.
-
-//These hold the information about each element
-Element_info :: union {
-	Rect_info,
-	Button_info,
-}
-
-Rect_info :: struct {
-	
-}
-
-//Button, true or false. Get the value from clicked.
-Button_info :: struct {
-	//Set by user
-	text : string,
-	clicked : ^bool,
-}
 
 ////////////////////////////////////////////////////////////
 
@@ -183,8 +253,93 @@ Tooltip :: union {
 }
 
 ////////////////////////////////////////////////////////////
+// The *_info holds the instance data of the gui elements.
+
+//These hold the information about each element
+@(private)
+Element_info :: union {
+	Rect_info,
+	Button_info,
+	Checkbox_info,
+	Label_info,
+	Slider_info,
+	Int_slider_info,
+	Text_field_info,
+	Panel_info,
+}
+
+//A box with no text, and no interactions.
+@(private)
+Rect_info :: struct {
+	//Contains no information
+}
+
+//Button, true or false. Get the value from clicked.
+@(private)
+Button_info :: struct {
+	//Set by user
+	text : string,
+	clicked : ^bool,
+}
+
+//Checkbox true or false.
+Checkbox_info :: struct {
+	checked : bool,
+	checked_res : ^bool,
+}
+
+//Checkbox true or false.
+Label_info :: struct {
+	text : string,
+}
+
+//Slider, a continues value.
+Slider_info :: struct {
+	//User settings
+	min_val : f32,
+	max_val : f32,
+	
+	//Internal
+	current_val : f32,
+	current_val_res : ^f32,
+}
+
+//Int slider, discontinues values
+Int_slider_info :: struct {
+	//User settings
+	min_val : int,
+	max_val : int,
+	
+	//Internal
+	current_val : int,
+	current_val_res : ^int,
+}
+
+Text_field_info :: struct {
+	//User settings
+	max_rune_length : int,
+	
+	//Internal
+	runes : [dynamic]rune,
+	view_start : int,
+	cursor_pos : int,
+	
+	bg_text : string,
+	text_res : ^string,
+}
+
+@(private)
+Panel_info :: struct {
+	//movable : bool,
+	//drag_area : Destination,
+	//scrollable : bool,
+	sub_elements : [dynamic]Element,
+}
+
+////////////////////////////////////////////////////////////
 
 //Common contiainer for all elements.
+@(private)
 Element_container :: struct {
 
 	//Content
@@ -195,27 +350,25 @@ Element_container :: struct {
 
     //visability
     is_showing : bool,
-
-	//This is used by some types when using mouse and most types when using controller (TODO controller)
-	is_selected : bool,	//TODO is this not the smae as active?
 	
+	stay_selected : bool, //For some types this is true.
+	
+	//This is used by some types when using mouse and most types when using controller (TODO controller)
 	//These are the states
-	last_active : bool,
-	active : bool,
-	hover : bool,
+	is_selected : bool,
+	is_active : bool,
+	is_hover : bool,
 	
 	//What will be displayed when hovering the elements (optional) may be nil
 	tooltip : Tooltip,
 
-	//TODO hover, click sounds
-
+	//TODO hover, and click sounds
+	
 	//User data, so the user can use the callback system if wanted (not recommended)
-	user_data : rawptr,
+	user_data : rawptr, //TODO delete, dont do callbacks, i think.
 	
 	//If any of these are set, they will override the style for the specific element.
-	appearance : Maybe(Appearance),
-	hover_appearance : Maybe(Appearance),
-	active_appearance : Maybe(Appearance),
+	using style : Style,
 }
 
 ////////////////// CONTEXT //////////////////
@@ -231,242 +384,76 @@ pixel_space_stack : [20][4]f32; //MAX 20 styles
 panel_stack_len : int;
 */
 
+Parent :: union {
+	^Gui_state,
+	Panel,
+}
+
 Gui_state :: struct {
 
 	default_style : Style,
 	Theme : Theme,
-
-	target : render.Render_target,
 	
-	active_elements : map[Element]Element_container,
+	window : ^render.Window, //TODO remove this window, it only used for input, find another way.
+	
+	owned_elements : [dynamic]Element,
 	
 	unit_size : f32,
-	
 	gui_pipeline : render.Pipeline,
 }
 
+//This is a global for all gui states, and all panels with sub elements, so it is "very" unique
+@(private)
 current_element_index : Element;
+
+@(private)
 bound_state : ^Gui_state;
 
-////////////////// USER FUNCTIONS ////////////////////
+@(private)
+active_elements : map[Element]Element_container;
 
-default_appearance : Colored_appearance = {
-	
-	text_anchor = .center_center,
-	text_size = 0.1,
-	bold = false,
-	italic = false,	
- 	fonts = render.state.default_fonts,
-	limit_by_width = true,
-	limit_by_height = true,
-	text_backdrop_offset = {0.002, -0.002},
-	text_backdrop_color = {0,0,0,1},
-	
-	bg_color = {0.3, 0.3, 0.3, 0.9},
-	mid_color = {0.6, 0.6, 0.6, 1},
-	mid_margin = 0.02,
-	front_color = {1,1,1,1},
-	front_margin = 0.02,
-	line_width = 0.01,
-	rounded = false,
-}
-
-default_hover_appearance : Colored_appearance = {
-	
-	text_anchor = .center_center,
-	text_size = 0.1,
-	bold = false,
-	italic = false,	
- 	fonts = render.state.default_fonts,
-	limit_by_width = true,
-	limit_by_height = true,
-	text_backdrop_offset = {0.002, -0.002},
-	text_backdrop_color = {0,0,0,1},
-	
-	bg_color = {0.2, 0.2, 0.2, 0.9},
-	mid_color = {0.8, 0.8, 0.8, 1},
-	mid_margin = 0.02,
-	front_color = {1,1,1,1},
-	front_margin = 0.02,
-	line_width = 0.01,
-	rounded = false,
-}
-
-default_active_appearance : Colored_appearance = {
-	
-	text_anchor = .center_center,
-	text_size = 0.1,
-	bold = false,
-	italic = false,	
- 	fonts = render.state.default_fonts,
-	limit_by_width = true,
-	limit_by_height = true,
-	text_backdrop_offset = {0.002, -0.002},
-	text_backdrop_color = {0,0,0,1},
-	
-	bg_color = {0.5, 0.5, 0.5, 0.9},
-	mid_color = {0.9, 0.9, 0.9, 1},
-	mid_margin = 0.02,
-	front_color = {1,1,1,1},
-	front_margin = 0.02,
-	line_width = 0.01,
-	rounded = false,
-}
-
-@(require_results)
-init :: proc (fallback_appearance := default_appearance, loc := #caller_location) -> (state : Gui_state) {
-	
-	state = {
-		active_elements = make(map[Element]Element_container),
-		gui_pipeline = render.pipeline_make(render.get_default_shader(), .blend, false, false),
-		default_style = {
-			default = default_appearance,
-			hover = default_appearance,
-			active = default_appearance,
-		},
-	}
-	
-	fmt.printf("default_style : %#v\n", state.default_style);
-	//state.default_style.hover = default_appearance; //This makes the bug go away.
-	assert(state.default_style.hover != nil); //This assertion fails.
-	
-	return;
-}
-
-destroy :: proc (using state : ^Gui_state) {
-
-	for k, e in active_elements {
-		element_cleanup(e);
-		delete_key(&active_elements, k);
-	}
-	
-	delete(active_elements); active_elements = {};
-	
-	render.pipeline_destroy(gui_pipeline);
-}
-
-begin :: proc (using state : ^Gui_state, render_target : render.Render_target, loc := #caller_location) {
-	assert(bound_state == nil, "begin has already been called.", loc);
-	assert(render.state.is_begin_frame == true, "regui's begin must be called after render's begin_frame", loc);
-	bound_state = state;
-
-	target = render_target;
-	w, h := render.get_render_target_size(target);
-	unit_size = get_unit_size(cast(f32)w, cast(f32)h);
-
-	//Do logic
-}
-
-end :: proc (using state : ^Gui_state, loc := #caller_location) {
-	assert(bound_state != nil, "begin has not been called.", loc);
-	assert(bound_state == state, "The passed gui state does not match the begin's statement.", loc);
-	assert(render.state.is_begin_frame == true, "regui's begin must be called before render's end_frame", loc);
-	
-	render.target_begin(target, nil, {});
-	render.pipeline_begin(gui_pipeline, render.camera_get_pixel_space(target));
-
-	style : Style = state.default_style;
-	
-	for k, e in active_elements {
-		element_update(auto_cast k, loc);
-	}
-	
-	//Draw
-	for k, e in active_elements {
-		element_draw(auto_cast k, style, loc);
-	}
-	render.pipeline_end();
-	render.target_end();
-
-	target = nil;
-	bound_state = nil;
-}
+////////////////// Private Functions ////////////////////
 
 //Common for all elements, only use if you are doing a custom element.
-element_make :: proc (state : ^Gui_state, container : Element_container, loc := #caller_location) -> Element {
-	assert(state != nil, "The bound state is nil", loc)
-	using state;
-
+@(private)
+element_make :: proc (parent : Parent, container : Element_container, loc := #caller_location) -> Element {
+	
 	current_element_index += 1;
 	active_elements[current_element_index] = container;
+	
+	switch v in parent {
+		
+		case ^Gui_state:
+		 	append(&v.owned_elements, current_element_index);
+			
+		case Panel:
+			contrainer : ^Element_container = &active_elements[v.e];
+			
+			ok : bool;
+			e : ^Panel_info;
+			e, ok = &(&contrainer.element).(Panel_info);
+			fmt.assertf(ok, "The handle %v is not of type %v. Handle data : %v", v.e, type_info_of(Panel_info), contrainer.element);
+			
+			append_elem(&e.sub_elements, current_element_index);
+	}
 
 	return current_element_index;
 }
 
 //Common for all elements
-element_destroy :: proc (using state : ^Gui_state, handle : Element, loc := #caller_location) {
+@(private)
+element_destroy :: proc (handle : Element, loc := #caller_location) {
 	assert(handle in active_elements, "The handle is not valid", loc);
 	key, container := delete_key(&active_elements, handle);
 	element_cleanup(container);
 }
 
-//Clicked will refer to a boolean, the boolean will be made true in the frame button is clicked.
-//Clicked may be nil
-//The text is copied, so you can delete it when wanted.
-button_make :: proc (state : ^Gui_state, dest : Destination, text : string, clicked : ^bool, show : bool = true, tooltip : Tooltip = nil, user_data : rawptr = nil,
-					appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Button {
-	
-	appearance := appearance;
-	hover_appearance := hover_appearance;
-	active_appearance := active_appearance;
-	
-	if a, ok := &appearance.?; ok {
-		appearance = state.default_style.default;
-	}
-	
-	if a, ok := &hover_appearance.?; ok {
-		hover_appearance = state.default_style.hover;
-	}
-	
-	if a, ok := &active_appearance.?; ok {
-		active_appearance = state.default_style.active;
-	}
-	
-	element : Button_info = {
-		clicked = clicked,
-		text = strings.clone(text),
-	}
-	
-	container : Element_container = {
-		element = element,
-		dest = dest,
-		is_showing = show,
-		is_selected = false,
-		tooltip = tooltip,
-		appearance = appearance,
-		hover_appearance = hover_appearance,
-		active_appearance = active_appearance,
-	}
-
-	return {auto_cast element_make(state, container, loc)};
-}
-
-button_is_hover :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(button.e, Button_info, loc);
-	return container.hover;
-}
-
-button_is_active :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(button.e, Button_info, loc);
-	return container.active;
-}
-
-button_is_pressed :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(button.e, Button_info, loc);
-	return !container.last_active && container.active;
-}
-
-button_is_released :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(button.e, Button_info, loc);
-	return container.last_active && !container.active;
-}
-
-////////////////// Private Functions ////////////////////
 
 //returns what it drew in screen space coordinates.
-draw_quad :: proc (anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]f32, color : [4]f32, loc := #caller_location) -> [4]f32 {
+@(private)
+draw_quad :: proc (anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]f32, parent_rect : [4]f32, color : [4]f32, loc := #caller_location) -> [4]f32 {
 	
-	rect := get_screen_space_position_rect(anchor, self_anchor, rect, get_screen_rect(), bound_state.unit_size);
+	rect := get_screen_space_position_rect(anchor, self_anchor, rect, parent_rect, bound_state.unit_size);
 	render.draw_quad_rect(rect, 0, color, loc);
 	
 	return rect;
@@ -475,7 +462,8 @@ draw_quad :: proc (anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]
 //position, size and bounds is in unit size coordinates (0-1 ish)
 //limit_by_width makes it so the text will not extend over the bounds.
 //TODO anchors
-draw_text_param :: proc (text : string, bounds : [4]f32, size : f32, anchor : Anchor_point, bold, italic : bool, color : [4]f32, fonts : render.Fonts,
+@(private)
+draw_text_param :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, size : f32, anchor : Anchor_point, bold, italic : bool, color : [4]f32, fonts : render.Fonts,
  						backdrop_color : [4]f32, backdrop_offset : [2]f32, limit_by_height : bool = true, limit_by_width : bool = true, loc := #caller_location) {
 	
 	if text == "" {
@@ -487,7 +475,7 @@ draw_text_param :: proc (text : string, bounds : [4]f32, size : f32, anchor : An
 	font := render.text_get_font_from_fonts(bold, italic, fonts);
 	
 	//This is the rect in pixels which the text should be drawn within.
-	rect := get_screen_space_position_rect(.center_center, .center_center, bounds, get_screen_rect(), bound_state.unit_size);
+	rect := get_screen_space_position_rect(.center_center, .center_center, bounds, parent_rect, bound_state.unit_size);
 	
 	text_target_size := size * unit_size; 
 	
@@ -510,15 +498,16 @@ draw_text_param :: proc (text : string, bounds : [4]f32, size : f32, anchor : An
 	
 	render.pipeline_end();
 	render.text_draw(text, rect.xy - {text_bounds.x, text_bounds.y}, rect.w, bold, italic, color, {color = backdrop_color, offset = backdrop_offset * unit_size}, fonts);
-	render.pipeline_begin(bound_state.gui_pipeline, render.camera_get_pixel_space(bound_state.target));
+	render.pipeline_begin(bound_state.gui_pipeline, render.camera_get_pixel_space(bound_state.window));
 }
 
-draw_text_appearance :: proc (text : string, bounds : [4]f32, color : [4]f32, margin : f32, appearance : Appearance, loc := #caller_location) {
+@(private)
+draw_text_appearance :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, color : [4]f32, appearance : Appearance, loc := #caller_location) {
 	
 	switch a in appearance {
 		
 		case Colored_appearance:
-			draw_text_param(text, bounds, a.text_size, a.text_anchor, a.bold, a.italic, a.front_color, a.fonts,
+			draw_text_param(text, bounds, parent_rect, a.text_size, a.text_anchor, a.bold, a.italic, color, a.fonts,
 							a.text_backdrop_color, a.text_backdrop_offset, a.limit_by_height, a.limit_by_width, loc);
 		
 		case Patched_appearance:
@@ -531,13 +520,16 @@ draw_text_appearance :: proc (text : string, bounds : [4]f32, color : [4]f32, ma
 	}
 }
 
+@(private)
 draw_text :: proc {draw_text_param, draw_text_appearance}
 
+@(private)
 get_screen_rect :: proc () -> [4]f32 {
-	w, h := render.get_render_target_size(bound_state.target);
+	w, h := render.get_render_target_size(bound_state.window);
 	return {0,0,cast(f32)w,cast(f32)h};
 }
 
+@(private)
 get_unit_size :: proc (width, height : f32) -> f32 {
 	return math.min(width, height);
 }
@@ -548,6 +540,7 @@ get_unit_size :: proc (width, height : f32) -> f32 {
 //self_anchor: which part of the rect is the origin (anchored place)
 //anchor_rect_pixel is a parent rect given in pixels space (0-2000 ish), will redifine what "the screen" is.
 //Unit size is the unit_size (0-2000 ish), see get_unit_size
+@(private)
 get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]f32, anchor_rect_pixel : [4]f32, unit_size : f32) -> [4]f32 {
 	
     offset : [2]f32;
@@ -636,76 +629,386 @@ get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anch
     return rectangle;
 }
 
+/*
 // Function to check if a point is inside a rectangle
+@(private)
 point_rect_collision :: proc(point: [2]f32, rect: [4]f32) -> bool {
 	return point.x >= rect.x &&
 	       point.x <= rect.x + rect.z &&
 	       point.y >= rect.y &&
 	       point.y <= rect.y + rect.w;
 }
+*/
 
-is_hovered :: proc (container : Element_container) -> bool {
+@(private)
+is_hovered :: proc (dest : Destination, parent_rect : [4]f32) -> bool {
+	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, parent_rect, bound_state.unit_size);
 	
-	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
-	
-	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, get_screen_rect(), bound_state.unit_size);
-	
-	return point_rect_collision(render.mouse_pos(), rect);
+	return collision_point_rect(mouse_pos(), rect);
 }
 
-is_activated :: proc (container : Element_container) -> bool {
+@(private)
+is_selected :: proc (dest : Destination, parent_rect : [4]f32) -> bool {
 	
-	return is_hovered(container) && render.button_released(.mouse_button_1);
+	return is_hovered(dest, parent_rect) && mouse_button_pressed(.mouse_button_1);
 }
+
+@(private)
+is_activated :: proc (dest : Destination, parent_rect : [4]f32) -> bool {
+	
+	return is_hovered(dest, parent_rect) && mouse_button_released(.mouse_button_1);
+}
+
+@(private)
+mouse_pos :: proc() -> [2]f32 {
+	mp := render.mouse_pos(bound_state.window);
+	return {mp.x, mp.y};	
+}
+
+mouse_button_down :: render.button_down;
+mouse_button_pressed :: render.button_pressed;
+mouse_button_released :: render.button_released;
+
+collision_point_rect :: utils.collision_point_rect;
 
 ///////////// Very private functions /////////////
 
-
+@(private)
+get_appearences :: proc (parent : Parent, appearance, hover_appearance, selected_appearance, active_appearance : Maybe(Appearance), loc := #caller_location) -> (a : Appearance, a_hover, a_sel, a_act : Maybe(Appearance)) {
+	
+	default_style : Style;
+	
+	switch v in parent {
+		
+		case ^Gui_state:
+			default_style = v.default_style;
+			
+		case Panel:
+			p, cont := element_get(v.e, Panel_info);
+		 	default_style = cont.style;
+			
+	}
+	
+	fmt.printf("appearance : %v\n", appearance);
+	
+	appearance := appearance;
+	hover_appearance := hover_appearance;
+	selected_appearance := selected_appearance;
+	active_appearance := active_appearance;
+	
+	default_appearance : Appearance;
+	
+	if a, ok := &appearance.?; !ok {
+		default_appearance = default_style.default;
+	}
+	
+	if a, ok := &hover_appearance.?; !ok {
+		hover_appearance = default_style.hover;
+	}
+	
+	if a, ok := &selected_appearance.?; !ok {
+		selected_appearance = default_style.selected;
+	}
+	
+	if a, ok := &active_appearance.?; !ok {
+		active_appearance = default_style.active;
+	}
+	
+	return default_appearance, hover_appearance, selected_appearance, active_appearance;
+}
 
 @(private)
-element_update :: proc (handle : Element, loc := #caller_location) {
-	using bound_state;
-	container : ^Element_container = &active_elements[handle];
+get_logical_margin :: proc (s : Style) -> f32 {
+	
+	margin : f32;
+	
+	switch v in s.default {
+		case Textured_appearance:
+			panic("TODO");
+			
+		case Colored_appearance:
+			margin = v.front_margin;
+			
+		case Patched_appearance:
+			panic("TODO");
+	}	
+	
+	return margin;
+}
+
+//TODO take in parent_rect, it is needed for panels.
+@(private)
+element_update :: proc (container : ^Element_container, style : Style, parent_rect : [4]f32, loc := #caller_location) {
+	
 	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
+	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, parent_rect, bound_state.unit_size);
 	
-	
-	if is_activated(container^) {
-		container.active = true;
+	container.is_active = false;
+	container.is_hover = false;
+	if container.stay_selected {
+		if mouse_button_pressed(.mouse_button_1) {
+			container.is_selected = false;
+		}
 	}
-	if is_hovered(container^) {
-		container.hover = true;
+	else if !mouse_button_down(.mouse_button_1) {
+		container.is_selected = false;
 	}
 	
-	switch e in container.element {
+	if is_activated(dest, parent_rect) {
+		container.is_active = true;
+	}
+	else if is_selected(dest, parent_rect) {
+		container.is_selected = true;
+	}
+	
+	if is_hovered(dest, parent_rect) {
+		container.is_hover = true;
+	}
+	
+	unit_size := bound_state.unit_size;
+	
+	switch &e in container.element {
 		case Rect_info:
+			//A rect has not logic
 			
 		case Button_info:
+			if e.clicked != nil {
+				e.clicked^ = container.is_active;
+			}
+		
+		case Checkbox_info:
+			if container.is_active {
+				e.checked = !e.checked;
+			}
+			if e.checked_res != nil {
+				e.checked_res^ = e.checked;
+			}
+		
+		case Label_info:
+			//A label has not logic
+		
+		case Slider_info:
 			
+			margin : f32 = get_logical_margin(style);
+			x := mouse_pos().x;
+			
+			//offset : f32 = margin/2 + (e.current_val - e.min_val) / (e.max_val - e.min_val) * (dest.rect.z - margin);
+			
+			dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
+			slider_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, bound_state.unit_size); //to convert to pixel space
+			if container.is_selected {
+				t := ((x - slider_rect.x) / slider_rect.z * (e.max_val - e.min_val)) + e.min_val;
+				e.current_val = math.clamp(t, e.min_val, e.max_val);
+			}
+			
+			if e.current_val_res != nil {
+				e.current_val_res^ = e.current_val;
+			}
+			
+		case Int_slider_info:
+			
+			margin : f32 = get_logical_margin(style);
+			x := mouse_pos().x;
+			
+			dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
+			slider_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, bound_state.unit_size); //to convert to pixel space
+			if container.is_selected {
+				t := ((x - slider_rect.x) / slider_rect.z * f32(e.max_val - e.min_val)) + f32(e.min_val);
+				e.current_val = cast(int)math.round(math.clamp(t, f32(e.min_val), f32(e.max_val)));
+			}
+			
+			if e.current_val_res != nil {
+				e.current_val_res^ = e.current_val;
+			}
+			
+		case Text_field_info:
+			
+			margin : f32 = get_logical_margin(style);
+			x := mouse_pos().x;
+			
+			dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
+			field_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, unit_size); //to convert to pixel space
+			
+			font : render.Font;
+			font_size : f32;
+			
+			//How many rune fit in rect
+			{
+				switch a in style.default {
+					
+					case Textured_appearance:
+						
+					case Colored_appearance:
+						font = render.text_get_font_from_fonts(a.bold, a.italic, a.fonts);
+						font_size = math.min(rect.w, a.text_size * unit_size);
+					
+					case Patched_appearance:
+						
+				}	
+				
+				//TODO something is wrong here.
+				e.view_start = math.clamp(e.view_start, 0, len(e.runes));
+				text := utf8.runes_to_string(e.runes[e.view_start:]);
+				defer delete(text);
+				dims := render.text_get_dimensions(text, font_size, font); //In pixel space
+				for dims.x > field_rect.z {
+					e.view_start += 1;
+					e.view_start = math.clamp(e.view_start, 0, len(e.runes));
+					text := utf8.runes_to_string(e.runes[e.view_start:]);
+					defer delete(text);
+					dims = render.text_get_dimensions(text, font_size, font); //In pixel space
+				}
+				
+			}
+			
+			if container.is_selected && mouse_button_pressed(.mouse_button_1) {
+				//The user clicked
+				t := math.clamp((x - field_rect.x) / field_rect.z, 0, 1);
+				//
+				fmt.printf("t : %v", t);
+			}
+			
+			if container.is_selected == true {
+				
+				if render.is_key_triggered(.backspace) {
+					if len(e.runes) != 0 {
+						pop(&e.runes);
+					}
+				}
+				
+				if render.is_key_triggered(.v) && render.is_key_down(.control_left) {
+					s := render.get_clipboard_string();
+					for r in s {
+						append(&e.runes, r);
+					}
+				}
+				
+				for codepoint in render.recive_next_input() {
+					append(&e.runes, codepoint);
+				}
+			}
+		
+		case Panel_info:
+			panel_rect := get_screen_space_position_rect(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, bound_state.unit_size);
+			
+			for key in e.sub_elements {
+				e := &active_elements[key];
+				element_update(e, style, panel_rect);
+			}
 	}
 }
 
 @(private)
-element_draw :: proc (handle : Element, style : Style, loc := #caller_location) {
-	using bound_state;
+element_draw :: proc (container : Element_container, style : Style, parent_rect : [4]f32, loc := #caller_location) {
 	
-	container : Element_container = active_elements[handle];
 	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
 	
 	appear : Appearance = style.default;
-	if act, ok := style.active.?; ok && container.active {
+	if act, ok := style.active.?; ok && container.is_active {
 		appear = act;
 	}
-	else if  hov, ok := style.hover.?; ok && container.hover {
+	else if sel, ok := style.selected.?; ok && container.is_selected {
+		appear = sel;
+	}
+	else if  hov, ok := style.hover.?; ok && container.is_hover {
 		appear = hov;
 	}
 	
-	fmt.printf("style.hover : %v\n", style.hover);
+	unit_size := bound_state.unit_size;
 	
 	switch e in container.element {
-		case Rect_info: 
-			//TODO
-		
+		case Rect_info:
+			switch a in style.default {
+				
+				case Textured_appearance:
+					//TODO
+					
+				case Colored_appearance:
+					render.set_texture(.texture_diffuse, render.texture2D_get_white());
+					draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					
+				case Patched_appearance:
+					//TODO
+				
+			}
+			
 		case Button_info:
+			switch a in appear {
+				
+				case Textured_appearance:
+					
+				case Colored_appearance:
+					render.set_texture(.texture_diffuse, render.texture2D_get_white());
+					
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					
+					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					
+					text_dest := mid_dest - {0,0, a.front_margin, a.front_margin};
+					draw_text(e.text, text_dest, new_rect, a.front_color, a, loc);
+					
+				case Patched_appearance:
+
+			}
+		
+		case Checkbox_info:
+			
+			switch a in appear {
+					
+				case Textured_appearance:
+					
+				case Colored_appearance:
+					render.set_texture(.texture_diffuse, render.texture2D_get_white());
+					
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					
+					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					
+					//TODO draw x
+					if e.checked {
+						
+						//Line (0,0) to (1,1)
+						{
+							p1 := new_rect.xy + (a.line_margin) * bound_state.unit_size;
+							p2 := new_rect.xy + new_rect.zw - (a.line_margin) * bound_state.unit_size;	
+							render.draw_line_2D(p1, p2, unit_size * a.line_width, color = a.front_color);
+						}
+						
+						//Line (0,1) to (1,0)
+						{
+							p1 := [2]f32{new_rect.x + (a.line_margin) * unit_size, new_rect.y + new_rect.w - (a.line_margin) * unit_size};
+							p2 := [2]f32{new_rect.x + new_rect.z - (a.line_margin) * unit_size, new_rect.y + (a.line_margin) * unit_size};
+							
+							render.draw_line_2D(p1, p2, unit_size * a.line_width, color = a.front_color);
+						}
+						
+					}
+					
+				case Patched_appearance:
+
+			}
+		
+		case Label_info:
+			
+			switch a in style.default {
+					
+				case Textured_appearance:
+					
+				case Colored_appearance:
+					render.set_texture(.texture_diffuse, render.texture2D_get_white());
+					
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					
+					text_dest : [4]f32 = {0,0, dest.rect.z - a.front_margin, dest.rect.w - a.front_margin};
+					draw_text(e.text, text_dest, new_rect, a.front_color, a, loc);
+					
+				case Patched_appearance:
+
+			}
+		
+		case Slider_info:
 			
 			switch a in appear {
 				
@@ -714,25 +1017,98 @@ element_draw :: proc (handle : Element, style : Style, loc := #caller_location) 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					draw_quad(dest.anchor, dest.self_anchor, dest.rect, a.bg_color, loc);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
 					
-					mid_dest := dest.rect - {0,0,a.mid_margin,a.mid_margin};
-					draw_quad(dest.anchor, dest.self_anchor, mid_dest, a.mid_color, loc);
-
-					draw_text(e.text, mid_dest, a.front_color, a.front_margin, a, loc);
+					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					
+					margin := get_logical_margin(style);
+					offset : f32 = margin/2 + (e.current_val - e.min_val) / (e.max_val - e.min_val) * (dest.rect.z - margin);
+					
+					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest.rect.w - a.line_margin}, new_rect, a.front_color, loc);
 					
 				case Patched_appearance:
 
 			}
+		
+		case Int_slider_info:
+			
+			switch a in appear {
+				
+				case Textured_appearance:
+					
+				case Colored_appearance:
+					render.set_texture(.texture_diffuse, render.texture2D_get_white());
+					
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					
+					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					
+					margin := get_logical_margin(style);
+					offset : f32 = margin/2 + f32(e.current_val - e.min_val) / f32(e.max_val - e.min_val) * (dest.rect.z - margin);
+					
+					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest.rect.w - a.line_margin}, new_rect, a.front_color, loc);
+					
+				case Patched_appearance:
 
+			}
+			
+		case Text_field_info:
+			
+			text := utf8.runes_to_string(e.runes[e.view_start:]);
+			defer delete(text);
+			
+			switch a in appear {
+				
+				case Textured_appearance:
+					
+				case Colored_appearance:
+					render.set_texture(.texture_diffuse, render.texture2D_get_white());
+					
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					
+					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					
+					if len(e.runes) != 0 {
+						text_dest := mid_dest - {0,0, a.front_margin, a.front_margin};
+						draw_text(text, text_dest, new_rect, a.front_color, a, loc);
+					}
+					else {
+						text_dest := mid_dest - {0,0, a.additional_margin, a.additional_margin};
+						draw_text_param(e.bg_text, text_dest, new_rect, a.text_size, a.text_anchor, a.bold, a.italic, a.additional_color, a.fonts,
+							{}, a.text_backdrop_offset, a.limit_by_height, a.limit_by_width, loc);
+					}
+					
+				case Patched_appearance:
+
+			}	
+			
+		case Panel_info:
+			switch a in style.default {
+				
+				case Textured_appearance:
+					
+				case Colored_appearance:
+					render.set_texture(.texture_diffuse, render.texture2D_get_white());
+					parent_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					
+					for key in e.sub_elements {
+						e := active_elements[key];
+						element_draw(e, style, parent_rect);
+					}
+					
+				case Patched_appearance:
+
+			}
+			
+	
 	}
 }
 
 @(private)
 element_get :: proc (handle : Element, $T : typeid, loc := #caller_location) -> (element : T, contrainer : Element_container) {
-	
-	using bound_state;
-	
 	assert(handle in active_elements, "The handle is not valid", loc);
 	contrainer = active_elements[handle];
 	
@@ -749,7 +1125,25 @@ element_cleanup :: proc(container : Element_container) {
 
 		case Button_info:
 			button_destroy(e);
-
+		
+		case Checkbox_info:
+			checkbox_destroy(e);
+			
+		case Label_info:
+			label_destroy(e);
+		
+		case Slider_info:
+			slider_destroy(e);
+			
+		case Int_slider_info:
+			int_slider_destroy(e);
+		
+		case Text_field_info:
+			text_field_destroy(e);
+			
+		case Panel_info:
+			panel_destroy(e);
+		
 	}
 }
 
@@ -757,5 +1151,42 @@ element_cleanup :: proc(container : Element_container) {
 @(private)
 button_destroy :: proc (button : Button_info) {
 	delete(button.text);
+}
+
+//Use gui.destroy
+@(private)
+checkbox_destroy :: proc (checkbox : Checkbox_info) {
+	//Nothing
+}
+
+//Use gui.destroy
+label_destroy :: proc (label : Label_info) {
+	delete(label.text);
+}
+
+slider_destroy :: proc (slider : Slider_info) {
+	//Nothing
+}
+
+int_slider_destroy :: proc (slider : Int_slider_info) {
+	//Nothing
+}
+
+text_field_destroy :: proc (text_field : Text_field_info) {
+	delete(text_field.runes);
+	delete(text_field.bg_text);
+}
+
+//Use gui.destroy
+@(private)
+panel_destroy :: proc (panel : Panel_info) {
+	
+	for k in panel.sub_elements {
+		e := active_elements[k];
+		element_cleanup(e);
+		delete_key(&active_elements, k);
+	}
+	 
+	delete(panel.sub_elements);
 }
 

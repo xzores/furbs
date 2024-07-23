@@ -19,7 +19,8 @@ ortho_mat :: proc "contextless" (left, right, bottom, top, near, far : f32) -> m
 	return mat;
 }
 
-perspective_mat :: proc "contextless" (fovy, aspect, near, far: f32) -> matrix[4,4]f32 {
+//TODO "contextless"
+perspective_mat :: proc (fovy, aspect, near, far: f32) -> matrix[4,4]f32 {
 	/*tan_half_fovy := math.tan(0.5 * fovy)
 	
 	m[0, 0] = 1 / (aspect*tan_half_fovy)
@@ -32,6 +33,8 @@ perspective_mat :: proc "contextless" (fovy, aspect, near, far: f32) -> matrix[4
 		m[2] = -m[2]
 	}
 	*/
+	
+	assert(false);
 	
 	return 1;
 }
@@ -137,12 +140,14 @@ rotation_matrix :: proc "contextless" (euler_angles : [3]f32) -> matrix[3,3]f32 
 }
 
 @require_results
-get_mouse_cast :: proc (camera : Camera3D, width : f32, height : f32) -> (direction : [3]f32) {
+get_mouse_cast :: proc (camera : Camera3D, window : ^Window) -> (direction : [3]f32) {
+	
+	width : f32 = cast(f32)window.width;
+	height : f32 = cast(f32)window.height;
 	
 	cam_view, cam_prj := camera3D_get_prj_view(camera, width / height);
 	
-	m_pos := mouse_pos();
-	m_pos.y = height - m_pos.y;
+	m_pos := mouse_pos(window);
 	
 	inv_prj := linalg.inverse(cam_prj);
 	ray_clip : [4]f32 = {(2 * m_pos.x / width) - 1, (2 * m_pos.y / height) - 1, 1, 1};

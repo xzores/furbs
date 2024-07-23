@@ -139,7 +139,7 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 	}
 	
 	if desc, ok := window_desc.?; ok {
-		assert(desc.resize_behavior == .resize_backbuffer || desc.resize_behavior == .dont_allow, "when calling init with a window descriptor, the resize_behavior must be .resize_backbuffer or .dont_allow", loc);
+		assert(desc.resize_behavior == .allow_resize || desc.resize_behavior == .dont_allow_resize, "when calling init with a window descriptor, the resize_behavior must be .resize_backbuffer or .dont_allow", loc);
 
 		if desc.antialiasing != .none {
 			glfw.WindowHint_int(glfw.SAMPLES, auto_cast desc.antialiasing);
@@ -212,8 +212,8 @@ destroy :: proc (loc := #caller_location) {
 	state.keys_released 	= {};
 	state.keys_pressed 		= {};
 	state.keys_triggered 	= {};
-
-	state.mouse_pos 		= {};
+	
+	state.old_mouse_pos 	= {};
 	state.mouse_delta 		= {};
 	state.scroll_delta 		= {};
 

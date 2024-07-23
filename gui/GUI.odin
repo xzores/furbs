@@ -554,17 +554,17 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 				}
 				
 				value^ = math.clamp(value^, 0, 1);
-
+				
 				//Determinec only by the value.
 				slider_line : [2][2]f32 = {	{elem_rect.x + (elem_rect.z - 2*fm_unit) * value^ + fm_unit, elem_rect.y + stl.line_margin/2 * unit_size},
 											{elem_rect.x + (elem_rect.z - 2*fm_unit) * value^ + fm_unit, elem_rect.y + elem_rect.w - stl.line_margin/2 * unit_size}}
-
+				
 				render.draw_shape(elem_rect, color = stl.bg_color, texture = texture);
 				render.draw_shape(render.Line{slider_line[0], slider_line[1], stl.line_width * unit_size}, color = stl.front_color, texture = line_texture);
 				
 			case Input_field:
 				using element;
-
+				
 				assert(value != nil, "value is nil");
 				//assert(raw_data(value^) != nil, "value^ is nil");
 
@@ -575,7 +575,7 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 						container.is_selected = true;
 					}
 				}
-
+				
 				if container.is_selected == true {
 					builder := strings.builder_make();
 					strings.write_string(&builder, value^);

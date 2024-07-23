@@ -219,6 +219,7 @@ recive_next_input :: proc () -> (char : rune, done : bool) {
 	return;
 }
 
+//This a view, don't delete it.
 get_clipboard_string :: proc (loc := #caller_location) -> string {
 
 	return glfw.GetClipboardString(state.owner_context);
@@ -267,9 +268,10 @@ button_released :: proc(button : Mouse_code) -> bool {
 	return state.button_released[button];
 }
 
-//will return the mouse position relative to the main window? what happens when you dpn't have a main window???
-mouse_pos :: proc () -> [2]f32 {
-	return state.mouse_pos;
+//will return the mouse position relative to the window?
+mouse_pos :: proc (window : ^Window) -> [2]f32 {
+	mx, my := glfw.GetCursorPos(window.glfw_window);
+	return [2]f32{auto_cast mx, cast(f32)window.height - auto_cast my};
 }
 
 mouse_delta :: proc() -> [2]f32 {
@@ -291,20 +293,20 @@ input_begin :: proc(loc := #caller_location) {
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);
 	
+	//This is for getting the delta mouse position, this is because the delta is window independent. 
 	mx, my := glfw.GetCursorPos(state.owner_context);
 	new_mouse_pos := [2]f32{auto_cast mx, auto_cast my};
+	state.mouse_delta = new_mouse_pos - state.old_mouse_pos;
+	state.old_mouse_pos = new_mouse_pos;
 	
-	state.mouse_delta = new_mouse_pos - state.mouse_pos;
-	state.mouse_pos = new_mouse_pos;
-
 	for queue.len(state.char_input_buffer) != 0 {
 		queue.append(&state.char_input, queue.pop_front(&state.char_input_buffer));
 	}
-
+	
 	for queue.len(state.scroll_input_event) != 0 {
 		state.scroll_delta += queue.pop_front(&state.scroll_input_event);
 	}
-
+	
 	for queue.len(state.button_input_events) != 0 {
 		event := queue.pop_front(&state.button_input_events);
 		

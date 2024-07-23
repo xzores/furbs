@@ -47,7 +47,7 @@ State :: struct {
 
 	scroll_input_event : queue.Queue([2]f32),
 
-	mouse_pos : [2]f32,
+	old_mouse_pos : [2]f32,
 	mouse_delta : [2]f32,
 	scroll_delta : [2]f32,
 		
