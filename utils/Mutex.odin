@@ -4,11 +4,10 @@ import "core:fmt"
 import "core:sync"
 import "base:runtime"
 
-
-/*
-
 TRACY_ENABLE 	:: #config(ODIN_DEBUG, false);
 LOCK_DEBUG 		:: #config(ODIN_DEBUG, true);
+
+import "../tracy"
 
 when LOCK_DEBUG || TRACY_ENABLE {
 
@@ -152,5 +151,3 @@ else {
 	lock_read :: sync.rw_mutex_shared_lock;
 	unlock_read :: sync.rw_mutex_shared_unlock;
 }
-
-*/
