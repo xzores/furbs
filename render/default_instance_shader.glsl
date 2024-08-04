@@ -36,35 +36,35 @@ out vec2 texture_coords;
 out vec3 normals;
 
 mat3 rotation_matrix(vec3 euler_angles) {
-    float cx = cos(radians(euler_angles.x));
-    float sx = sin(radians(euler_angles.x));
+	float cx = cos(radians(euler_angles.x));
+	float sx = sin(radians(euler_angles.x));
 
-    float cy = cos(radians(euler_angles.y));
-    float sy = sin(radians(euler_angles.y));
-    
+	float cy = cos(radians(euler_angles.y));
+	float sy = sin(radians(euler_angles.y));
+	
 	float cz = cos(radians(euler_angles.z));
-    float sz = sin(radians(euler_angles.z));
+	float sz = sin(radians(euler_angles.z));
 
-    mat3 rot_x = mat3(	1, 0, 0,
+	mat3 rot_x = mat3(	1, 0, 0,
 					 	0, cx, sx,
 					 	0, -sx, cx);
 
-    mat3 rot_y = mat3(	cy, 0, -sy,
+	mat3 rot_y = mat3(	cy, 0, -sy,
 					 	0, 1, 0,
 						sy, 0, cy);
 
-    mat3 rot_z = mat3(	cz, sz, 0,
+	mat3 rot_z = mat3(	cz, sz, 0,
 						-sz, cz, 0,
 						0, 0, 1);
 
-    return rot_z * rot_y * rot_x;
+	return rot_z * rot_y * rot_x;
 }
 
 void main() {
 	texture_coords = (texcoord * instance_tex_pos_scale.zw) + instance_tex_pos_scale.xy;
 	normals = normal;
 	vec4 pos = vec4(((rotation_matrix(instance_rotation) * position) * instance_scale) + instance_position, 1.0);
-    gl_Position = mvp * pos;
+	gl_Position = mvp * pos;
 }
 
 
@@ -85,6 +85,6 @@ out vec4 FragColor;
 void main() {
 	vec4 texColor = texture(texture_diffuse, texture_coords);
 
-    FragColor = color_diffuse * texColor;
+	FragColor = color_diffuse * texColor;
 }
 

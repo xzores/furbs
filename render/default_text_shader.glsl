@@ -47,7 +47,7 @@ void main() {
 		texture_coords = instance_tex_pos_scale.xy;
 	}
 	
-    gl_Position = mvp * vec4((position * instance_scale) + instance_position, 1.0);
+	gl_Position = mvp * vec4((position * instance_scale) + instance_position, 1.0);
 }
 
 
@@ -67,6 +67,6 @@ out vec4 FragColor;
 void main() {
 	vec4 tex_color = texture(texture_diffuse, texture_coords);
 	
-    FragColor = color_diffuse * vec4(1, 1, 1, tex_color.r);
+	FragColor = color_diffuse * vec4(1, 1, 1, tex_color.r);
 }
 

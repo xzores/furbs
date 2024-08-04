@@ -13,10 +13,10 @@ input_events_mutex : sync.Mutex;
 Input_modifier_enum :: enum i32 {
 	none = 0,
 	
-	shift     = 1,
+	shift	 = 1,
 	control   = 2,
-	alt       = 4,
-	super     = 8,
+	alt	   = 4,
+	super	 = 8,
 	caps_lock = 16,
 	//num_lock  = 32, //TODO this does not fit
 }

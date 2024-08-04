@@ -5,16 +5,16 @@ import "core:fmt"
 
 Color_render_buffer :: struct {
 	id 		: Rbo_id,
-	width	: i32,               		// Texture base width
-	height	: i32,               		// Texture base height
+	width	: i32,			   		// Texture base width
+	height	: i32,			   		// Texture base height
 	samples : i32,
 	format 	: Color_format,
 }
 
 Depth_render_buffer :: struct {
 	id 		: Rbo_id,
-	width	: i32,               		// Texture base width
-	height	: i32,               		// Texture base height
+	width	: i32,			   		// Texture base width
+	height	: i32,			   		// Texture base height
 	samples : i32,
 	format 	: Depth_format,
 }

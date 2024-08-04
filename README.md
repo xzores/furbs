@@ -4,12 +4,12 @@ A Odin library for games, currently under construction not ready for production.
 Furbs library collection aims to provide all the necessities for shipping 3D/2D indie games. 
 
 The libary collection current holds the following capabilities:<br />
-    -Utils (used internally)<br />
-    -Render, used for opening a windows and rending OpenGL 3.3 to 4.6, this might in the furture support 3.0, OpenGL ES 2/3<br />
-    -GUI library<br />
-    -Networking library<br />
-    -Sound library (comming)<br />
-    -Partical system library (comming)<br />
+	-Utils (used internally)<br />
+	-Render, used for opening a windows and rending OpenGL 3.3 to 4.6, this might in the furture support 3.0, OpenGL ES 2/3<br />
+	-GUI library<br />
+	-Networking library<br />
+	-Sound library (comming)<br />
+	-Partical system library (comming)<br />
 
 It is heavily inspired by Raylib with a greater emphasis om preformence while still being easy to use.
 
@@ -30,10 +30,10 @@ main :: proc {
 	my_rect : [4][2]f32 = {};
 
 	my_camera : Camera2D = {
-		position 			= {0,0},            // Camera position
+		position 			= {0,0},			// Camera position
 		target_relative 	= {0,0},			// 
 		rotation	 		= 0,				// In degrees
-		zoom	   			= 1,            	//
+		zoom	   			= 1,				//
 		far					= 1,
 		near 				= -1,
 	};
@@ -63,26 +63,26 @@ Codeveloped by albe194e
 
 
 Examples are included to do the following:
-    -Drawing 2D<br />
+	-Drawing 2D<br />
 ![Drawing_a_quad](https://github.com/xzores/furbs/assets/17770917/af20e297-bbad-422a-b0a1-90c6a34333d7)
 
-    -Drawing 3D<br />
+	-Drawing 3D<br />
 ![Drawing_a_quad_3D](https://github.com/xzores/furbs/assets/17770917/df6b56d2-5fe3-49fd-b045-4ecaecfbbe4e)
 
-    -Drawing 2D shapes, transparetcy and textures 3D<br />
+	-Drawing 2D shapes, transparetcy and textures 3D<br />
 ![Drawing_shapes](https://github.com/xzores/furbs/assets/17770917/4d89a90a-9518-4967-8636-f11c02e11bbf)
 
-    -Drawing text<br />
+	-Drawing text<br />
 ![Drawing_text](https://github.com/xzores/furbs/assets/17770917/9e2c1360-17cd-4d08-a3c3-a0a00f867dac)
 
-    -Drawing 3D<br />
+	-Drawing 3D<br />
 ![Drawing_3D](https://github.com/xzores/furbs/assets/17770917/fdf7f63d-a190-41eb-9c47-4cfdccfd5597)
 
 
 Furbs also include a gui library.<br />
 The gui library includes the following elements:<br />
  	-Rect<br />
-    	-Button<br />
+		-Button<br />
 	-Checkbox<br />
 	-Slide_input<br />
 	-Slider<br />

@@ -6,8 +6,10 @@ import "base:runtime"
 import "core:encoding/json"
 import "core:strings"
 import "core:os"
+import "core:log"
+import "core:path/filepath"
 
-load_all_as_txt :: proc(directory_path : string, extension : string, include_extension : bool = false, alloc := context.allocator) -> (res : map[string]string) {
+load_all_in_dir_as_txt :: proc(directory_path : string, extension : string, include_extension : bool = false, alloc := context.allocator) -> (res : map[string]string) {
 
 	context.allocator = alloc;
 
@@ -54,7 +56,7 @@ load_all_as_txt :: proc(directory_path : string, extension : string, include_ext
 	return;
 } 
 
-load_all_as_json :: proc($T : typeid, directory_path : string, extension : string, include_extension : bool = false) -> (res : map[string]T) {
+load_all_in_dir_as_json :: proc($T : typeid, directory_path : string, extension : string, include_extension : bool = false) -> (res : map[string]T) {
 	
 	//Open Directory
 	dir, _ := os.open(directory_path);
@@ -116,4 +118,87 @@ load_all_as_json :: proc($T : typeid, directory_path : string, extension : strin
 	}
 
 	return;
+}
+
+ensure_folder_exists :: proc(folder_path : string) -> (err: os.Errno) {
+
+	// Check if the folder exists
+	if !os.exists(folder_path) {
+		// Folder does not exist, so create it
+		err = os.make_directory(folder_path)
+	}
+	return;
+}
+
+// Recursive function to delete directory contents
+delete_directory_contents :: proc(dir_path: string) -> (success : bool) {
+	
+	dir_handle, dir_err := os.open(dir_path);
+	if dir_err != 0 {
+		log.logf(.Error, "Error opening directory : %v", dir_err);
+		return false;
+	}
+	
+	files, err := os.read_dir(dir_handle, 0); //get all files
+	os.close(dir_handle);
+	
+	if err != 0 {
+		log.logf(.Error, "Error reading directory : %v", err);
+		return false;
+	}
+	
+	for file in files {
+		
+		full_path := fmt.aprintf("%v/%v", dir_path, file.name);
+		defer delete(full_path);
+		
+		if file.is_dir {
+			if file.name != "." && file.name != ".." {
+				if !delete_directory_contents(full_path) {
+					return false
+				}
+				if os.remove_directory(full_path) != 0 {
+					log.logf(.Error, "Error removing directory: %v", full_path)
+					return false
+				}
+			}
+		} else {
+			if os.remove(full_path) != 0 {
+				log.logf(.Error, "Error removing file : %v", full_path)
+				return false
+			}
+		}
+	}
+	
+	return true
+}
+
+// Function to delete a directory and its contents
+remove_directory_recursive :: proc(dir_path: string) -> (success : bool) {
+	
+	if !delete_directory_contents(dir_path) {
+		return false;
+	}
+	if os.remove_directory(dir_path) != 0 {
+		log.logf(.Error, "Error removing directory:", dir_path);
+		return false;
+	}
+	
+	return true;
+}
+
+copy_file :: proc (from : string, to : string) -> (success : bool) {
+	
+	data, suc := os.read_entire_file(fmt.tprintf(from));
+	defer delete(data);
+	
+	if !suc {
+		return false;
+	}
+	
+	if !os.write_entire_file(to, data) {
+		return false;
+	}
+	
+	return true;
 }

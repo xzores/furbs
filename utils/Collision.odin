@@ -14,32 +14,32 @@ test_AABB_against_frustum :: proc(aabb : Bounding_box) -> bool {
 		return val >= min && val <= max;
 	}
 	
-    // Use our min max to define eight corners
-    corners : [8][4]f32 = {
-        {aabb.min.x, aabb.min.y, aabb.min.z, 1.0}, // x y z
-        {aabb.max.x, aabb.min.y, aabb.min.z, 1.0}, // X y z
-        {aabb.min.x, aabb.max.y, aabb.min.z, 1.0}, // x Y z
-        {aabb.max.x, aabb.max.y, aabb.min.z, 1.0}, // X Y z
+	// Use our min max to define eight corners
+	corners : [8][4]f32 = {
+		{aabb.min.x, aabb.min.y, aabb.min.z, 1.0}, // x y z
+		{aabb.max.x, aabb.min.y, aabb.min.z, 1.0}, // X y z
+		{aabb.min.x, aabb.max.y, aabb.min.z, 1.0}, // x Y z
+		{aabb.max.x, aabb.max.y, aabb.min.z, 1.0}, // X Y z
 
-        {aabb.min.x, aabb.min.y, aabb.max.z, 1.0}, // x y Z
-        {aabb.max.x, aabb.min.y, aabb.max.z, 1.0}, // X y Z
-        {aabb.min.x, aabb.max.y, aabb.max.z, 1.0}, // x Y Z
-        {aabb.max.x, aabb.max.y, aabb.max.z, 1.0}, // X Y Z
-    };
+		{aabb.min.x, aabb.min.y, aabb.max.z, 1.0}, // x y Z
+		{aabb.max.x, aabb.min.y, aabb.max.z, 1.0}, // X y Z
+		{aabb.min.x, aabb.max.y, aabb.max.z, 1.0}, // x Y Z
+		{aabb.max.x, aabb.max.y, aabb.max.z, 1.0}, // X Y Z
+	};
 
-    inside : bool = false;
+	inside : bool = false;
 
-    for corner in corners {
-        // Transform vertex
-        corner : [4]f32 = MVP * corner;
-        // Check vertex against clip space bounds
-        inside = inside || 
+	for corner in corners {
+		// Transform vertex
+		corner : [4]f32 = MVP * corner;
+		// Check vertex against clip space bounds
+		inside = inside || 
 		within(-corner.w, corner.x, corner.w) &&
 		within(-corner.w, corner.y, corner.w) &&
 		within(0.0, corner.z, corner.w)
-    }
+	}
 
-    return inside;
+	return inside;
 	*/
 }
 

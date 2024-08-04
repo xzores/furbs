@@ -5,10 +5,10 @@ import "core:net"
 import "core:testing"
 import "core:time"
 
-import queue "core:container/queue"
+import "core:container/queue"
 
-import utils "../../FurbLib/utils"
-import thread "../../FurbLib/utils"
+import "../utils"
+import thread "../utils" //TODO
 
 @test
 test_main :: proc (t : ^testing.T) {

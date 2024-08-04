@@ -117,14 +117,14 @@ window_focus_callback : glfw.WindowFocusProc : proc "c" (glfw_window : glfw.Wind
 
 	focused : bool = focused == 1;
 
-    if (focused) {
-        // The window gained input focus
+	if (focused) {
+		// The window gained input focus
 		state.window_in_focus = window;
-    }
-    else if state.window_in_focus == window {
-        // The window lost input focus
+	}
+	else if state.window_in_focus == window {
+		// The window lost input focus
 		state.window_in_focus = nil;
-    }
+	}
 }
 
 Antialiasing :: enum {
@@ -242,9 +242,9 @@ setup_window_no_backbuffer :: proc(desc : Window_desc, window : ^Window) {
 		glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE);
 	}
 
-    // Create render window.
-    window.glfw_window = glfw.CreateWindow(desc.width, desc.height, fmt.ctprintf("%s", desc.title), nil, state.owner_context);
-    assert(window.glfw_window != nil, "Window or OpenGL context creation failed");
+	// Create render window.
+	window.glfw_window = glfw.CreateWindow(desc.width, desc.height, fmt.ctprintf("%s", desc.title), nil, state.owner_context);
+	assert(window.glfw_window != nil, "Window or OpenGL context creation failed");
 
 	//glfw.SetCursorPosCallback(window.glfw_window, mouse_pos_callback);
 	glfw.SetKeyCallback(window.glfw_window, key_callback);
@@ -533,7 +533,7 @@ Monitor_info :: struct {
 	name 					: string,
 	is_primary_monitor		: bool,
 
-	pixel_size        		: [2]i32,
+	pixel_size				: [2]i32,
 	physical_width 			: Maybe([2]i32), // in milimeters
 
 	virtual_position 		: [2]f32,

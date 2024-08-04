@@ -39,14 +39,14 @@ Theme :: struct {
 
 Mouse_info :: struct {
 
-    mouse_pos : [2]f32,
-    mouse_delta : [2]f32,
+	mouse_pos : [2]f32,
+	mouse_delta : [2]f32,
 
-    scroll_delta : [2]f32,
+	scroll_delta : [2]f32,
 
-    left_down, left_released, left_pressed,
-    right_down, right_released, right_pressed,
-    middle_down, middle_released, middle_pressed : bool,
+	left_down, left_released, left_pressed,
+	right_down, right_released, right_pressed,
+	middle_down, middle_released, middle_pressed : bool,
 }
 
 Gui_context :: struct {
@@ -87,26 +87,26 @@ Style :: struct {
 
 Anchor_point :: enum {
 	bottom_left,
-    bottom_center,
-    bottom_right,
-    center_left,
-    center_center,
-    center_right,
+	bottom_center,
+	bottom_right,
+	center_left,
+	center_center,
+	center_right,
 	top_left,
-    top_center,
-    top_right,
+	top_center,
+	top_right,
 }
 
 Destination :: struct {
-    anchor : Anchor_point, // This decides where 0,0 is on the screen
-    self_anchor : Anchor_point, // This decides at which point on element is anchored to 0,0
-    rect : [4]f32,
+	anchor : Anchor_point, // This decides where 0,0 is on the screen
+	self_anchor : Anchor_point, // This decides at which point on element is anchored to 0,0
+	rect : [4]f32,
 }
 
 //These are the all the GUI elements
 Element :: union {
 	Rect,
-    Button,
+	Button,
 	Checkbox,
 	Slide_input,
 	Slider,
@@ -120,13 +120,13 @@ Element :: union {
 Element_container :: struct {
 
 	//Content
-    element : Element,
+	element : Element,
 	
-    //Position
-    dest : Destination,
+	//Position
+	dest : Destination,
 
-    //visability
-    is_showing : ^bool,
+	//visability
+	is_showing : ^bool,
 
 	//This is used by some types when using mouse and most types when using controller (TODO controller)
 	is_selected : bool,
@@ -149,8 +149,8 @@ Button :: struct {
 
 //Checkbox, true or false. Get the value from checked.
 Checkbox :: struct {
-    //Static
-    checked : ^bool,
+	//Static
+	checked : ^bool,
 }
 
 //A single line text input, get the value from value.
@@ -161,12 +161,12 @@ Input_field :: struct {
 
 //Slider value is from 0 to 1.
 Slider :: struct {
-    value : ^f32,
+	value : ^f32,
 }
 
 //A numeric input, where user can slide while holding to mouse to change value. Alternativly the element can be clicked to write a precise value. The sensitivity can be set with slider_sensitivity in ctx.
 Slide_input :: struct {
-    //Static, set by user.
+	//Static, set by user.
 	value : ^f32,
 	lower_bound, upper_bound : f32,
 
@@ -177,16 +177,16 @@ Slide_input :: struct {
 
 //Ex: select difficulty (easy, intermediate, hard) contains fixed values to choose from, use selected_value to get the value.
 Selector :: struct { 
-    options : []string,     
-    selected_value : ^int,
+	options : []string,	 
+	selected_value : ^int,
 }
 
 Slot :: struct {
-    slot_value : rawptr,
+	slot_value : rawptr,
 }
 
 Label :: struct {
-    text : string,
+	text : string,
 }
 
 //Panels can hold other elements (including other panels), the other elements will consider the panel and a sub-window.
@@ -431,7 +431,7 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 			line_texture := stl.line_texture;
 			
 			//Element specific behavior
-       		switch element in &container.element {
+	   		switch element in &container.element {
 			case Rect:
 				using element;
 				render.draw_shape(elem_rect, color = stl.bg_color, texture = texture);
@@ -695,89 +695,89 @@ draw_element :: proc (container : ^Element_container, style : Theme = current_th
 
 get_screen_space_position_rect :: proc(rect : [4]f32, anchor : Anchor_point, self_anchor : Anchor_point, anchor_rect_pixel : [4]f32, screen_size : [2]f32, unit_size : f32) -> [4]f32 {
 	
-    offset : [2]f32;
+	offset : [2]f32;
 
-    switch self_anchor {
+	switch self_anchor {
 		
-        case .bottom_left:
-            //No code required
+		case .bottom_left:
+			//No code required
 
-        case .bottom_center:
-            offset.x = -rect.z / 2;
+		case .bottom_center:
+			offset.x = -rect.z / 2;
 
-        case .bottom_right:
-            offset.x = -rect.z
+		case .bottom_right:
+			offset.x = -rect.z
 
-        case .center_left:
-            offset.y = -rect.w / 2;
+		case .center_left:
+			offset.y = -rect.w / 2;
 
-        case .center_center:
-            offset.x = -rect.z / 2;
-            offset.y = -rect.w / 2;
-        
-        case .center_right:
-            offset.x = -rect.z
-            offset.y = -rect.w / 2;
+		case .center_center:
+			offset.x = -rect.z / 2;
+			offset.y = -rect.w / 2;
+		
+		case .center_right:
+			offset.x = -rect.z
+			offset.y = -rect.w / 2;
 
-        case .top_left:
-            offset.y = -rect.w;
+		case .top_left:
+			offset.y = -rect.w;
 
-        case .top_center:
-            offset.x = -rect.z / 2
-            offset.y = -rect.w
+		case .top_center:
+			offset.x = -rect.z / 2
+			offset.y = -rect.w
 
-        case .top_right:
-            offset.x = -rect.z
-            offset.y = -rect.w
-        case: // default
-    }
+		case .top_right:
+			offset.x = -rect.z
+			offset.y = -rect.w
+		case: // default
+	}
 
-    rectangle := [4]f32{
-        (rect.x + offset.x) * unit_size,
-        (rect.y + offset.y) * unit_size,
-        rect.z * unit_size,
-        rect.w * unit_size,
-    }
+	rectangle := [4]f32{
+		(rect.x + offset.x) * unit_size,
+		(rect.y + offset.y) * unit_size,
+		rect.z * unit_size,
+		rect.w * unit_size,
+	}
 
 	rectangle.xy += anchor_rect_pixel.xy;
 
-    switch anchor {
+	switch anchor {
 
-        case .bottom_left     :
-            //No code required
+		case .bottom_left	 :
+			//No code required
 
-        case .bottom_center   :
-            rectangle.x += anchor_rect_pixel.z / 2;
+		case .bottom_center   :
+			rectangle.x += anchor_rect_pixel.z / 2;
 			
-        case .bottom_right    :
-            rectangle.x += anchor_rect_pixel.z;
+		case .bottom_right	:
+			rectangle.x += anchor_rect_pixel.z;
 
-        case .center_left  :
-            rectangle.y += anchor_rect_pixel.w / 2;
+		case .center_left  :
+			rectangle.y += anchor_rect_pixel.w / 2;
 
-        case .center_center:
-            rectangle.x += anchor_rect_pixel.z / 2;
-            rectangle.y += anchor_rect_pixel.w / 2;
+		case .center_center:
+			rectangle.x += anchor_rect_pixel.z / 2;
+			rectangle.y += anchor_rect_pixel.w / 2;
 
-        case .center_right :
-            rectangle.x += anchor_rect_pixel.z
-            rectangle.y += anchor_rect_pixel.w / 2;
+		case .center_right :
+			rectangle.x += anchor_rect_pixel.z
+			rectangle.y += anchor_rect_pixel.w / 2;
 
-        case .top_left  :
-            rectangle.y += anchor_rect_pixel.w;
+		case .top_left  :
+			rectangle.y += anchor_rect_pixel.w;
 
-        case .top_center:
-            rectangle.x += anchor_rect_pixel.z / 2;
-            rectangle.y += anchor_rect_pixel.w;
+		case .top_center:
+			rectangle.x += anchor_rect_pixel.z / 2;
+			rectangle.y += anchor_rect_pixel.w;
 
-        case .top_right :
-            rectangle.x += anchor_rect_pixel.z;
-            rectangle.y += anchor_rect_pixel.w;
+		case .top_right :
+			rectangle.x += anchor_rect_pixel.z;
+			rectangle.y += anchor_rect_pixel.w;
 
-        case: // default
+		case: // default
 			unreachable();
-    }
-    return rectangle;
+	}
+	return rectangle;
 }
 
 add_style :: proc (Theme : ^Theme, $element_type : typeid, style, hover_style : Style, active_style : Style) where intrinsics.type_is_variant_of(Element, element_type) {

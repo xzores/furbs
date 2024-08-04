@@ -34,8 +34,8 @@ Texture_desc :: struct {
 
 /////////////////////////////////// Texture 1D ///////////////////////////////////
 Texture1D :: struct {
-	id			: gl.Tex1d_id,            	// OpenGL texture id
-	width		: i32,               		// Texture base width
+	id			: gl.Tex1d_id,				// OpenGL texture id
+	width		: i32,			   		// Texture base width
 
 	using desc : Texture_desc,
 }
@@ -62,7 +62,7 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 	id : gl.Tex1d_id = gl.gen_texture1D(loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 
-    gl.wrapmode_texture1D(id, desc.wrapmode);
+	gl.wrapmode_texture1D(id, desc.wrapmode);
 	gl.filtermode_texture1D(id, desc.filtermode, mipmaps);
 
 	size_per_component, channels : int;
@@ -94,7 +94,7 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 		desc,
 	}
 
-    return tex;
+	return tex;
 }
 
 texture1D_destroy :: proc(tex : ^Texture1D) {
@@ -113,9 +113,9 @@ texture1D_upload_data :: proc(tex : ^Texture1D, #any_int pixel_offset : i32, #an
 
 /////////////////////////////////// Texture 2D ///////////////////////////////////
 Texture2D :: struct {
-	id			: gl.Tex2d_id,            	// OpenGL texture id
-	width		: i32,               		// Texture base width
-	height		: i32,               		// Texture base height
+	id			: gl.Tex2d_id,				// OpenGL texture id
+	width		: i32,			   		// Texture base width
+	height		: i32,			   		// Texture base height
 
 	using desc : Texture_desc,
 }
@@ -128,7 +128,7 @@ texture2D_load_from_file :: proc(filename : string, desc : Texture_desc = {.clam
 
 	fmt.assertf(ok, "loading texture data for %v failed", filename, loc = loc);
 
-    return texture2D_load_from_png_bytes(desc, data, filename, loc = loc);
+	return texture2D_load_from_png_bytes(desc, data, filename, loc = loc);
 }
 
 //Load many textures threaded, good for many of the same types of textures.
@@ -245,7 +245,7 @@ texture2D_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textur
 		.alpha_add_if_missing,
 	};
 
-    img, err := png.load_from_bytes(data, options);
+	img, err := png.load_from_bytes(data, options);
 	defer image.destroy(img);
 	
 	if err != nil {
@@ -313,7 +313,7 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 		assert(data != nil, "Data must not be nil if upload_format is not .no_upload", loc = loc);
 	}
 	
-    gl.wrapmode_texture2D(id, desc.wrapmode);
+	gl.wrapmode_texture2D(id, desc.wrapmode);
 	gl.filtermode_texture2D(id, desc.filtermode, mipmaps);
 	
 	size_per_component, channels : int;
@@ -366,7 +366,7 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 		desc,
 	}
 
-    return tex;
+	return tex;
 }
 
 texture2D_upload_data :: proc(tex : ^Texture2D, upload_format : gl.Pixel_format_upload, pixel_offset : [2]i32, pixel_cnt : [2]i32, data : []$T, loc := #caller_location) {
@@ -435,9 +435,9 @@ texture2D_get_black :: proc () -> Texture2D {
 
 /////////////////////////////////// Texture 3D ///////////////////////////////////
 Texture3D :: struct {
-	id			: gl.Tex3d_id,            	// OpenGL texture id
-	width		: i32,               		// Texture base width
-	height		: i32,               		// Texture base height
+	id			: gl.Tex3d_id,				// OpenGL texture id
+	width		: i32,			   		// Texture base width
+	height		: i32,			   		// Texture base height
 	depth 		: i32, 						// Texture base depth
 
 	using desc : Texture_desc,
@@ -465,7 +465,7 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 	id : gl.Tex3d_id = gl.gen_texture3D(loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 	
-    gl.wrapmode_texture3D(id, desc.wrapmode);
+	gl.wrapmode_texture3D(id, desc.wrapmode);
 	gl.filtermode_texture3D(id, desc.filtermode, mipmaps);
 	
 	size_per_component, channels : int;
@@ -499,7 +499,7 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 		desc,
 	}
 
-    return tex;
+	return tex;
 }
 
 texture3D_destroy :: proc(tex : ^Texture3D) {

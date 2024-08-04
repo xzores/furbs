@@ -4,12 +4,12 @@ import "core:fmt"
 import "core:net"
 import "core:mem"
 
-import queue "core:container/queue"
+import "core:container/queue"
 
-import utils "../../FurbLib/utils"
-import thread "../../FurbLib/utils"
+import "../utils"
+import thread "../utils" //TODO
 
-import tracy "shared:tracy"
+import "../tracy"
 
 Client :: struct {
     using base : Client_base,

@@ -1,21 +1,22 @@
 package network
 
+import "base:builtin"
+
 import "core:net"
 import "base:intrinsics"
 import "core:fmt"
 import "base:runtime"
 import "core:mem"
 import "core:reflect"
-import "core:builtin"
 import "core:time"
 
 import mem_virtual "core:mem/virtual"
 
-import queue "core:container/queue"
+import "core:container/queue"
 
-import utils "../../FurbLib/utils"
-import thread "../../FurbLib/utils"
-import tracy "shared:tracy"
+import "../utils"
+import thread "../utils" //TODO
+import "../tracy"
 
 typeid_set :: map[typeid]struct{};
 

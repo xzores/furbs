@@ -431,8 +431,8 @@ GL_info :: struct {
 
 debug_callback : gl.debug_proc_t : proc "c" (source: gl.GLenum, type: gl.GLenum, id: gl.GLuint, severity: gl.GLenum, length: gl.GLsizei, message: cstring, user_param : rawptr) {
 	context = runtime.default_context();
-    // Print or handle the debug message here
-    fmt.printf("OpenGL Debug Message: %.*s\n", length, message);
+	// Print or handle the debug message here
+	fmt.printf("OpenGL Debug Message: %.*s\n", length, message);
 }
 
 init :: proc() {
@@ -862,7 +862,7 @@ associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes 
 		//fmt.printf("setting up VertexAttribPointer : %v, %v, %v, %v, %v, %v\n", attrib.location, get_attribute_type_dimensions(attrib.attribute_type), get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
 		gl.VertexAttribPointer(auto_cast attrib.location, auto_cast get_attribute_type_dimensions(attrib.attribute_type), auto_cast get_attribute_primary_type(attrib.attribute_type), attrib.normalized, attrib.stride, attrib.offset);
 		gl.EnableVertexAttribArray(auto_cast attrib.location);
-		//VertexAttribPointer      :: proc "c" (index: u32, size: i32, type: u32, normalized: bool, stride: i32, pointer: uintptr)
+		//VertexAttribPointer	  :: proc "c" (index: u32, size: i32, type: u32, normalized: bool, stride: i32, pointer: uintptr)
 	}
 
 	gl.BindBuffer(.ARRAY_BUFFER, 0);
@@ -871,7 +871,7 @@ associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes 
 
 draw_arrays :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32) {
 	gl.BindVertexArray(auto_cast vao);
-    gl.DrawArrays(auto_cast primitive, first, count);
+	gl.DrawArrays(auto_cast primitive, first, count);
    	gl.BindVertexArray(0);
 }
 

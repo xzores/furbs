@@ -11,7 +11,15 @@ import "gl"
 
 //This contains high-level state, go to wrappers to see the opengl client side state.
 
-state : State;
+when ODIN_BUILD_MODE == .Executable {
+	state : State;
+}
+else when ODIN_BUILD_MODE == .Dynamic {
+	state : ^State;
+}
+else {
+	#panic("What here?");
+}
 
 enable_preformence_warnings :: proc (warnings : bool) {
 	state.pref_warn = warnings;

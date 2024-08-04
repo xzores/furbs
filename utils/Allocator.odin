@@ -15,13 +15,16 @@ init_tracking_allocators :: proc (alloc := context.allocator) {
 	tracking_allcoators = make([dynamic]Pair(^mem.Tracking_Allocator, int), allocator = alloc);
 }
 
-make_tracking_allocator :: proc(backing_alloc := context.allocator, internals_allocator := context.allocator) -> mem.Allocator {
+make_tracking_allocator :: proc(backing_alloc := context.allocator, internals_allocator := context.allocator,
+									tracker_res : ^^mem.Tracking_Allocator = nil) -> mem.Allocator {
 
 	tracker := new(mem.Tracking_Allocator, tracking_allcoators_allocator);
 	mem.tracking_allocator_init(tracker, backing_alloc, internals_allocator);
 	
 	append(&tracking_allcoators, Pair(^mem.Tracking_Allocator, int){tracker, sync.current_thread_id()});
-
+	
+	tracker_res^ = tracker; //Return the optinal result.
+	
 	return  mem.tracking_allocator(tracker);
 }
 
@@ -31,11 +34,11 @@ Investigator_Allocator_Entry :: struct {
 }
 
 Investigator_Allocator :: struct {
-	backing:           	mem.Allocator,
+	backing:		   	mem.Allocator,
 	total_usage_current:int,
 	total_usage_peak: 	int,
-	allocation_map:    	map[runtime.Source_Code_Location]map[int]Investigator_Allocator_Entry,
-	mutex:             	sync.Recursive_Mutex,
+	allocation_map:		map[runtime.Source_Code_Location]map[int]Investigator_Allocator_Entry,
+	mutex:			 	sync.Recursive_Mutex,
 }
 
 investigator_allocator_init :: proc(t: ^Investigator_Allocator, backing_allocator: mem.Allocator, internals_allocator := context.allocator) {
@@ -71,7 +74,7 @@ investigator_allocator :: proc(data: ^Investigator_Allocator) -> mem.Allocator {
 }
 
 investigator_allocator_proc :: proc(allocator_data: rawptr, mode: mem.Allocator_Mode, size, alignment: int,
-                                old_memory: rawptr, old_size: int, loc := #caller_location) -> (result: []byte, err: mem.Allocator_Error) {
+								old_memory: rawptr, old_size: int, loc := #caller_location) -> (result: []byte, err: mem.Allocator_Error) {
 	data := (^Investigator_Allocator)(allocator_data)
 
 	sync.recursive_mutex_lock(&data.mutex);
@@ -173,7 +176,7 @@ print_investigator_memory_results :: proc(using self: Investigator_Allocator, si
 }
 
 print_tracking_memory_results :: proc() -> (found_leak : bool) {
-	
+		
 	found_leak = false;
 	
 	fmt.printf("%sTracking memory results:%s\n", BLUE, RESET);

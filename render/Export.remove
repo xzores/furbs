@@ -1,0 +1,72 @@
+package render;
+
+import "gl"
+
+Render_functions : struct {
+	
+	//Mesh_gen.odin
+	generate_quad : proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, alloc := context.allocator) -> (verts : []Default_vertex, indices : Indices),
+	make_mesh_quad : proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) -> (res : Mesh_single),
+	generate_circle : proc(diameter : f32, offset : [3]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices),
+	make_mesh_circle : proc(diameter : f32, offset : [3]f32, sectors : int, use_index_buffer : bool) -> (res : Mesh_single),
+	generate_cube : proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices),
+	make_mesh_cube : proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) -> (res : Mesh_single),
+	generate_cylinder : proc(offset : [3]f32, height, diameter : f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices),
+	make_mesh_cylinder : proc(offset : [3]f32, height, diameter : f32, stacks : int, sectors : int, use_index_buffer : bool) -> (res : Mesh_single),
+	generate_sphere : proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices),
+	make_mesh_sphere : proc(offset : [3]f32, diameter : f32, stacks : int, sectors : int, use_index_buffer : bool) -> (res : Mesh_single),
+	generate_cone : proc (offset : [3]f32, height, diameter : f32, sectors : int, use_index_buffer : bool) -> (verts : []Default_vertex, indices : Indices),
+	make_mesh_cone : proc(offset : [3]f32, height, diameter : f32, sectors : int, use_index_buffer : bool) -> (res : Mesh_single),
+	generate_arrow : proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cyl, diameter_cone : f32, sectors : int, use_index_buffer : bool, up : [3]f32 = {0,1,0}) -> (verts : []Default_vertex, indices : Indices),
+	make_mesh_arrow : proc(direction : [3]f32, height_cyl, heigth_cone, diameter_cyl, diameter_cone : f32, sectors : int, use_index_buffer : bool, up := [3]f32{1,0,0}) -> (res : Mesh_single),
+	
+	
+	//Maths.odin
+	ortho_mat : proc "contextless" (left, right, bottom, top, near, far : f32) -> matrix[4,4]f32,
+	perspective_mat : proc (fovy, aspect, near, far: f32) -> matrix[4,4]f32,
+	look_at : proc "contextless" (eye, centre, up: [3]f32) -> matrix[4,4]f32,
+	camera_look_at : proc "contextless" (eye, centre, up: [3]f32) -> matrix[4,4]f32,
+	extract_rotation_from_matrix3 : proc "contextless" (mat : matrix[3,3]f32) -> [3]f32,
+	extract_rotation_from_matrix4 : proc "contextless" (mat : matrix[4,4]f32) -> [3]f32,
+	rotation_matrix : proc "contextless" (euler_angles : [3]f32) -> matrix[3,3]f32,
+	get_mouse_cast : proc (camera : Camera3D, window : ^Window) -> (direction : [3]f32),
+	
+	//Input.odin
+	is_key_down : proc(key : Key_code) -> bool,
+	is_key_pressed : proc(key : Key_code) -> bool,
+	is_key_released : proc(key : Key_code) -> bool,
+	is_key_triggered : proc(key : Key_code) -> bool,
+
+	recive_next_input : proc () -> (char : rune, done : bool),
+	get_clipboard_string : proc (loc := #caller_location) -> string,
+	button_down : proc(button : Mouse_code) -> bool,
+	button_pressed : proc(button : Mouse_code) -> bool,
+	
+	button_released : proc(button : Mouse_code) -> bool,
+	mouse_pos : proc (window : ^Window) -> [2]f32,
+	mouse_delta : proc() -> [2]f32,
+
+	scroll_delta : proc () -> [2]f32,
+	
+	//Framebuffer.odin
+	frame_buffer_make_render_buffers : proc (#any_int color_attachemet_cnt, width, height, samples_hint : i32, color_format : Color_format, depth_format : Depth_format, loc := #caller_location) -> (fbo : Frame_buffer),
+	frame_buffer_make_textures : proc (#any_int color_attachemet_cnt, width, height : i32, color_format : Color_format, depth_format : Depth_format,
+				mipmaps : bool, filtermode : gl.Filtermode, use_depth_texture := true, wrapmode : Wrapmode = .clamp_to_border, loc := #caller_location) -> (fbo : Frame_buffer),
+	frame_buffer_destroy : proc(fbo : Frame_buffer),
+	
+	//Extras.odin
+	draw_coordinate_overlay : proc (target : Render_target, camera : Camera3D, offset : [2]f32 = {0.05, 0.05}, scale : f32 = 0.25, loc := #caller_location),
+	draw_fps_overlay : proc (target : Render_target, offset : [2]f32 = {0,0}, scale : f32 = 1),
+	
+	//Camera.odin
+	camera3D_get_prj_view : proc(using camera : Camera3D, aspect : f32, loc := #caller_location) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32),
+	camera2D_get_prj_view : proc(using camera : Camera2D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32),
+	camera_get_pixel_space : proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D),
+
+	camera_forward : proc(cam : Camera3D) -> [3]f32,
+	camera_forward_horizontal : proc(cam : Camera3D) -> [3]f32,
+	camera_right : proc(cam : Camera3D) -> [3]f32,
+	camera_move : proc(cam : ^Camera3D, movement : [3]f32),
+	camera_rotation : proc(cam : ^Camera3D, yaw, pitch : f32),
+}
+

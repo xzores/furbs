@@ -17,7 +17,7 @@ import utils "../utils"
 /////////////////////////////////////////////////////////////// AT STARTUP /////////////////////////////////////////////////////////////// 
 
 @(require_results)
-init :: proc (fallback_appearance := default_appearance, loc := #caller_location) -> (state : Gui_state) {
+init :: proc (fallback_appearance := default_appearance, loc := #caller_location) -> (state : Scene) {
 	
 	state = {
 		gui_pipeline = render.pipeline_make(render.get_default_shader(), .blend, false, false),
@@ -35,7 +35,7 @@ init :: proc (fallback_appearance := default_appearance, loc := #caller_location
 	return;
 }
 
-destroy :: proc (using state : ^Gui_state) {
+destroy :: proc (using state : ^Scene) {
 
 	for k in owned_elements {
 		e := active_elements[k];
@@ -54,12 +54,12 @@ destroy :: proc (using state : ^Gui_state) {
 
 /////////////////////////////////////////////////////////////// PER FRAME ///////////////////////////////////////////////////////////////
 
-begin :: proc (state : ^Gui_state, target_window : ^render.Window, loc := #caller_location) {
-	assert(bound_state == nil, "begin has already been called.", loc);
+begin :: proc (state : ^Scene, target_window : ^render.Window, loc := #caller_location) {
+	assert(bound_scene == nil, "begin has already been called.", loc);
 	assert(render.state.is_begin_frame == true, "regui's begin must be called after render's begin_frame", loc);
 	assert(render.state.current_target != nil, "You must set the target with render.target_begin(some_window) before calling gui.begin", loc);
 	
-	bound_state = state;
+	bound_scene = state;
 	
 	state.window = target_window;
 	w, h := render.get_render_target_size(state.window);
@@ -73,9 +73,9 @@ begin :: proc (state : ^Gui_state, target_window : ^render.Window, loc := #calle
 	}
 }
 
-end :: proc (state : ^Gui_state, loc := #caller_location) {
-	assert(bound_state != nil, "begin has not been called.", loc);
-	assert(bound_state == state, "The passed gui state does not match the begin's statement.", loc);
+end :: proc (state : ^Scene, loc := #caller_location) {
+	assert(bound_scene != nil, "begin has not been called.", loc);
+	assert(bound_scene == state, "The passed gui state does not match the begin's statement.", loc);
 	assert(render.state.is_begin_frame == true, "regui's begin must be called before render's end_frame", loc);
 	
 	style : Style = state.default_style;
@@ -91,7 +91,7 @@ end :: proc (state : ^Gui_state, loc := #caller_location) {
 	render.pipeline_end();
 
 	state.window = nil;
-	bound_state = nil;
+	bound_scene = nil;
 }
 
 ////////////////// TYPES ////////////////////
@@ -187,14 +187,14 @@ Theme :: struct {
 
 Anchor_point :: enum {
 	bottom_left,
-    bottom_center,
-    bottom_right,
-    center_left,
-    center_center,
-    center_right,
+	bottom_center,
+	bottom_right,
+	center_left,
+	center_center,
+	center_right,
 	top_left,
-    top_center,
-    top_right,
+	top_center,
+	top_right,
 }
 
 //Common for all elements, determines screen position in a 0-1 range.
@@ -202,9 +202,9 @@ Anchor_point :: enum {
 //For a non-square screen the range will extend in the longest direction propertionally to the width/heigth or heigth/width ratio.
 //This ensures that all elements always are placed correct relativly to each other.
 Destination :: struct {
-    anchor : Anchor_point, // This decides where 0,0 is on the screen
-    self_anchor : Anchor_point, // This decides at which point on element is anchored to 0,0
-    rect : [4]f32,
+	anchor : Anchor_point, // This decides where 0,0 is on the screen
+	self_anchor : Anchor_point, // This decides at which point on element is anchored to 0,0
+	rect : [4]f32,
 }
 
 ////////////////////////////////////////////////////////////
@@ -343,13 +343,13 @@ Panel_info :: struct {
 Element_container :: struct {
 
 	//Content
-    element : Element_info,
+	element : Element_info,
 	
-    //Position
-    dest : Destination,
+	//Position
+	dest : Destination,
 
-    //visability
-    is_showing : bool,
+	//visability
+	is_showing : bool,
 	
 	stay_selected : bool, //For some types this is true.
 	
@@ -385,11 +385,11 @@ panel_stack_len : int;
 */
 
 Parent :: union {
-	^Gui_state,
+	^Scene,
 	Panel,
 }
 
-Gui_state :: struct {
+Scene :: struct {
 
 	default_style : Style,
 	Theme : Theme,
@@ -407,7 +407,7 @@ Gui_state :: struct {
 current_element_index : Element;
 
 @(private)
-bound_state : ^Gui_state;
+bound_scene : ^Scene;
 
 @(private)
 active_elements : map[Element]Element_container;
@@ -423,7 +423,7 @@ element_make :: proc (parent : Parent, container : Element_container, loc := #ca
 	
 	switch v in parent {
 		
-		case ^Gui_state:
+		case ^Scene:
 		 	append(&v.owned_elements, current_element_index);
 			
 		case Panel:
@@ -453,7 +453,7 @@ element_destroy :: proc (handle : Element, loc := #caller_location) {
 @(private)
 draw_quad :: proc (anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]f32, parent_rect : [4]f32, color : [4]f32, loc := #caller_location) -> [4]f32 {
 	
-	rect := get_screen_space_position_rect(anchor, self_anchor, rect, parent_rect, bound_state.unit_size);
+	rect := get_screen_space_position_rect(anchor, self_anchor, rect, parent_rect, bound_scene.unit_size);
 	render.draw_quad_rect(rect, 0, color, loc);
 	
 	return rect;
@@ -471,11 +471,11 @@ draw_text_param :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, s
 	}
 	assert(size != 0, "text size may not be zero", loc = loc);
 	
-	unit_size := bound_state.unit_size;
+	unit_size := bound_scene.unit_size;
 	font := render.text_get_font_from_fonts(bold, italic, fonts);
 	
 	//This is the rect in pixels which the text should be drawn within.
-	rect := get_screen_space_position_rect(.center_center, .center_center, bounds, parent_rect, bound_state.unit_size);
+	rect := get_screen_space_position_rect(.center_center, .center_center, bounds, parent_rect, bound_scene.unit_size);
 	
 	text_target_size := size * unit_size; 
 	
@@ -498,7 +498,7 @@ draw_text_param :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, s
 	
 	render.pipeline_end();
 	render.text_draw(text, rect.xy - {text_bounds.x, text_bounds.y}, rect.w, bold, italic, color, {color = backdrop_color, offset = backdrop_offset * unit_size}, fonts);
-	render.pipeline_begin(bound_state.gui_pipeline, render.camera_get_pixel_space(bound_state.window));
+	render.pipeline_begin(bound_scene.gui_pipeline, render.camera_get_pixel_space(bound_scene.window));
 }
 
 @(private)
@@ -525,7 +525,7 @@ draw_text :: proc {draw_text_param, draw_text_appearance}
 
 @(private)
 get_screen_rect :: proc () -> [4]f32 {
-	w, h := render.get_render_target_size(bound_state.window);
+	w, h := render.get_render_target_size(bound_scene.window);
 	return {0,0,cast(f32)w,cast(f32)h};
 }
 
@@ -543,90 +543,90 @@ get_unit_size :: proc (width, height : f32) -> f32 {
 @(private)
 get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]f32, anchor_rect_pixel : [4]f32, unit_size : f32) -> [4]f32 {
 	
-    offset : [2]f32;
+	offset : [2]f32;
 
-    switch self_anchor {
+	switch self_anchor {
 		
-        case .bottom_left:
-            //No code required
+		case .bottom_left:
+			//No code required
 
-        case .bottom_center:
-            offset.x = -rect.z / 2;
+		case .bottom_center:
+			offset.x = -rect.z / 2;
 
-        case .bottom_right:
-            offset.x = -rect.z
+		case .bottom_right:
+			offset.x = -rect.z
 
-        case .center_left:
-            offset.y = -rect.w / 2;
+		case .center_left:
+			offset.y = -rect.w / 2;
 
-        case .center_center:
-            offset.x = -rect.z / 2;
-            offset.y = -rect.w / 2;
-        
-        case .center_right:
-            offset.x = -rect.z
-            offset.y = -rect.w / 2;
-
-        case .top_left:
-            offset.y = -rect.w;
+		case .center_center:
+			offset.x = -rect.z / 2;
+			offset.y = -rect.w / 2;
 		
-        case .top_center:
-            offset.x = -rect.z / 2
-            offset.y = -rect.w
+		case .center_right:
+			offset.x = -rect.z
+			offset.y = -rect.w / 2;
 
-        case .top_right:
-            offset.x = -rect.z
-            offset.y = -rect.w
-        case: // default
-    }
+		case .top_left:
+			offset.y = -rect.w;
+		
+		case .top_center:
+			offset.x = -rect.z / 2
+			offset.y = -rect.w
 
-    rectangle := [4]f32{
-        (rect.x + offset.x) * unit_size,
-        (rect.y + offset.y) * unit_size,
-        rect.z * unit_size,
-        rect.w * unit_size,
-    }
+		case .top_right:
+			offset.x = -rect.z
+			offset.y = -rect.w
+		case: // default
+	}
+
+	rectangle := [4]f32{
+		(rect.x + offset.x) * unit_size,
+		(rect.y + offset.y) * unit_size,
+		rect.z * unit_size,
+		rect.w * unit_size,
+	}
 
 	rectangle.xy += anchor_rect_pixel.xy;
 
-    switch anchor {
+	switch anchor {
 
-        case .bottom_left     :
-            //No code required
+		case .bottom_left	 :
+			//No code required
 
-        case .bottom_center   :
-            rectangle.x += anchor_rect_pixel.z / 2;
+		case .bottom_center   :
+			rectangle.x += anchor_rect_pixel.z / 2;
 			
-        case .bottom_right    :
-            rectangle.x += anchor_rect_pixel.z;
+		case .bottom_right	:
+			rectangle.x += anchor_rect_pixel.z;
 
-        case .center_left  :
-            rectangle.y += anchor_rect_pixel.w / 2;
+		case .center_left  :
+			rectangle.y += anchor_rect_pixel.w / 2;
 
-        case .center_center:
-            rectangle.x += anchor_rect_pixel.z / 2;
-            rectangle.y += anchor_rect_pixel.w / 2;
+		case .center_center:
+			rectangle.x += anchor_rect_pixel.z / 2;
+			rectangle.y += anchor_rect_pixel.w / 2;
 		
-        case .center_right :
-            rectangle.x += anchor_rect_pixel.z
-            rectangle.y += anchor_rect_pixel.w / 2;
+		case .center_right :
+			rectangle.x += anchor_rect_pixel.z
+			rectangle.y += anchor_rect_pixel.w / 2;
 
-        case .top_left  :
-            rectangle.y += anchor_rect_pixel.w;
+		case .top_left  :
+			rectangle.y += anchor_rect_pixel.w;
 
-        case .top_center:
-            rectangle.x += anchor_rect_pixel.z / 2;
-            rectangle.y += anchor_rect_pixel.w;
+		case .top_center:
+			rectangle.x += anchor_rect_pixel.z / 2;
+			rectangle.y += anchor_rect_pixel.w;
 
-        case .top_right :
-            rectangle.x += anchor_rect_pixel.z;
-            rectangle.y += anchor_rect_pixel.w;
+		case .top_right :
+			rectangle.x += anchor_rect_pixel.z;
+			rectangle.y += anchor_rect_pixel.w;
 
-        case: // default
+		case: // default
 			unreachable();
-    }
+	}
 
-    return rectangle;
+	return rectangle;
 }
 
 /*
@@ -634,15 +634,15 @@ get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anch
 @(private)
 point_rect_collision :: proc(point: [2]f32, rect: [4]f32) -> bool {
 	return point.x >= rect.x &&
-	       point.x <= rect.x + rect.z &&
-	       point.y >= rect.y &&
-	       point.y <= rect.y + rect.w;
+		   point.x <= rect.x + rect.z &&
+		   point.y >= rect.y &&
+		   point.y <= rect.y + rect.w;
 }
 */
 
 @(private)
 is_hovered :: proc (dest : Destination, parent_rect : [4]f32) -> bool {
-	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, parent_rect, bound_state.unit_size);
+	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, parent_rect, bound_scene.unit_size);
 	
 	return collision_point_rect(mouse_pos(), rect);
 }
@@ -661,7 +661,7 @@ is_activated :: proc (dest : Destination, parent_rect : [4]f32) -> bool {
 
 @(private)
 mouse_pos :: proc() -> [2]f32 {
-	mp := render.mouse_pos(bound_state.window);
+	mp := render.mouse_pos(bound_scene.window);
 	return {mp.x, mp.y};	
 }
 
@@ -680,7 +680,7 @@ get_appearences :: proc (parent : Parent, appearance, hover_appearance, selected
 	
 	switch v in parent {
 		
-		case ^Gui_state:
+		case ^Scene:
 			default_style = v.default_style;
 			
 		case Panel:
@@ -741,7 +741,7 @@ get_logical_margin :: proc (s : Style) -> f32 {
 element_update :: proc (container : ^Element_container, style : Style, parent_rect : [4]f32, loc := #caller_location) {
 	
 	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
-	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, parent_rect, bound_state.unit_size);
+	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, parent_rect, bound_scene.unit_size);
 	
 	container.is_active = false;
 	container.is_hover = false;
@@ -765,7 +765,7 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 		container.is_hover = true;
 	}
 	
-	unit_size := bound_state.unit_size;
+	unit_size := bound_scene.unit_size;
 	
 	switch &e in container.element {
 		case Rect_info:
@@ -795,7 +795,7 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 			//offset : f32 = margin/2 + (e.current_val - e.min_val) / (e.max_val - e.min_val) * (dest.rect.z - margin);
 			
 			dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
-			slider_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, bound_state.unit_size); //to convert to pixel space
+			slider_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, bound_scene.unit_size); //to convert to pixel space
 			if container.is_selected {
 				t := ((x - slider_rect.x) / slider_rect.z * (e.max_val - e.min_val)) + e.min_val;
 				e.current_val = math.clamp(t, e.min_val, e.max_val);
@@ -811,7 +811,7 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 			x := mouse_pos().x;
 			
 			dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
-			slider_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, bound_state.unit_size); //to convert to pixel space
+			slider_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, bound_scene.unit_size); //to convert to pixel space
 			if container.is_selected {
 				t := ((x - slider_rect.x) / slider_rect.z * f32(e.max_val - e.min_val)) + f32(e.min_val);
 				e.current_val = cast(int)math.round(math.clamp(t, f32(e.min_val), f32(e.max_val)));
@@ -889,7 +889,7 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 			}
 		
 		case Panel_info:
-			panel_rect := get_screen_space_position_rect(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, bound_state.unit_size);
+			panel_rect := get_screen_space_position_rect(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, bound_scene.unit_size);
 			
 			for key in e.sub_elements {
 				e := &active_elements[key];
@@ -914,7 +914,7 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 		appear = hov;
 	}
 	
-	unit_size := bound_state.unit_size;
+	unit_size := bound_scene.unit_size;
 	
 	switch e in container.element {
 		case Rect_info:
@@ -971,8 +971,8 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 						
 						//Line (0,0) to (1,1)
 						{
-							p1 := new_rect.xy + (a.line_margin) * bound_state.unit_size;
-							p2 := new_rect.xy + new_rect.zw - (a.line_margin) * bound_state.unit_size;	
+							p1 := new_rect.xy + (a.line_margin) * bound_scene.unit_size;
+							p2 := new_rect.xy + new_rect.zw - (a.line_margin) * bound_scene.unit_size;	
 							render.draw_line_2D(p1, p2, unit_size * a.line_width, color = a.front_color);
 						}
 						

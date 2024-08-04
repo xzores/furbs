@@ -22,8 +22,8 @@ import utils "../../utils"
 _ :: gl.GLenum;
 
 RENDER_DEBUG	:: #config(RENDER_DEBUG, ODIN_DEBUG);
-RECORD_DEBUG 	:: #config(RECORD_DEBUG, false);
-UNBIND_DEBUG 	:: #config(UNBIND_DEBUG, true);
+RECORD_DEBUG	:: #config(RECORD_DEBUG, false);
+UNBIND_DEBUG	:: #config(UNBIND_DEBUG, true);
 
 /////////// Opengl handles ///////////
 Shader_program_id :: distinct u32;
@@ -49,63 +49,63 @@ Fence :: struct {
 MAX_COLOR_ATTACH :: 8; //If we use opengl 3.0 we can only have 4 color attachements here.
 
 Uniform_type :: enum u64 {
-	invalid 		= 0,
-	float 			= gl.FLOAT,
-	vec2 			= gl.FLOAT_VEC2,
-	vec3 			= gl.FLOAT_VEC3,
-	vec4 			= gl.FLOAT_VEC4,
-	int 			= gl.INT,
-	ivec2 			= gl.INT_VEC2,
-	ivec3 			= gl.INT_VEC3,
-	ivec4 			= gl.INT_VEC4,
-	uint 			= gl.UNSIGNED_INT,
-	uvec2 			= gl.UNSIGNED_INT_VEC2,
-	uvec3 			= gl.UNSIGNED_INT_VEC3,
-	uvec4 			= gl.UNSIGNED_INT_VEC4,
-	bool 			= gl.BOOL,
-	mat2 			= gl.FLOAT_MAT2,
-	mat3 			= gl.FLOAT_MAT3,
-	mat4 			= gl.FLOAT_MAT4,
-	sampler_1d 		= gl.SAMPLER_1D,
-	sampler_2d 		= gl.SAMPLER_2D,
-	sampler_3d 		= gl.SAMPLER_3D,
+	invalid		= 0,
+	float			= gl.FLOAT,
+	vec2			= gl.FLOAT_VEC2,
+	vec3			= gl.FLOAT_VEC3,
+	vec4			= gl.FLOAT_VEC4,
+	int			= gl.INT,
+	ivec2			= gl.INT_VEC2,
+	ivec3			= gl.INT_VEC3,
+	ivec4			= gl.INT_VEC4,
+	uint			= gl.UNSIGNED_INT,
+	uvec2			= gl.UNSIGNED_INT_VEC2,
+	uvec3			= gl.UNSIGNED_INT_VEC3,
+	uvec4			= gl.UNSIGNED_INT_VEC4,
+	bool			= gl.BOOL,
+	mat2			= gl.FLOAT_MAT2,
+	mat3			= gl.FLOAT_MAT3,
+	mat4			= gl.FLOAT_MAT4,
+	sampler_1d		= gl.SAMPLER_1D,
+	sampler_2d		= gl.SAMPLER_2D,
+	sampler_3d		= gl.SAMPLER_3D,
 	sampler_cube	= gl.SAMPLER_CUBE,
-	isampler_1d 	= gl.INT_SAMPLER_1D,
-	isampler_2d 	= gl.INT_SAMPLER_2D,
-	isampler_3d 	= gl.INT_SAMPLER_3D,
-	isampler_cube 	= gl.INT_SAMPLER_CUBE,
+	isampler_1d	= gl.INT_SAMPLER_1D,
+	isampler_2d	= gl.INT_SAMPLER_2D,
+	isampler_3d	= gl.INT_SAMPLER_3D,
+	isampler_cube	= gl.INT_SAMPLER_CUBE,
 	isampler_buffer = gl.INT_SAMPLER_BUFFER,
 	//TODO should we support more? : https://registry.khronos.org/OpenGL-Refpages/gl4/html/glGetActiveUniform.xhtml
 }
 
 Attribute_type :: enum u32 {
-	invalid 		= 0,
-	float 			= gl.FLOAT,
-	vec2 			= gl.FLOAT_VEC2,
-	vec3 			= gl.FLOAT_VEC3,
-	vec4 			= gl.FLOAT_VEC4,
-	int 			= gl.INT,
-	ivec2 			= gl.INT_VEC2,
-	ivec3 			= gl.INT_VEC3,
-	ivec4 			= gl.INT_VEC4,
-	uint 			= gl.UNSIGNED_INT,
-	uvec2 			= gl.UNSIGNED_INT_VEC2,
-	uvec3 			= gl.UNSIGNED_INT_VEC3,
-	uvec4 			= gl.UNSIGNED_INT_VEC4,
-	//mat2 			= gl.FLOAT_MAT2,
-	//mat3 			= gl.FLOAT_MAT3,
-	//mat4 			= gl.FLOAT_MAT4,
+	invalid		= 0,
+	float			= gl.FLOAT,
+	vec2			= gl.FLOAT_VEC2,
+	vec3			= gl.FLOAT_VEC3,
+	vec4			= gl.FLOAT_VEC4,
+	int			= gl.INT,
+	ivec2			= gl.INT_VEC2,
+	ivec3			= gl.INT_VEC3,
+	ivec4			= gl.INT_VEC4,
+	uint			= gl.UNSIGNED_INT,
+	uvec2			= gl.UNSIGNED_INT_VEC2,
+	uvec3			= gl.UNSIGNED_INT_VEC3,
+	uvec4			= gl.UNSIGNED_INT_VEC4,
+	//mat2			= gl.FLOAT_MAT2,
+	//mat3			= gl.FLOAT_MAT3,
+	//mat4			= gl.FLOAT_MAT4,
 }
 
 Attribute_primary_type :: enum u32 {
-	invalid 		= 0,
-	float 			= gl.FLOAT,
-	int 			= gl.INT,
-	uint 			= gl.UNSIGNED_INT,
+	invalid		= 0,
+	float			= gl.FLOAT,
+	int			= gl.INT,
+	uint			= gl.UNSIGNED_INT,
 }
 
 Uniform_info :: struct {
-	location : i32, 				//this is a per shader thing
+	location : i32,				//this is a per shader thing
 	uniform_type : Uniform_type,
 	active : bool,
 	array_size : i32,
@@ -259,17 +259,17 @@ Cull_method :: enum u32 {
 }
 
 Polygon_mode :: enum u32 {
-	point 			= gl.POINT,
-	line 			= gl.LINE,
-	fill 			= gl.FILL,
+	point			= gl.POINT,
+	line			= gl.LINE,
+	fill			= gl.FILL,
 }
 
 Primitive :: enum u32 {
-	points 			= gl.POINTS,
-	line_strip 		= gl.LINE_STRIP,
-	lines 			= gl.LINES,
-	triangle_strip 	= gl.TRIANGLE_STRIP,
-	triangles 		= gl.TRIANGLES,
+	points			= gl.POINTS,
+	line_strip		= gl.LINE_STRIP,
+	lines			= gl.LINES,
+	triangle_strip	= gl.TRIANGLE_STRIP,
+	triangles		= gl.TRIANGLES,
 }
 
 //TODO how to make proper blend functions?
@@ -328,16 +328,16 @@ Resource_usage :: enum {
 Resource_usage_3_3 :: enum u32 {
 	stream_write =	gl.STREAM_DRAW,
 	stream_read =	gl.STREAM_READ,
-	stream_copy = 	gl.STREAM_COPY,
+	stream_copy =	gl.STREAM_COPY,
 
 	static_write =	gl.STATIC_DRAW,
 	static_read =	gl.STATIC_READ,
-	static_copy = 	gl.STATIC_COPY,
+	static_copy =	gl.STATIC_COPY,
 	
 	//These are static because the memory other would live in heap memory. NOT GPU memory.
 	//But we likely want to to be GPU memory.
 	dynamic_write = gl.DYNAMIC_DRAW,
-	dynamic_read = 	gl.DYNAMIC_READ,
+	dynamic_read =	gl.DYNAMIC_READ,
 	dynamic_copy =  gl.DYNAMIC_COPY,
 }
 
@@ -355,17 +355,17 @@ Resource_direction :: enum {
 			//This should use glMapBufferRange flags "GL_MAP_READ_BIT"
 	
 	write,
-		//This should use glBufferData     flags "GL_STREAM_WRITE", "GL_STATIC_WRITE" or "GL_DYNAMIC_WRITE" for opengl 3.3
+		//This should use glBufferData	 flags "GL_STREAM_WRITE", "GL_STATIC_WRITE" or "GL_DYNAMIC_WRITE" for opengl 3.3
 		//This should use glStorageBuffer  flags "GL_MAP_WRITE_BIT"
 			//This should use glMapBufferRange flags "GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT"
 	
 	read_write,		//This requires mapping, so that is why there is both glBufferData and glMapBuffer.
-		//This should use glBufferData     flags "GL_STREAM_WRITE", "GL_STATIC_WRITE" or "GL_DYNAMIC_WRITE" for opengl 3.3 (I don't think we can do better)
+		//This should use glBufferData	 flags "GL_STREAM_WRITE", "GL_STATIC_WRITE" or "GL_DYNAMIC_WRITE" for opengl 3.3 (I don't think we can do better)
 		//This should use glStorageBuffer  flags "GL_MAP_WRITE_BIT | GL_MAP_READ_BIT" if stream_usage.
 			//This should use glMapBufferRange flags "GL_MAP_WRITE_BIT | GL_MAP_READ_BIT"
 
 	host_only,		//host_only is for transfers that are from GPU buffer to another GPU buffer, where the data does not go though the GPU.
-		//This should use glBufferData     flags "GL_STREAM_COPY", "GL_STATIC_COPY" or "GL_DYNAMIC_COPY" for opengl 3.3
+		//This should use glBufferData	 flags "GL_STREAM_COPY", "GL_STATIC_COPY" or "GL_DYNAMIC_COPY" for opengl 3.3
 		//This should use glBufferStorage  flags "" (no flags) as we only want to data on the host.
 
 }
@@ -397,61 +397,61 @@ Resource_usage_4_4 :: enum u32 {
 @(require_results)
 translate_resource_usage_3_3 :: proc(usage : Resource_usage) -> (buffer_flags : Resource_usage_3_3, map_flags : u32) {
 
-	//buffer_flags 	are for glBufferData
-	//map_flags 	are for glMapBufferRange
+	//buffer_flags	are for glBufferData
+	//map_flags	are for glMapBufferRange
 
 	switch usage {
 
 		//STREAM//
 		case .stream_read:
-			buffer_flags 	= .stream_read;
-			map_flags 		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= .stream_read;
+			map_flags		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 		
 		case .stream_write:
-			buffer_flags 	= .stream_write;
-			map_flags 		= gl.MAP_WRITE_BIT | gl.MAP_INVALIDATE_RANGE_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= .stream_write;
+			map_flags		= gl.MAP_WRITE_BIT | gl.MAP_INVALIDATE_RANGE_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 		
 		case .stream_read_write:
-			buffer_flags 	= .stream_write;	//THERE is no good hint, here default to write
-			map_flags 		= gl.MAP_WRITE_BIT | gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= .stream_write;	//THERE is no good hint, here default to write
+			map_flags		= gl.MAP_WRITE_BIT | gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .stream_host_only:
-			buffer_flags 	= .stream_copy;	//THERE is no good hint, here default to write
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a host only buffer
+			buffer_flags	= .stream_copy;	//THERE is no good hint, here default to write
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a host only buffer
 
 		//DYNAMIC//
 		case .dynamic_read:
-			buffer_flags 	= .dynamic_read;
-			map_flags 		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= .dynamic_read;
+			map_flags		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .dynamic_write:
-			buffer_flags 	= .dynamic_write;
-			map_flags 		= gl.MAP_WRITE_BIT | gl.MAP_INVALIDATE_RANGE_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= .dynamic_write;
+			map_flags		= gl.MAP_WRITE_BIT | gl.MAP_INVALIDATE_RANGE_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .dynamic_read_write:
-			buffer_flags 	= .dynamic_write;
-			map_flags 		= gl.MAP_WRITE_BIT | gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= .dynamic_write;
+			map_flags		= gl.MAP_WRITE_BIT | gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .dynamic_host_only:
-			buffer_flags 	= .dynamic_copy;
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a host only buffer
+			buffer_flags	= .dynamic_copy;
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a host only buffer
 
 		//STATIC//
 		case .static_read:
-			buffer_flags 	= .static_read;
-			map_flags 		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT; //This should be ok
+			buffer_flags	= .static_read;
+			map_flags		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT; //This should be ok
 
 		case .static_write:
-			buffer_flags 	= .static_write;
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a static buffer
+			buffer_flags	= .static_write;
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a static buffer
 
 		case .static_read_write:
-			buffer_flags 	= .static_write;
-			map_flags 		= 0 //THIS IS NOT VALID, you should not map a static buffer
+			buffer_flags	= .static_write;
+			map_flags		= 0 //THIS IS NOT VALID, you should not map a static buffer
 
 		case .static_host_only:
-			buffer_flags 	= .static_copy;
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a host only buffer
+			buffer_flags	= .static_copy;
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a host only buffer
 	}
 
 	return;
@@ -460,8 +460,8 @@ translate_resource_usage_3_3 :: proc(usage : Resource_usage) -> (buffer_flags : 
 @(require_results)
 translate_resource_usage_4_4 :: proc(usage : Resource_usage) -> (buffer_flags : u32, map_flags : u32) {
 
-	//buffer_flags 	are for glStorageBuffer
-	//map_flags 	are for glMapBufferRange
+	//buffer_flags	are for glStorageBuffer
+	//map_flags	are for glMapBufferRange
 	
 	//THE MAP_UNSYNCHRONIZED_BIT flag only makes sense for double or trible buffering.
 	//This is because it affects glUnmapBuffer, so a fence should be placed after glUnmapBuffer.
@@ -473,55 +473,55 @@ translate_resource_usage_4_4 :: proc(usage : Resource_usage) -> (buffer_flags : 
 	switch usage {
 		//STREAM//
 		case .stream_read:
-			buffer_flags 	= gl.MAP_READ_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
-			map_flags 		= gl.MAP_READ_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= gl.MAP_READ_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
+			map_flags		= gl.MAP_READ_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 		
 		case .stream_write:
-			buffer_flags 	= gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
-			map_flags 		= gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
+			map_flags		= gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 		
 		case .stream_read_write:
-			buffer_flags 	= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
-			map_flags 		= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT;
+			map_flags		= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .stream_host_only:
-			buffer_flags 	= 0; //THERE is no good hint, here default to write
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a host only buffer
+			buffer_flags	= 0; //THERE is no good hint, here default to write
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a host only buffer
 		
 		//DYNAMIC//
 		case .dynamic_read:
-			buffer_flags 	= gl.MAP_READ_BIT;
-			map_flags 		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= gl.MAP_READ_BIT;
+			map_flags		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .dynamic_write:
-			buffer_flags 	= gl.MAP_WRITE_BIT | gl.DYNAMIC_STORAGE_BIT;
-			map_flags 		= gl.MAP_WRITE_BIT | gl.MAP_INVALIDATE_RANGE_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= gl.MAP_WRITE_BIT | gl.DYNAMIC_STORAGE_BIT;
+			map_flags		= gl.MAP_WRITE_BIT | gl.MAP_INVALIDATE_RANGE_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .dynamic_read_write:
-			buffer_flags 	= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.DYNAMIC_STORAGE_BIT;
-			map_flags 		= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
+			buffer_flags	= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.DYNAMIC_STORAGE_BIT;
+			map_flags		= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT | gl.MAP_UNSYNCHRONIZED_BIT;
 
 		case .dynamic_host_only:
-			buffer_flags 	= 0; //This is valid, there are just no flags.
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a host only buffer
+			buffer_flags	= 0; //This is valid, there are just no flags.
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a host only buffer
 
 		//STATIC// (these are the same as dynamic for opengl 4.4)
 		//For static models we recreate the glStorageBuffer with the data. This mean we cannot write at all because we are not using the gl.DYNAMIC_STORAGE_BIT flag.
 		case .static_read:
-			buffer_flags 	= gl.MAP_READ_BIT;
-			map_flags 		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT; //THIS IS NOT VALID, you should not map a static buffer
+			buffer_flags	= gl.MAP_READ_BIT;
+			map_flags		= gl.MAP_READ_BIT | gl.MAP_UNSYNCHRONIZED_BIT; //THIS IS NOT VALID, you should not map a static buffer
 
 		case .static_write:
-			buffer_flags 	= gl.MAP_WRITE_BIT;
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a static buffer
+			buffer_flags	= gl.MAP_WRITE_BIT;
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a static buffer
 
 		case .static_read_write:
-			buffer_flags 	= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT;
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a static buffer
+			buffer_flags	= gl.MAP_READ_BIT | gl.MAP_WRITE_BIT;
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a static buffer
 
 		case .static_host_only:
-			buffer_flags 	= 0; //This is valid, there are just no flags.
-			map_flags 		= 0; //THIS IS NOT VALID, you should not map a host only buffer
+			buffer_flags	= 0; //This is valid, there are just no flags.
+			map_flags		= 0; //THIS IS NOT VALID, you should not map a host only buffer
 	}
 
 	return;
@@ -529,16 +529,16 @@ translate_resource_usage_4_4 :: proc(usage : Resource_usage) -> (buffer_flags : 
 
 Buffer_type :: enum u32 {
 	array_buffer = gl.ARRAY_BUFFER,								//Version GL 1.5	//Used as attribute data, yeah pretty normal stuff
-	//would anyone use this? = gl.ATOMIC_COUNTER_BUFFER,		//Version GL 3.1 	//I don't know when I would use this, seems like a way to slow down shaders
+	//would anyone use this? = gl.ATOMIC_COUNTER_BUFFER,		//Version GL 3.1	//I don't know when I would use this, seems like a way to slow down shaders
 	//dispatch_indirect_buffer= gl.DISPATCH_INDIRECT_BUFFER,	//Version GL 4.3	//something with computes shaders, we will likely not use this, We wont support compute shaders... (use fraqment or vertex)
 	draw_indirect_buffer = gl.DRAW_INDIRECT_BUFFER,				//Version GL 4.0	//Used for GL_MULTI_DRAW_INDIRECT, we will use this when advaliable
 	element_array_buffer = gl.ELEMENT_ARRAY_BUFFER,				//Version GL 1.5	//Used to hold indicies... yeah big surprise
 	pixel_pack_buffer = gl.PIXEL_PACK_BUFFER,					//Version GL 2.1	//Used to download (from GPU to CPU) pixels, it is optimized for this.
 	pixel_unpack_buffer = gl.PIXEL_UNPACK_BUFFER,				//Version GL 2.1	//Used to upload (from CPU to GPU) pixels, it is optimized for this.
-	//??? = gl.QUERY_BUFFER,									//Version GL 4.4 	//???
-	//shader_storage_buffer = gl.SHADER_STORAGE_BUFFER,			//Version GL 4.3 	//We will not use this (too new), it allows fast read/writes from the shader.
-	texture_buffer = gl.TEXTURE_BUFFER,							//Version GL 3.1 	//Use to store access large amount of memory from the shader (it is not a real texture, it is a hacky way to access data).
-	transform_feedback_buffer = gl.TRANSFORM_FEEDBACK_BUFFER,	//Version GL 3.0 	//This is a way to process data in a vertex shader without rasterizing or fragment shader. Use for partical systems and such.
+	//??? = gl.QUERY_BUFFER,									//Version GL 4.4	//???
+	//shader_storage_buffer = gl.SHADER_STORAGE_BUFFER,			//Version GL 4.3	//We will not use this (too new), it allows fast read/writes from the shader.
+	texture_buffer = gl.TEXTURE_BUFFER,							//Version GL 3.1	//Use to store access large amount of memory from the shader (it is not a real texture, it is a hacky way to access data).
+	transform_feedback_buffer = gl.TRANSFORM_FEEDBACK_BUFFER,	//Version GL 3.0	//This is a way to process data in a vertex shader without rasterizing or fragment shader. Use for partical systems and such.
 	uniform_buffer = gl.UNIFORM_BUFFER,							//Version GL 3.1	//We will not use this...
 
 	read_copy_buffer = gl.COPY_READ_BUFFER,						
@@ -576,11 +576,11 @@ Resource_desc :: struct {
 
 Resource :: struct {
 
-	buffer 			: Buffer_id, //Vertex buffer or somthing
+	buffer			: Buffer_id, //Vertex buffer or somthing
 	
 	persistent_mapped_data : []u8,
 
-	using desc 		: Resource_desc,
+	using desc		: Resource_desc,
 }
 
 
@@ -907,15 +907,15 @@ when RENDER_DEBUG {
 	}
 
 	Living_state :: struct {
-		programs 	: map[Shader_program_id]Source_Code_Location,
-		buffers 	: map[Buffer_id]Source_Code_Location,
-		vaos 		: map[Vao_id]Source_Code_Location,
-		fbos 		: map[Fbo_id]Source_Code_Location,
-		tex1ds 		: map[Tex1d_id]Source_Code_Location,
-		tex2ds 		: map[Tex2d_id]Source_Code_Location,
-		tex3ds 		: map[Tex3d_id]Source_Code_Location,
-		rbos 		: map[Rbo_id]Source_Code_Location,
-		syncs 		: map[gl.sync_t]Source_Code_Location,
+		programs	: map[Shader_program_id]Source_Code_Location,
+		buffers	: map[Buffer_id]Source_Code_Location,
+		vaos		: map[Vao_id]Source_Code_Location,
+		fbos		: map[Fbo_id]Source_Code_Location,
+		tex1ds		: map[Tex1d_id]Source_Code_Location,
+		tex2ds		: map[Tex2d_id]Source_Code_Location,
+		tex3ds		: map[Tex3d_id]Source_Code_Location,
+		rbos		: map[Rbo_id]Source_Code_Location,
+		syncs		: map[gl.sync_t]Source_Code_Location,
 	}
 
 	GL_debug_state :: struct {
@@ -960,22 +960,22 @@ info : GL_info;			//fecthed in the begining and can be read from to get system i
 
 GL_state :: struct {
 
-	bound_shader 	: Shader_program_id,
-	bound_target 	: Maybe(Fbo_id),
-	bound_draw_fbo 	: Maybe(Fbo_id),
-	bound_read_fbo 	: Maybe(Fbo_id),
-	bound_rbo 		: Rbo_id,
+	bound_shader	: Shader_program_id,
+	bound_target	: Maybe(Fbo_id),
+	bound_draw_fbo	: Maybe(Fbo_id),
+	bound_read_fbo	: Maybe(Fbo_id),
+	bound_rbo		: Rbo_id,
 
 	//Textures have a 16 slots, so there are 16 textures in play at once. texture_slot denotes the texture currently being changed.
 	//The other textures are still there and still bound in the shader.
-	texture_slot 	: i32, //0-15 (specifies what bound_texture is currently changing).
-	bound_texture 	: [16]Texg_id,
+	texture_slot	: i32, //0-15 (specifies what bound_texture is currently changing).
+	bound_texture	: [16]Texg_id,
 
 	//There are a single bound VAO, it keeps track of all the bound buffers, and attributes. It also keeps track on how the attriute data is sourced from the buffers.
 	//When binding a buffer you are really binding a buffer to a VAO, even if you think a VAO is unbind, it acctually just means that the default VAO is active.
 	//So there is always an VAO. 
-	bound_vao 		: Vao_id,
-	bound_buffer 	: map[Buffer_type]Buffer_id,
+	bound_vao		: Vao_id,
+	bound_buffer	: map[Buffer_type]Buffer_id,
 }
 
 GL_state_ex :: struct {
@@ -1041,13 +1041,13 @@ destroy_state :: proc (state : GL_states_comb) {
 
 debug_callback : gl.debug_proc_t : proc "c" (source: gl.GLenum, type: gl.GLenum, id: gl.GLuint, severity: gl.GLenum, length: gl.GLsizei, message: cstring, user_param : rawptr) {
 	context = _gl_context;
-    // Print or handle the debug message here
+	// Print or handle the debug message here
 
 	#partial switch severity {
 		case .DEBUG_SEVERITY_NOTIFICATION:
 			log.debugf("From %v, OpenGL Debug Message: %.*s", source, message);
-	 	case .DEBUG_SEVERITY_LOW:
-    		log.infof("From %v, OpenGL Debug Message: %.*s", source, message);
+		case .DEBUG_SEVERITY_LOW:
+			log.infof("From %v, OpenGL Debug Message: %.*s", source, message);
 		case .DEBUG_SEVERITY_MEDIUM:
 			log.warnf("From %v, OpenGL Debug Message: %.*s", source, message);
 		case .DEBUG_SEVERITY_HIGH:
@@ -1064,15 +1064,15 @@ swap_states :: proc (new_states : ^GL_states_comb, old_states : ^GL_states_comb,
 
 when RENDER_DEBUG {
 	GL_states_comb :: struct {
-		cpu_state 	: GL_state_ex,
-		gpu_state 	: GL_state,
+		cpu_state	: GL_state_ex,
+		gpu_state	: GL_state,
 		debug_state : GL_debug_state,
 	}
 }
 else {
 	GL_states_comb :: struct {
-		cpu_state 	: GL_state_ex,
-		gpu_state 	: GL_state,
+		cpu_state	: GL_state_ex,
+		gpu_state	: GL_state,
 	}
 }
 
@@ -1961,7 +1961,7 @@ associate_buffer_with_vao :: proc (vao : Vao_id, buffer : Buffer_id, attributes 
 		if divisor != 0 {
 			gl.VertexAttribDivisor(auto_cast attrib.location, divisor);
 		}
-		//VertexAttribPointer      :: proc "c" (index: u32, size: i32, type: u32, normalized: bool, stride: i32, pointer: uintptr)
+		//VertexAttribPointer	  :: proc "c" (index: u32, size: i32, type: u32, normalized: bool, stride: i32, pointer: uintptr)
 	}
 	
 	bind_buffer(.array_buffer, 0);
@@ -1978,8 +1978,8 @@ associate_index_buffer_with_vao :: proc(vao : Vao_id, buffer : Buffer_id) {
 
 draw_arrays :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32) {
 	bind_vertex_array(auto_cast vao);
-    gl.DrawArrays(auto_cast primitive, first, count);
-   	unbind_vertex_array();
+	gl.DrawArrays(auto_cast primitive, first, count);
+	unbind_vertex_array();
 }
 
 draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32, index_type : Index_buffer_type, index_buf : Buffer_id, loc := #caller_location) {
@@ -2003,14 +2003,14 @@ draw_elements :: proc (vao : Vao_id, primitive : Primitive, #any_int first, coun
 	}
 
 	bind_vertex_array(auto_cast vao);
-    gl.DrawElements(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size));
+	gl.DrawElements(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size));
 	unbind_vertex_array();
 }
 
 draw_arrays_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count, instance_count : i32) {
 	bind_vertex_array(auto_cast vao);
-    gl.DrawArraysInstanced(auto_cast primitive, first, count, instance_count);
-   	unbind_vertex_array();
+	gl.DrawArraysInstanced(auto_cast primitive, first, count, instance_count);
+	unbind_vertex_array();
 }
 
 draw_elements_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int first, count : i32, index_type : Index_buffer_type, index_buf : Buffer_id, instance_count : i32) {
@@ -2027,8 +2027,8 @@ draw_elements_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int f
 	}
 
 	bind_vertex_array(auto_cast vao);
-    gl.DrawElementsInstanced(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size), instance_count);
-   	unbind_vertex_array();
+	gl.DrawElementsInstanced(auto_cast primitive, count, auto_cast index_type, cast(rawptr)cast(uintptr)(first * index_size), instance_count);
+	unbind_vertex_array();
 }
 
 /////////// Buffer stuff ///////////
@@ -2217,15 +2217,15 @@ sync_fence :: proc (fence : ^Fence) {
 	for true {
 		waitResult = gl.ClientWaitSync(fence.sync, auto_cast gl.SYNC_FLUSH_COMMANDS_BIT, 1000000000); // 1 second timeout
 		
-        if waitResult == auto_cast gl.ALREADY_SIGNALED || waitResult == auto_cast gl.CONDITION_SATISFIED {
-            break;
-        } 
+		if waitResult == auto_cast gl.ALREADY_SIGNALED || waitResult == auto_cast gl.CONDITION_SATISFIED {
+			break;
+		} 
 		else if waitResult == auto_cast gl.TIMEOUT_EXPIRED {
-        	log.warnf("Timeout waiting for fence sync object, trying again\n");
-        }
+			log.warnf("Timeout waiting for fence sync object, trying again\n");
+		}
 		else if waitResult == auto_cast gl.WAIT_FAILED {
-            panic("Wait for fence sync object failed\n");
-        }
+			panic("Wait for fence sync object failed\n");
+		}
 		else {
 			panic("What now?");
 		}

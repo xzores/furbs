@@ -15,10 +15,10 @@ CameraProjection :: enum {
 }
 
 Camera3D :: struct {
-	position		: [3]f32,            	// Camera position
-	target			: [3]f32,            	// Camera target it looks-at
-	up				: [3]f32,            	// Camera up vector (rotation over its axis)
-	fovy			: f32,                	// Camera field-of-view apperture in Y (degrees) in perspective
+	position		: [3]f32,				// Camera position
+	target			: [3]f32,				// Camera target it looks-at
+	up				: [3]f32,				// Camera up vector (rotation over its axis)
+	fovy			: f32,					// Camera field-of-view apperture in Y (degrees) in perspective
 	ortho_height 	: f32,					// Camera ortho_height when using orthographic projection
 	projection		: CameraProjection, 	// Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
 	
@@ -28,10 +28,10 @@ Camera3D :: struct {
 
 //Zoom = 1 for no zoom
 Camera2D :: struct {
-	position		: [2]f32,            	// Camera position
+	position		: [2]f32,				// Camera position
 	target_relative	: [2]f32,				// 
 	rotation		: f32,				// in degrees
-	zoom 			: f32,            	//
+	zoom 			: f32,				//
 	
 	near 			: f32,
 	far 			: f32,
@@ -49,19 +49,19 @@ camera3D_get_prj_view :: proc(using camera : Camera3D, aspect : f32, loc := #cal
 
 	view = camera_look_at(camera.position, camera.target, camera.up);
 
-    if (camera.projection == .perspective)
-    {
+	if (camera.projection == .perspective)
+	{
 		assert(camera.near > 0, "camera near plane must be above zero for a perspective matrix", loc);
 		prj = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, false); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
 		//prj = glsl.mat4Perspective(camera.fovy * math.PI / 180, aspect, near, far);
-    }
-    else if (camera.projection == .orthographic)
-    {	
-        top : f32 = ortho_height / 2.0;
-        right : f32 = top * aspect;
+	}
+	else if (camera.projection == .orthographic)
+	{	
+		top : f32 = ortho_height / 2.0;
+		right : f32 = top * aspect;
 
 		prj = ortho_mat(-right, right, -top, top, near, far);
-    }
+	}
 
 	return;
 };
@@ -73,7 +73,7 @@ camera2D_get_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view : 
 	view = linalg.mul(translation_mat, rotation_mat);
 	
 	top : f32 = 1 / zoom;
-    right : f32 = top * aspect;
+	right : f32 = top * aspect;
 	prj = ortho_mat(-right, right, -top, top, near, far);
 	
 	return;
@@ -82,7 +82,7 @@ camera2D_get_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view : 
 @(private)
 camera3D_bind :: proc(using camera : Camera3D, loc := #caller_location) {
 
-    aspect : f32 = state.target_pixel_width / state.target_pixel_height;
+	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 
 	state.view_mat, state.prj_mat = camera3D_get_prj_view(camera, aspect);
 	state.inv_view_mat = linalg.matrix4_inverse(state.view_mat);	

@@ -75,7 +75,7 @@ console_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string,
 	col := RESET
 	switch level {
 		case .Debug:   col = DARK_GREY
-		case .Info:    col = GREEN
+		case .Info:	col = GREEN
 		case .Warning: col = YELLOW
 		case .Error, .Fatal: col = RED
 	}
@@ -113,7 +113,7 @@ file_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string, op
 			t := time.now()
 			y, m, d := time.date(t)
 			h, min, s := time.clock(t)
-			if .Date in options { fmt.sbprintf(&buf, "%d-%02d-%02d ", y, m, d)    }
+			if .Date in options { fmt.sbprintf(&buf, "%d-%02d-%02d ", y, m, d)	}
 			if .Time in options { fmt.sbprintf(&buf, "%02d:%02d:%02d", h, min, s) }
 			fmt.sbprint(&buf, "] ")
 		}
@@ -139,7 +139,7 @@ do_level_header :: proc(opts: log.Options, level: log.Level, str: ^strings.Build
 	col := RESET
 	switch level {
 	case .Debug:   col = DARK_GREY
-	case .Info:    col = RESET
+	case .Info:	col = RESET
 	case .Warning: col = YELLOW
 	case .Error, .Fatal: col = RED
 	}

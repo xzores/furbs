@@ -76,22 +76,32 @@ glfw_error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstrin
 	fmt.panicf("Recvied GLFW error : %v, text : %s", error, description);
 }
 
-init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [Attribute_location]Attribute_info, shader_defines : map[string]string, 
-			window_desc : Maybe(Window_desc) = nil, required_gl_verion : Maybe(GL_version) = nil, render_context := context, pref_warn := true, loc := #caller_location) -> ^Window {
+//uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [Attribute_location]Attribute_info,
+init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc) = nil, required_gl_verion : Maybe(GL_version) = nil, render_context := context, pref_warn := true, loc := #caller_location) -> ^Window {
 	
 	using gl;
 
 	window : ^Window = nil;
-
-	fmt.assertf(mem.check_zero_ptr(&state, size_of(state)), "it looks like the state is not cleared correctly, did you forget to close the last state correctly, or did you already call init_render?\nThe state : %v", state, loc = loc);
+	
+	when ODIN_BUILD_MODE == .Executable {
+		state_ptr := &state;
+	}
+	else when ODIN_BUILD_MODE == .Dynamic {
+		state_ptr := state;
+	}
+	else {
+		#panic("What here?");
+	}
+	
+	fmt.assertf(mem.check_zero_ptr(state_ptr, size_of(state)), "it looks like the state is not cleared correctly, did you forget to close the last state correctly, or did you already call init_render?\nThe state : %v", state, loc = loc);
 	state.render_context = render_context;
 	state.time_start = time.now();
 	state.time_last = time.now();
 
 	// Initialize GLFW
-    if !glfw.Init() {
+	if !glfw.Init() {
 		panic("Could not init glfw\n");
-    }
+	}
 	
 	state.shader_defines = make(map[string]string);
 	if shader_defines != nil {
@@ -103,8 +113,8 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 	state.is_init = true;
 	enable_preformence_warnings(pref_warn);
 
-    // Set GLFW error callback
-    glfw.SetErrorCallback(glfw_error_callback);
+	// Set GLFW error callback
+	glfw.SetErrorCallback(glfw_error_callback);
 
 	//SHOULD THIS BE A THING? glfw.WindowHint(glfw.REFRESH_RATE, glfw.DONT_CARE);
 
@@ -117,17 +127,17 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 	
 	when ODIN_OS == .Windows {
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
-    	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 6);
+		glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 6);
 	}
 	else when ODIN_OS == .Darwin { //Mac_os, idk something that is needed (I think)
 		glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 		glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE);
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
-    	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 1);
+		glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 1);
 	}
 	else when ODIN_OS == .Linux {
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
-    	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 6);
+		glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 6);
 	}
 	else {
 		panic("TODO");
@@ -161,10 +171,10 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 		glfw.WindowHint(glfw.VISIBLE, glfw.TRUE);
 	}
 
-    if state.owner_context == nil {
-        fmt.printf("Failed to open window");
-        glfw.Terminate();
-    }
+	if state.owner_context == nil {
+		fmt.printf("Failed to open window");
+		glfw.Terminate();
+	}
 
 	_make_context_current(nil);
 
@@ -198,29 +208,39 @@ init :: proc(uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [At
 
 destroy :: proc (loc := #caller_location) {
 
+	when ODIN_BUILD_MODE == .Executable {
+		state_ptr := &state;
+	}
+	else when ODIN_BUILD_MODE == .Dynamic {
+		state_ptr := state;
+	}
+	else {
+		#panic("What here?");
+	}
+
 	//Check we inited before destroy 
 	assert(state.is_init == true, "Cannot destroy renderer as the state is not initialized. Call init first.", loc);
 	state.is_init = false;
 	state.opengl_version = nil;
 
 	//Reset button and key state
-	state.button_down 		= {};
-	state.button_released 	= {};
-	state.button_pressed 	= {};
+	state.button_down		= {};
+	state.button_released	= {};
+	state.button_pressed	= {};
 
-	state.keys_down 		= {};
-	state.keys_released 	= {};
-	state.keys_pressed 		= {};
-	state.keys_triggered 	= {};
+	state.keys_down		= {};
+	state.keys_released	= {};
+	state.keys_pressed		= {};
+	state.keys_triggered	= {};
 	
-	state.old_mouse_pos 	= {};
-	state.mouse_delta 		= {};
-	state.scroll_delta 		= {};
+	state.old_mouse_pos	= {};
+	state.mouse_delta		= {};
+	state.scroll_delta		= {};
 
 	//Extras
-	state.fps_measurement 	= {};
+	state.fps_measurement	= {};
 	state.overlay_init = false;
-	frame_buffer_destroy(state.arrow_fbo); 			state.arrow_fbo = {};
+	frame_buffer_destroy(state.arrow_fbo);			state.arrow_fbo = {};
 	pipeline_destroy(state.shapes_pipeline);		state.shapes_pipeline = {};
 	pipeline_destroy(state.overlay_pipeline);		state.overlay_pipeline = {};
 
@@ -279,31 +299,31 @@ destroy :: proc (loc := #caller_location) {
 	queue.destroy(&state.button_release_input_events);
 	queue.destroy(&state.scroll_input_event);
 
-	state.key_input_events 				= {};
-	state.key_release_input_events 		= {};
-	state.char_input_buffer 			= {};
-	state.char_input 					= {};
-	state.button_input_events 			= {};
+	state.key_input_events				= {};
+	state.key_release_input_events		= {};
+	state.char_input_buffer			= {};
+	state.char_input					= {};
+	state.button_input_events			= {};
 	state.button_release_input_events	= {};
-	state.scroll_input_event 			= {};
+	state.scroll_input_event			= {};
 	
-	state.current_context 	= nil;
-	state.vsync 			= false;
+	state.current_context	= nil;
+	state.vsync			= false;
 	state.window_in_focus	= nil;
-	state.render_context 	= {};
+	state.render_context	= {};
 	
-	state.time_start 	= {};
-	state.time_last 	= {};
-	state.delta_time 	= {};
-	state.time_elapsed 	= {};
+	state.time_start	= {};
+	state.time_last	= {};
+	state.delta_time	= {};
+	state.time_elapsed	= {};
 
 	state.pref_warn = false;
 
 	glfw.Terminate();
 	
-	if !mem.check_zero_ptr(&state, size_of(State)) {
+	if !mem.check_zero_ptr(state_ptr, size_of(State)) {
 		for field in reflect.struct_fields_zipped(State) {
-			ptr : uintptr = cast(uintptr)&state + field.offset;
+			ptr : uintptr = cast(uintptr)state_ptr + field.offset;
 			val := any{data = cast(rawptr)ptr, id = field.type.id};
 
 			if !mem.check_zero_ptr(val.data, reflect.size_of_typeid(val.id)) {
@@ -355,7 +375,7 @@ begin_frame :: proc() {
 	
 	//auto reload shaders
 	if true {
-	 	for shader in state.loaded_shaders {
+		for shader in state.loaded_shaders {
 			if load, ok := shader.loaded.?; ok {
 				
 				file, err := os.stat(load.path);

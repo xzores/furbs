@@ -575,7 +575,7 @@ get_text_bounds :: proc(ctx: ^Font_context, text : string, loc := #caller_locati
 	x_min, y_min, x_max, y_max := _get_bounds(ctx);
 	rect : [4]f32 = {0, y_min, total_width, y_max - y_min};
 	
- 	return rect;
+	return rect;
 }
 
 //x_offset, y_offset, width and height in pixels.
@@ -635,7 +635,7 @@ get_visible_text_bounds :: proc(ctx: ^Font_context, text : string) -> [4]f32 {
 	
 	rect : [4]f32 = {flsb, -y1, total_width - flsb, height};
 	
- 	return rect;
+	return rect;
 }
 
 //////////////////// get non-specifc character information ////////////////////

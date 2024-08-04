@@ -1,17 +1,18 @@
 package network
 
+import "base:builtin"
+
 import "core:fmt"
 import "core:net"
-import "core:builtin"
 import "core:time"
 import "core:mem"
 
-import queue "core:container/queue"
+import "core:container/queue"
 
-import utils "../../FurbLib/utils"
-import thread "../../FurbLib/utils"
+import "../utils"
+import thread "../utils" //TODO
 
-import tracy "shared:tracy"
+import "../tracy"
 
 Server_side_client :: struct {
 
