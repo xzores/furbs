@@ -140,6 +140,7 @@ delete_directory_contents :: proc(dir_path: string) -> (success : bool) {
 	}
 	
 	files, err := os.read_dir(dir_handle, 0); //get all files
+	defer os.file_info_slice_delete(files);
 	os.close(dir_handle);
 	
 	if err != 0 {
