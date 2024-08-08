@@ -124,7 +124,7 @@ frame_buffer_make_textures :: proc (#any_int color_attachemet_cnt, width, height
 	assert(depth_format != nil, "depth_format is nil", loc);
 
 	fbo = Frame_buffer{
-		id 				= gl.gen_frame_buffer(),
+		id 				= gl.gen_frame_buffer(loc),
 		width			= width,
 		height			= height,
 		color_format	= color_format,
@@ -137,7 +137,7 @@ frame_buffer_make_textures :: proc (#any_int color_attachemet_cnt, width, height
 	{
 		color_attachments_max : [MAX_COLOR_ATTACH]gl.Tex2d_id;
 		for i in 0 ..<color_attachemet_cnt {
-			color_texture := texture2D_make(mipmaps, wrapmode, filtermode, auto_cast color_format, width, height, .no_upload, nil);
+			color_texture := texture2D_make(mipmaps, wrapmode, filtermode, auto_cast color_format, width, height, .no_upload, nil, loc = loc);
 			color_attachments_max[i] = color_texture.id;
 			fbo.color_attachments[i] = color_texture;
 		}
@@ -149,13 +149,13 @@ frame_buffer_make_textures :: proc (#any_int color_attachemet_cnt, width, height
 
 	//setup depth buffer
 	if use_depth_texture {
-		depth_texture := texture2D_make(mipmaps, wrapmode, filtermode, auto_cast depth_format, width, height, .no_upload, nil);
+		depth_texture := texture2D_make(mipmaps, wrapmode, filtermode, auto_cast depth_format, width, height, .no_upload, nil, loc = loc);
 		fbo.depth_attachment = depth_texture;
 		gl.associate_depth_texture_with_frame_buffer(fbo.id, depth_texture.id);
 	}
 	else {
 		depth_buf := gl.gen_render_buffer();
-		depth_samples := gl.associate_depth_render_buffer_with_frame_buffer(fbo.id, depth_buf, width, height, 1, auto_cast depth_format)
+		depth_samples := gl.associate_depth_render_buffer_with_frame_buffer(fbo.id, depth_buf, width, height, 1, auto_cast depth_format, loc = loc)
 		assert(fbo.samples == depth_samples, "inconsistent FBO samples", loc = loc);
 		fbo.depth_attachment = Depth_render_buffer{depth_buf, width, height, depth_samples, depth_format};
 	}

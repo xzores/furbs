@@ -358,8 +358,6 @@ window_get_monitor :: proc (window : ^Window) -> Monitor {
 		}
 	}
 	
-	assert(monitor != nil);
-
 	return monitor;
 }
 
@@ -387,6 +385,10 @@ window_set_fullscreen :: proc(window : ^Window, mode : Fullscreen_mode, monitor 
 
 	monitor := window_get_monitor(window);
 	
+	if monitor == nil {
+		monitor = glfw.GetPrimaryMonitor();
+	}
+	
 	mon_mode := glfw.GetVideoMode(monitor);
 	assert(mon_mode != nil);
 
@@ -399,13 +401,13 @@ window_set_fullscreen :: proc(window : ^Window, mode : Fullscreen_mode, monitor 
 		
 		switch mode {
 			case .fullscreen:
-				window.old_windowed_rect = {xpos, xpos, ww, wh};
+				window.old_windowed_rect = {xpos, ypos, ww, wh};
 				glfw.SetWindowMonitor(window.glfw_window, monitor, 0, 0, mon_mode.width, mon_mode.height, mon_mode.refresh_rate);
 
 			case .borderless_fullscreen:
 				//HAHA, windows does fun stuff, it ignores the SetWindowPos and SetWindowAttrib if the size is set to the same as the window.
 				//So on windows this looks like it goes fullscreen, but idk, it might be different of other OS's.
-				window.old_windowed_rect = {xpos, xpos, ww, wh};
+				window.old_windowed_rect = {xpos, ypos, ww, wh};
 				glfw.SetWindowAttrib(window.glfw_window, glfw.DECORATED, 0);
 				glfw.SetWindowSize(window.glfw_window, mon_mode.width, mon_mode.height);
 				glfw.SetWindowPos(window.glfw_window, 0, 0);
@@ -465,6 +467,10 @@ window_set_position :: proc "contextless" (window : ^Window, x, y : i32) {
 
 window_get_position :: proc "contextless" (window : ^Window) -> (x, y : i32) {
 	return glfw.GetWindowPos(window.glfw_window);
+}
+
+window_is_fullscreen :: proc "contextless" (window : ^Window) -> (fullscreen : Fullscreen_mode) {
+	return window.current_fullscreen;
 }
 
 window_set_size :: proc "contextless" (window : ^Window, w, h : i32) {
