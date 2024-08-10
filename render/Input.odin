@@ -34,7 +34,7 @@ Input_modifier :: bit_set[Input_modifier_enum; i32];
 Key_code :: enum i32 {
 
 	/* The unknown glfw.KEY */
-	invlaid = glfw.KEY_UNKNOWN,
+	invalid = glfw.KEY_UNKNOWN,
 
 	/** Printable glfw.KEYs **/
 
@@ -58,7 +58,7 @@ Key_code :: enum i32 {
 	zero = glfw.KEY_0,
 	one = glfw.KEY_1,
 	two = glfw.KEY_2,
-	tree = glfw.KEY_3,
+	three = glfw.KEY_3,
 	four = glfw.KEY_4,
 	five = glfw.KEY_5,
 	six = glfw.KEY_6,
@@ -172,8 +172,6 @@ Key_code :: enum i32 {
 	alt_right = glfw.KEY_RIGHT_ALT,
 	super_right = glfw.KEY_RIGHT_SUPER,
 	menu = glfw.KEY_MENU,
-
-	max_keys = glfw.KEY_LAST,
 }
 
 Key_input_event :: struct {

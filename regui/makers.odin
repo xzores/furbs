@@ -56,7 +56,7 @@ button_is_hover :: proc (button : Button, loc := #caller_location) -> bool {
 
 button_is_selected :: proc (button : Button, loc := #caller_location) -> bool {
 	info, container := element_get(button.e, Button_info, loc);
-	return container.is_active;
+	return container.is_selected;
 }
 
 button_is_pressed :: proc (button : Button, loc := #caller_location) -> bool {

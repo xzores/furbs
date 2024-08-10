@@ -75,13 +75,13 @@ Indices :: union {
 	[]u32,
 }
 
-indices_delete :: proc (indices : Indices) {
+indices_delete :: proc (indices : Indices, loc := #caller_location) {
 	switch ind in indices {
 		case nil:
 		case []u16:
-			delete(ind); 
+			delete(ind, loc = loc); 
 		case []u32:
-			delete(ind); 
+			delete(ind, loc = loc); 
 	}
 }
 

@@ -9,7 +9,7 @@ import "core:time"
 //TODO delete draw char
 @(private)
 _ensure_shapes_loaded :: proc (loc := #caller_location) {
-
+	
 	if !state.shapes_init {
 		state.shapes_init = true;
 		
@@ -23,25 +23,25 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 		{
 			cubev, cubei := generate_cube({1,1,1}, {0,0,0}, use_index_buffer);
 			state.shape_cube = [2]int{i, i + indices_len(cubei)}; i += indices_len(cubei);
-
-			cirv, ciri := generate_circle(1, {0,0,0}, 20, use_index_buffer);
+			
+			cirv, ciri := generate_circle(1, {0,0,0}, 10, use_index_buffer);
 			state.shape_circle = [2]int{i, i + indices_len(ciri)}; i += indices_len(ciri);
-
+			
 			qv, qi := generate_quad({1,1,1}, {0,0,0}, use_index_buffer);
 			state.shape_quad = [2]int{i, i + indices_len(qi)}; i += indices_len(qi);
-
-			cyv, cyi := generate_cylinder({0,0,0}, 1, 1, 20, 20, use_index_buffer);
+			
+			cyv, cyi := generate_cylinder({0,0,0}, 1, 1, 10, 10, use_index_buffer);
 			state.shape_cylinder = [2]int{i, i + indices_len(cyi)}; i += indices_len(cyi);
-
-			sv, si := generate_sphere({0,0,0}, 1, 20, 20, use_index_buffer);
+			
+			sv, si := generate_sphere({0,0,0}, 1, 10, 10, use_index_buffer);
 			state.shape_sphere = [2]int{i, i + indices_len(si)}; i += indices_len(si);
-
-			conv, coni := generate_cone({0,0,0}, 1, 1, 20, use_index_buffer);
+			
+			conv, coni := generate_cone({0,0,0}, 1, 1, 10, use_index_buffer);
 			state.shape_cone = [2]int{i, i + indices_len(coni)}; i += indices_len(coni);
-
-			arrv, arri := generate_arrow({1,0,0}, 0.65, 0.35, 0.15, 0.35, 20, use_index_buffer);
+			
+			arrv, arri := generate_arrow({1,0,0}, 0.65, 0.35, 0.15, 0.35, 10, use_index_buffer);
 			state.shape_arrow = [2]int{i, i + indices_len(arri)}; i += indices_len(arri);
-
+			
 			defer {
 				delete(cubev); indices_delete(cubei);
 				delete(cirv); indices_delete(ciri);
@@ -51,10 +51,18 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 				delete(conv); indices_delete(coni);
 				delete(arrv); indices_delete(arri);
 			};
-
+			
 			D :: Mesh_combine_data(Default_vertex);
-			vertex_data, index_data = combine_mesh_data_multi(Default_vertex, D{1, cubev, cubei}, D{1, cirv, ciri}, D{1, qv, qi},
-				D{1, cyv, cyi}, D{1, sv, si}, D{1, conv, coni}, D{1, arrv, arri});
+			vertex_data, index_data = combine_mesh_data_multi(Default_vertex, []D{
+				D{1, cubev, cubei}, 
+				D{1, cirv, ciri}, 
+				D{1, qv, qi},
+				D{1, cyv, cyi}, 
+				D{1, sv, si},
+				D{1, conv, coni},
+				D{1, arrv, arri}
+			});
+			
 			assert(vertex_data != nil);
 			//fmt.printf("indices_len(index_data) : %v\n", indices_len(index_data));
 			assert(len(vertex_data) <= auto_cast max(u16));
@@ -84,7 +92,7 @@ shapes_destroy :: proc() {
 }
 
 draw_quad_mat :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	_ensure_shapes_loaded();
+	_ensure_shapes_loaded(loc);
 	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_quad, loc);
 }
 

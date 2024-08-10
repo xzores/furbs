@@ -75,7 +75,7 @@ combine_mesh_data :: proc(transform1 : matrix[4,4]f32, verts : []$T, indices : I
 		v.position = (transform2 * [4]f32{v.position.x, v.position.y, v.position.z, 1}).xyz;
 		new_verts[i + len(verts)] = v;
 	}
-
+	
 	//This is a mess, there are too many names for indices, don't know how to fix
 	switch indexes in indices {
 		case nil:
@@ -114,21 +114,29 @@ combine_mesh_data :: proc(transform1 : matrix[4,4]f32, verts : []$T, indices : I
 	return;
 }
 
-Mesh_combine_data :: struct(T: typeid) { transform : matrix[4,4]f32, verts : []T, indices : Indices}
+Mesh_combine_data :: struct(T: typeid) {
+	transform : matrix[4,4]f32, 
+	verts : []T, 
+	indices : Indices
+}
 
-combine_mesh_data_multi :: proc ($T : typeid, mesh_datas : ..Mesh_combine_data(T), loc := #caller_location) -> (res_verts : []T, res_indices : Indices) {
-	
-	//fmt.assertf(mesh_datas[0].indices == nil, "mesh_datas[0].indices is : %v, %v\n", mesh_datas[0].indices, mesh_datas[0].indices);
+combine_mesh_data_multi :: proc ($T : typeid, mesh_datas : []Mesh_combine_data(T), loc := #caller_location) -> (res_verts : []T, res_indices : Indices) {
 	
 	switch ind in mesh_datas[0].indices {
 		case nil:
+			res_indices = nil;
 		case []u16:
 			res_indices = make([]u16,0);
 		case []u32:
 			res_indices = make([]u32,0);
 	}
 	
-	for m in mesh_datas {
+	for m, i in mesh_datas {
+				
+		t2 := reflect.union_variant_type_info(m.indices);
+		t1 := reflect.union_variant_type_info(res_indices);
+		fmt.assertf(t1 == t2, "indicies does not match, type 1 was %v, and type 2 was: %v", t1, t2);
+		
 		new_verts, new_indices := combine_mesh_data(1, res_verts, res_indices, m.transform, m.verts, m.indices, loc = loc);
 		if res_verts != nil {
 			delete(res_verts);
@@ -150,7 +158,7 @@ generate_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, a
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, 4)
-		_indices := make([]u16, 6);
+		_indices := make([]u32, 6);
 		
 		verts[0] = Default_vertex{[3]f32{0,0,0} * size + offset - {0.5,0.5,0}, {0,0}, {0,0,-1}};
 		verts[1] = Default_vertex{[3]f32{1,0,0} * size + offset - {0.5,0.5,0}, {1,0}, {0,0,-1}};
@@ -199,7 +207,7 @@ make_mesh_quad :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) 
 generate_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices) {
 	
 	vertices := make([dynamic]Default_vertex);
-	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
+	temp_indices := make([dynamic]u32, 0, 3 * (sectors+1), context.temp_allocator);
 	defer delete(vertices);
 	defer delete(temp_indices);
 
@@ -234,7 +242,7 @@ generate_circle :: proc(diameter : f32, offset : [3]f32, sectors : int, use_inde
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, len(vertices));
-		_indices := make([]u16, len(temp_indices));
+		_indices := make([]u32, len(temp_indices));
 		
 		for v, i in vertices {
 			verts[i] = v; 	//convert from 2D to 3D
@@ -308,17 +316,17 @@ generate_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool, l
 		Default_vertex{{0,1,0}, {0,1}, {0,0,-1}},
 	};
 
-	odering : [6]u16 = {
+	odering : [6]u32 = {
 		0, 1, 2,
 		0, 2, 3,
 	}
 
-	_indices := make([]u16, 36);
+	_indices := make([]u32, 36);
 
 	index : int = 0;
 	for i in 0..<6 {
 		for o in odering {
-			_indices[index] = o + 4 * cast(u16)i;
+			_indices[index] = o + 4 * cast(u32)i;
 			index += 1;
 		}
 	}
@@ -359,7 +367,7 @@ make_mesh_cube :: proc(size : [3]f32, offset : [3]f32, use_index_buffer : bool) 
 generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int, sectors : int, use_index_buffer : bool, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices) {
 
 	vertices := make([dynamic]Default_vertex);
-	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
+	temp_indices := make([dynamic]u32, 0, 3 * (sectors+1), context.temp_allocator);
 	defer delete(vertices);
 	defer delete(temp_indices);
 
@@ -385,8 +393,8 @@ generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int,
 				below_i	 	:= up * sectors + phi - sectors;
 				this 		:= up * sectors + phi;
 				pos 		:= up * sectors + ((phi + 1) %% sectors);
-				append(&temp_indices, u16(below_i), u16(this), u16(pos));
-				append(&temp_indices, u16(below_i), u16(below_neg), u16(this)); 
+				append(&temp_indices, u32(below_i), u32(this), u32(pos));
+				append(&temp_indices, u32(below_i), u32(below_neg), u32(this)); 
 			}
 			
 		}
@@ -458,7 +466,7 @@ generate_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int,
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, len(vertices)); 
-		_indices := make([]u16, len(temp_indices));
+		_indices := make([]u32, len(temp_indices));
 
 		for v, i in vertices {
 			verts[i] = v;
@@ -493,9 +501,7 @@ make_mesh_cylinder :: proc(offset : [3]f32, height, diameter : f32, stacks : int
 generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : int = 10, sectors : int = 20, use_index_buffer := true, loc := #caller_location) -> (verts : []Default_vertex, indices : Indices) {
 
 	vertices := make([dynamic]Default_vertex);
-	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
-	defer delete(vertices);
-	defer delete(temp_indices);
+	temp_indices := make([dynamic]u32, 0, 3 * (sectors+1));
 
 	stacks := stacks + 1;
 
@@ -524,8 +530,8 @@ generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : 
 				below_i	 	:= up * sectors + phi - sectors;
 				this 		:= up * sectors + phi;
 				pos 		:= up * sectors + ((phi + 1) %% sectors);
-				append(&temp_indices, u16(below_i), u16(below_neg), u16(this)); 
-				append(&temp_indices, u16(below_i), u16(this), u16(pos)); 
+				append(&temp_indices, u32(below_i), u32(below_neg), u32(this)); 
+				append(&temp_indices, u32(below_i), u32(this), u32(pos)); 
 			}
 			
 		}
@@ -534,20 +540,14 @@ generate_sphere :: proc(offset : [3]f32 = {0,0,0}, diameter : f32 = 1, stacks : 
 	//assert(indices[6 * stacks * sectors - 1] != 0)
 
 	if use_index_buffer {
-		verts = make([]Default_vertex, len(vertices)); 
-		_indices := make([]u16, len(temp_indices));
-
-		for v, i in vertices {
-			verts[i] = v;
-		}
-		for ii, i in temp_indices {
-			_indices[i] = ii;
-		}
-		indices = _indices;
+		verts = vertices[:];
+		indices = temp_indices[:];
 	}
 	else {
 		verts = convert_to_non_indexed(vertices[:], temp_indices[:]);
 		indices = nil;
+		delete(vertices);
+		delete(temp_indices);
 	}
 
 	return;
@@ -570,7 +570,7 @@ make_mesh_sphere :: proc(offset : [3]f32, diameter : f32, stacks : int, sectors 
 generate_cone :: proc (offset : [3]f32, height, diameter : f32, sectors : int, use_index_buffer : bool) -> (verts : []Default_vertex, indices : Indices) {
 
 	vertices := make([dynamic]Default_vertex);
-	temp_indices := make([dynamic]u16, 0, 3 * (sectors+1), context.temp_allocator);
+	temp_indices := make([dynamic]u32, 0, 3 * (sectors+1), context.temp_allocator);
 	defer delete(vertices);
 	defer delete(temp_indices);
 	
@@ -613,7 +613,7 @@ generate_cone :: proc (offset : [3]f32, height, diameter : f32, sectors : int, u
 
 	if use_index_buffer {
 		verts = make([]Default_vertex, len(vertices));
-		_indices := make([]u16, len(temp_indices));
+		_indices := make([]u32, len(temp_indices));
 		
 		for v, i in vertices {
 			verts[i] = v; 	//convert from 2D to 3D
@@ -690,7 +690,7 @@ generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 
 		ok : bool;
 		verts = _verts;
-		indices, ok = _indices.([]u16);
+		indices, ok = _indices.([]u32);
 		assert(ok, "internal error");
 	}
 	else {

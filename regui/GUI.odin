@@ -85,7 +85,7 @@ end :: proc (state : ^Scene, loc := #caller_location) {
 	//Draw
 	for k in state.owned_elements {
 		e : Element_container = active_elements[k];
-		element_draw(auto_cast e, style, get_screen_rect(), loc);
+		element_draw(auto_cast e, style, get_screen_rect());
 	}
 	
 	render.pipeline_end();
@@ -689,8 +689,6 @@ get_appearences :: proc (parent : Parent, appearance, hover_appearance, selected
 			
 	}
 	
-	fmt.printf("appearance : %v\n", appearance);
-	
 	appearance := appearance;
 	hover_appearance := hover_appearance;
 	selected_appearance := selected_appearance;
@@ -925,7 +923,7 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 					
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
-					draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
 					
 				case Patched_appearance:
 					//TODO
@@ -940,13 +938,13 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
 					
 					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
-					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					text_dest := mid_dest - {0,0, a.front_margin, a.front_margin};
-					draw_text(e.text, text_dest, new_rect, a.front_color, a, loc);
+					draw_text(e.text, text_dest, new_rect, a.front_color, a);
 					
 				case Patched_appearance:
 
@@ -961,10 +959,10 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
 					
 					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
-					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					//TODO draw x
 					if e.checked {
@@ -999,10 +997,10 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
 					
 					text_dest : [4]f32 = {0,0, dest.rect.z - a.front_margin, dest.rect.w - a.front_margin};
-					draw_text(e.text, text_dest, new_rect, a.front_color, a, loc);
+					draw_text(e.text, text_dest, new_rect, a.front_color, a);
 					
 				case Patched_appearance:
 
@@ -1017,15 +1015,15 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
 					
 					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
-					draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					margin := get_logical_margin(style);
 					offset : f32 = margin/2 + (e.current_val - e.min_val) / (e.max_val - e.min_val) * (dest.rect.z - margin);
 					
-					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest.rect.w - a.line_margin}, new_rect, a.front_color, loc);
+					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest.rect.w - a.line_margin}, new_rect, a.front_color);
 					
 				case Patched_appearance:
 
@@ -1040,15 +1038,15 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
 					
 					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
-					draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					margin := get_logical_margin(style);
 					offset : f32 = margin/2 + f32(e.current_val - e.min_val) / f32(e.max_val - e.min_val) * (dest.rect.z - margin);
 					
-					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest.rect.w - a.line_margin}, new_rect, a.front_color, loc);
+					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest.rect.w - a.line_margin}, new_rect, a.front_color);
 					
 				case Patched_appearance:
 
@@ -1066,19 +1064,19 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
 					
 					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
-					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color, loc);
+					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					if len(e.runes) != 0 {
 						text_dest := mid_dest - {0,0, a.front_margin, a.front_margin};
-						draw_text(text, text_dest, new_rect, a.front_color, a, loc);
+						draw_text(text, text_dest, new_rect, a.front_color, a);
 					}
 					else {
 						text_dest := mid_dest - {0,0, a.additional_margin, a.additional_margin};
 						draw_text_param(e.bg_text, text_dest, new_rect, a.text_size, a.text_anchor, a.bold, a.italic, a.additional_color, a.fonts,
-							{}, a.text_backdrop_offset, a.limit_by_height, a.limit_by_width, loc);
+							{}, a.text_backdrop_offset, a.limit_by_height, a.limit_by_width);
 					}
 					
 				case Patched_appearance:
@@ -1092,7 +1090,7 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 					
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
-					parent_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color, loc);
+					parent_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
 					
 					for key in e.sub_elements {
 						e := active_elements[key];

@@ -127,6 +127,7 @@ window_focus_callback : glfw.WindowFocusProc : proc "c" (glfw_window : glfw.Wind
 	}
 }
 
+
 Antialiasing :: enum {
 	none = 1,
 	msaa2 = 2,
@@ -447,6 +448,16 @@ window_should_close :: proc "contextless" (window : ^Window, loc := #caller_loca
 
 window_maximize :: proc "contextless" (window : ^Window) {
 	glfw.MaximizeWindow(window.glfw_window);
+}
+
+//Undo maximize
+window_restore :: proc "contextless" (window : ^Window) {
+	glfw.RestoreWindow(window.glfw_window)
+}
+
+window_is_maximized :: proc "contextless" (window : ^Window) -> bool {
+	maximized := glfw.GetWindowAttrib(window.glfw_window, glfw.MAXIMIZED);
+	return maximized != 0;
 }
 
 window_focus :: proc "contextless" (window : ^Window) {
