@@ -447,7 +447,7 @@ Texture3D :: struct {
 
 @(require_results)
 texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture3D {
+							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture3D {
 	
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -459,8 +459,10 @@ texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 	return texture3D_make_desc(desc, width, height, depth, upload_format, data, clear_color, loc);
 }
 
+//TODO set border color
+//clear_color is in range 0 to 1
 @(require_results)
-texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture3D {
+texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture3D {
 	assert(state.is_init, "You must init first", loc);
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO this is done at startup is that enough?
@@ -479,29 +481,8 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
-		
-		//TODO I dont like this way to clear, make it simpler at some point.
-		if cc, ok := clear_color.([4]f32); ok {
-			
-			channels := gl.internal_format_channel_cnt(desc.format);
-			tex_type := gl.internal_format_to_texture_type(desc.format);
-			TYPE :: gl.odin_type_from_upload_format_channelless(desc.format);
-			
-			if channels == 1 {
-				gl.clear_texture_3D(id, [1]f32{cc.x}, tex_type, loc);
-			}
-			else if channels == 2 {
-				gl.clear_texture_3D(id, cc.xy, tex_type, loc);
-			}
-			else if channels == 3 {
-				gl.clear_texture_3D(id, cc.xyz, tex_type, loc);
-			}
-			else if channels == 4 {
-				gl.clear_texture_3D(id, cc.xyzw, tex_type, loc);
-			}
-			else {
-				panic("!?!?");
-			}
+		if cc, ok := clear_color.([4]f64); ok {		
+			gl.clear_texture_3D(id, cc, loc);
 		}
 	}
 	else {

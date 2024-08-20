@@ -608,7 +608,7 @@ Pixel_format_internal :: enum i32 {
 	RGB16 = gl.RGB16,
 	RGBA16 = gl.RGBA16,
 	
-	//These don't exists, they are eqvivilent to ****32_float (see below)
+	//These don't exists, use ****32_float instead (see below)
 	//R32 = gl.R32,		//dont exists
 	//RG32 = gl.RG32,		//dont exists
 	//RGB32 = gl.RGB32,	//dont exists
@@ -814,6 +814,32 @@ internal_format_gl_channel_format :: proc (f : Pixel_format_internal) -> (gl_cha
 }
 
 @(require_results)
+is_internal_format_float :: proc (f : Pixel_format_internal) -> bool {
+
+	#partial switch f {
+		case .R16_float, .RG16_float, .RGB16_float, .RGBA16_float, .R32_float, .RG32_float, .RGB32_float, .RGBA32_float:
+			return true;
+		case:
+			return false;
+	}
+	
+	unreachable();
+}
+
+@(require_results)
+is_internal_format_compressed :: proc (f : Pixel_format_internal) -> bool {
+
+	#partial switch f {
+		case .compressed_R8, .compressed_RG8, .compressed_RGB8, .compressed_RGBA8:
+			return true;
+		case:
+			return false;
+	}
+	
+	unreachable();
+}
+
+@(require_results)
 upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) {
 	
 	switch f {
@@ -915,152 +941,267 @@ upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes
 }
 
 @(require_results)
-upload_format_from_odin_type :: proc ($N : int, $T : typeid) -> (upload_format : Pixel_format_upload) {
+upload_format_from_internal_format :: proc (f : Pixel_format_internal)  -> (upload_format : Pixel_format_upload){
 	
-	when N == 1 {
-		when T == i8 {
+	switch f {
+		case .invalid:
+			panic("invalid format");
+		case .RGB4:
+			return .RGB8;
+		case .RGBA4:
+			return .RGBA8;
+		case .R8:
+			return .R8;
+		case .RG8:
+			return .RG8;
+		case .RGB8:
+			return .RGB8;
+		case .RGBA8:
+			return .RGBA8;
+		case .R16:
+			return .R16;
+		case .RG16:
+			return .RG16;
+		case .RGB16:
+			return .RGB16;
+		case .RGBA16:
+			return .RGBA16;
+		case .compressed_R8:
+			return .R8;
+		case .compressed_RG8:
+			return .RG8;
+		case .compressed_RGB8:
+			return .RGB8;
+		case .compressed_RGBA8:
+			return .RGBA8;
+		case .S_RGB8:
+			return .RGB8;
+		case .S_RGBA8:
+			return .RGBA8;
+		case .RGB5_A1:
+			return .RGBA8;
+		case .depth_component16:
+			return .R32_float;
+		case .depth_component24:
+			return .R32_float;
+		case .depth_component32:
+			return .R32_float;
+		case .R8_int:
+			return .R8_int;
+		case .RG8_int:
+			return .RG8_int;
+		case .RGB8_int:
+			return .RGB8_int;
+		case .RGBA8_int:
+			return .RGBA8_int;
+		case .R16_int:
+			return .R16_int;
+		case .RG16_int:
+			return .RG16_int;
+		case .RGB16_int:
+			return .RGB16_int;
+		case .RGBA16_int:
+			return .RGBA16_int;
+		case .R32_int:
+			return .R32_int;
+		case .RG32_int:
+			return .RG32_int;
+		case .RGB32_int:
+			return .RGB32_int;
+		case .RGBA32_int:
+			return .RGBA32_int;
+		case .R8_uint:
+			return .R8_uint;
+		case .RG8_uint:
+			return .RG8_uint;
+		case .RGB8_uint:
+			return .RGB8_uint;
+		case .RGBA8_uint:
+			return .RGBA8_uint;
+		case .R16_uint:
+			return .R16_uint;
+		case .RG16_uint:
+			return .RG16_uint;
+		case .RGB16_uint:
+			return .RGB16_uint;
+		case .RGBA16_uint:
+			return .RGBA16_uint;
+		case .R32_uint:
+			return .R32_uint;
+		case .RG32_uint:
+			return .RG32_uint;
+		case .RGB32_uint:
+			return .RGB32_uint;
+		case .RGBA32_uint:
+			return .RGBA32_uint;
+		case .R16_float:
+			return .R32_float;
+		case .RG16_float:
+			return .RG32_float;
+		case .RGB16_float:
+			return .RGB32_float;
+		case .RGBA16_float:
+			return .RGBA32_float;
+		case .R32_float:
+			return .R32_float;
+		case .RG32_float:
+			return .RG32_float;
+		case .RGB32_float:
+			return .RGB32_float;
+		case .RGBA32_float:
+			return .RGBA32_float;
+	}
+
+	unreachable();
+}
+
+@(require_results)
+upload_format_from_odin_type :: proc (N : int, T : typeid) -> (upload_format : Pixel_format_upload) {
+	
+	if N == 1 {
+		if T == i8 {
 			upload_format = .R8_int;
 		}
-		else when T == u8 {
+		else if T == u8 {
 			upload_format = .R8_uint;
 		}
-		else when T == i16 {
+		else if T == i16 {
 			upload_format = .R16_int;
 		}
-		else when T == u16 {
+		else if T == u16 {
 			upload_format = .R16_uint;
 		}
-		else when T == i32 {
+		else if T == i32 {
 			upload_format = .R32_int;
 		}
-		else when T == u32 {
+		else if T == u32 {
 			upload_format = .R32_uint;
 		}
-		else when T == f32 {
+		else if T == f32 {
 			upload_format = .R32_float;
 		}
 		else {
-			#panic("Unsupported type");
+			panic("Unsupported type");
 		}
 	}
-	else when N == 2 {
-		when T == i8 {
+	else if N == 2 {
+		if T == i8 {
 			upload_format = .RG8_int;
 		}
-		else when T == u8 {
+		else if T == u8 {
 			upload_format = .RG8_uint;
 		}
-		else when T == i16 {
+		else if T == i16 {
 			upload_format = .RG16_int;
 		}
-		else when T == u16 {
+		else if T == u16 {
 			upload_format = .RG16_uint;
 		}
-		else when T == i32 {
+		else if T == i32 {
 			upload_format = .RG32_int;
 		}
-		else when T == u32 {
+		else if T == u32 {
 			upload_format = .RG32_uint;
 		}
-		else when T == f32 {
+		else if T == f32 {
 			upload_format = .RG32_float;
 		}
 		else {
-			#panic("Unsupported type");
+			panic("Unsupported type");
 		}
 	}
-	else when N == 3 {
-		when T == i8 {
+	else if N == 3 {
+		if T == i8 {
 			upload_format = .RGB8_int;
 		}
-		else when T == u8 {
+		else if T == u8 {
 			upload_format = .RGB8_uint;
 		}
-		else when T == i16 {
+		else if T == i16 {
 			upload_format = .RGB16_int;
 		}
-		else when T == u16 {
+		else if T == u16 {
 			upload_format = .RGB16_uint;
 		}
-		else when T == i32 {
+		else if T == i32 {
 			upload_format = .RGB32_int;
 		}
-		else when T == u32 {
+		else if T == u32 {
 			upload_format = .RGB32_uint;
 		}
-		else when T == f32 {
+		else if T == f32 {
 			upload_format = .RGB32_float;
 		}
 		else {
-			#panic("Unsupported type");
+			panic("Unsupported type");
 		}
 	}
-	else when N == 4 {
-		when T == i8 {
+	else if N == 4 {
+		if T == i8 {
 			upload_format = .RGBA8_int;
 		}
-		else when T == u8 {
+		else if T == u8 {
 			upload_format = .RGBA8_uint;
 		}
-		else when T == i16 {
+		else if T == i16 {
 			upload_format = .RGBA16_int;
 		}
-		else when T == u16 {
+		else if T == u16 {
 			upload_format = .RGBA16_uint;
 		}
-		else when T == i32 {
+		else if T == i32 {
 			upload_format = .RGBA32_int;
 		}
-		else when T == u32 {
+		else if T == u32 {
 			upload_format = .RGBA32_uint;
 		}
-		else when T == f32 {
+		else if T == f32 {
 			upload_format = .RGBA32_float;
 		}
 		else {
-			#panic("Unsupported type");
+			panic("Unsupported type");
 		}
 	}
 	else {
-		#panic("Unsupported type");
+		panic("Unsupported type");
 	}
 	
 	return;
 }
 
 @(require_results)
-gl_type_from_odin_type :: proc ($T : typeid) -> (t : gl.GLenum) {
+gl_type_from_odin_type :: proc (T : typeid) -> (t : gl.GLenum) {
 	
-	when T == i8 {
+	if T == i8 {
 		t = .BYTE;
 	}
-	else when T == u8 {
+	else if T == u8 {
 		t = .UNSIGNED_BYTE;
 	}
-	else when T == i16 {
+	else if T == i16 {
 		t = .SHORT;
 	}
-	else when T == u16 {
+	else if T == u16 {
 		t = .UNSIGNED_SHORT;
 	}
-	else when T == i32 {
+	else if T == i32 {
 		t = .INT;
 	}
-	else when T == u32 {
+	else if T == u32 {
 		t = .UNSIGNED_INT;
 	}
-	else when T == f32 {
+	else if T == f32 {
 		t = .FLOAT;
 	}
 	else {
-		#panic("Unsupported type");
+		panic("Unsupported type");
 	}
 	
 	return;
 }
 
 @(require_results)
-odin_type_from_upload_format :: proc($f : Pixel_format_upload) -> (T : typeid) {
+odin_type_from_upload_format :: proc(f : Pixel_format_upload) -> (T : typeid) {
 	
 	switch f {
 		case .no_upload:
@@ -1153,7 +1294,7 @@ odin_type_from_upload_format :: proc($f : Pixel_format_upload) -> (T : typeid) {
 }
 
 @(require_results)
-odin_type_from_upload_format_channelless :: proc($f : Pixel_format_upload) -> (T : typeid) {
+odin_type_from_upload_format_channelless :: proc(f : Pixel_format_upload) -> (T : typeid) {
 	
 	switch f {
 		case .no_upload:
@@ -1183,6 +1324,54 @@ odin_type_from_upload_format_channelless :: proc($f : Pixel_format_upload) -> (T
 	}
 	
 	unreachable();
+}
+
+@(require_results)
+convert_color_to_upload_format :: proc (val : [4]f64, f : Pixel_format_upload) -> (data : [4]rawptr, len : int, to_free : rawptr) {
+	
+	t := upload_format_gl_type(f);
+	
+	convert :: proc(val : [4]f64, $T : typeid) -> (data : [4]rawptr, len : int, to_free : rawptr) {
+		res := new([4]T);
+		len = size_of(T);
+		
+		res^[0] = cast(T)(val.x * cast(f64)max(T));
+		res^[1] = cast(T)(val.y * cast(f64)max(T));
+		res^[2] = cast(T)(val.z * cast(f64)max(T));
+		res^[3] = cast(T)(val.w * cast(f64)max(T));
+		
+		to_free = res;
+		data = {&res.x, &res.y, &res.z, &res.w};
+		return;
+	}
+	
+	#partial switch t {
+		case .UNSIGNED_BYTE:
+			data, len, to_free = convert(val, u8);
+		case .BYTE:
+			data, len, to_free = convert(val, i8);
+		case .UNSIGNED_SHORT:
+			data, len, to_free = convert(val, u16);
+		case .SHORT:
+			data, len, to_free = convert(val, i16);
+		case .UNSIGNED_INT:
+			data, len, to_free = convert(val, u32);
+		case .INT:
+			data, len, to_free = convert(val, i32);
+		case .FLOAT: //Keep the float range
+			res := new([4]f32);
+			len = size_of(f32);
+			res^[0] = cast(f32)(val.x);
+			res^[1] = cast(f32)(val.y);
+			res^[2] = cast(f32)(val.z);
+			res^[3] = cast(f32)(val.w);
+			to_free = res;
+			data = {&res.x, &res.y, &res.z, &res.w};
+		case:
+			panic("invalid format");
+	}
+	
+	return;
 }
 
 Wrapmode :: enum i32 {
@@ -3715,7 +3904,6 @@ clear_texture_1D :: proc (tex : Tex1d_id, clear_color : [$N]$T, format : Pixel_f
 }
 
 //Clear mipmap level 0 of a texture
-//TODO this does not support GL_DEPTH_COMPONENT, GL_STENCIL_INDEX, or GL_DEPTH_STENCIL textures, see https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearTexImage.xhtml
 clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : Texture_type, loc := #caller_location) {
 	//assert(cpu_state.bound_texture[cpu_state.texture_slot] == 0, "There cannot be a bound texture, while clearing a texture", loc);
 	format : Pixel_format_internal;
@@ -3797,7 +3985,7 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : T
 }
 
 //TODO move down to 3d stuff
-clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [$N]$T, texture_type : Texture_type, loc := #caller_location) {
+clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [4]f64, loc := #caller_location) {
 	//assert(cpu_state.bound_texture[cpu_state.texture_slot] == 0, "There cannot be a bound texture, while clearing a texture", loc);
 	format : Pixel_format_internal;
 	
@@ -3809,44 +3997,24 @@ clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [$N]$T, texture_type : T
 		unbind_texture3D();
 	}
 	
-	assert(N == internal_format_channel_cnt(format), "The clear_color does not have the same amount of channels as the format", loc = loc);
+	if !is_internal_format_float(format) {
+		assert(clear_color.x >= 0 && clear_color.x <= 1, "clear_color out of range, x range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.y >= 0 && clear_color.y <= 1, "clear_color out of range, y range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.z >= 0 && clear_color.z <= 1, "clear_color out of range, z range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.w >= 0 && clear_color.w <= 1, "clear_color out of range, w range is 0 to 1 for non-float formats", loc);
+	}
+	
+	channels := internal_format_channel_cnt(format);
+	texture_type := internal_format_to_texture_type(format);
+	
+	if is_internal_format_compressed(format) {
+		panic("TODO, this is not legal, maybe use fallback, see : https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearTexImage.xhtml");
+	}
 	
 	if cpu_state.gl_version >= .opengl_4_4 {
 		clear_color := clear_color;
-		t : gl.GLenum = gl_type_from_odin_type(T);
-		
-		upload_format : gl.GLenum;
-		
-		when N == 1 {
-			if texture_type == .color {
-				upload_format = .RED;
-			}
-			else if texture_type == .depth {
-				upload_format = .DEPTH_COMPONENT;
-			}
-			else if texture_type == .stencil_index {
-				upload_format = .STENCIL_INDEX;
-			}
-			else if texture_type == .stencil_depth {
-				upload_format = .DEPTH_STENCIL;
-			}
-			else {
-				panic("Unimplemented");
-			}
-		}
-		else when N == 2 {
-			upload_format = .RG;
-		}
-		else when N == 3 {
-			upload_format = .RGB;
-		}
-		else when N == 4 {
-			upload_format = .RGBA;
-		}
-		else {
-			#panic("Unsupported type");
-		}
-		
+		t : gl.GLenum = upload_format_gl_type(upload_format_from_internal_format(format));
+		upload_format : gl.GLenum = internal_format_gl_channel_format(format);
 		gl.ClearTexImage(auto_cast tex, 0, upload_format, t, &clear_color[0]);
 	}
 	else {
@@ -3863,16 +4031,29 @@ clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [$N]$T, texture_type : T
 			unbind_texture3D();
 		}
 		
-		upload_format := upload_format_from_odin_type(N, T);
+		upload_format := upload_format_from_internal_format(format);
+		
+		upload_channel_count := upload_format_channel_cnt(upload_format);
+		upload_component_size := upload_format_component_size(upload_format);
 		
 		assert(width != 0, "width is zero, internal error");
 		assert(height != 0, "height is zero, internal error");
 		assert(depth != 0, "depth is zero, internal error");
-		pixels := make([][N]T, width * height * depth);
+		
+		pixels := make([]u8, upload_channel_count * upload_component_size * cast(int)width * cast(int)height * cast(int)depth);
 		defer delete(pixels);
 		
-		for &p in pixels {
-			p = clear_color;
+		converted_color, color_len, to_free := convert_color_to_upload_format(clear_color, upload_format);
+		defer free(to_free);
+		
+		assert(color_len == upload_component_size, "Internal error: color_len and upload_component_size does not match");
+		
+		offset : int = 0;
+		for i : int = 0; i < cast(int)width * cast(int)height * cast(int)depth; i += 1 {
+			for c in 0..<upload_channel_count {
+				mem.copy(&pixels[offset], converted_color[c], upload_component_size);
+				offset += upload_component_size;
+			}
 		}
 		
 		assert(pixels != nil, "fallback pixels are nil, internal error");
