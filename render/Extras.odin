@@ -13,7 +13,7 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 	if state.overlay_init == false {
 		//s, ok := load_shader_from_path("my_shader.glsl"); assert(ok == nil);
 		state.shapes_pipeline = pipeline_make(get_default_shader(), .blend, true, true, .fill, .no_cull);
-		state.overlay_pipeline = pipeline_make(get_default_shader(), .blend, true, true, .fill, .no_cull);
+		state.overlay_pipeline = pipeline_make(get_default_shader(), .blend, false, false, .fill, .no_cull);
 		state.arrow_fbo = frame_buffer_make_textures(1, texture_size.x, texture_size.y, .RGBA8, .depth_component16, false, .linear);
 		state.overlay_init = true;
 	}

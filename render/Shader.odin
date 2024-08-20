@@ -150,9 +150,9 @@ Uniform_odin_type :: union {
 }
 
 Texture_odin_type :: union {
-	//Texture1D,
+	Texture1D,
 	Texture2D,
-	//Texture3D,
+	Texture3D,
 	//CubeMap,
 	//Texture2DArray,
 }
@@ -276,8 +276,12 @@ set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc 
 	switch v in value {
 		case nil:
 			gl.active_bind_texture2D(0, cast(i32)location);
+		case Texture1D:
+			gl.active_bind_texture1D(v.id, cast(i32)location);
 		case Texture2D:
 			gl.active_bind_texture2D(v.id, cast(i32)location);
+		case Texture3D:
+			gl.active_bind_texture3D(v.id, cast(i32)location);
 		case:
 			panic("TODO");
 	}

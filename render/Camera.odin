@@ -9,7 +9,7 @@ import linalg "core:math/linalg"
 import glsl "core:math/linalg/glsl"
 
 // Camera projection
-CameraProjection :: enum {
+CameraProjection :: enum u8 {
 	perspective,				// Perspective projection
 	orthographic,				// Orthographic projection
 }
@@ -40,6 +40,71 @@ Camera2D :: struct {
 Camera :: union {
 	Camera2D,
 	Camera3D,
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////
+
+//Z space is -1 to 1
+camera_get_pixel_space :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
+
+	w, h : f32;
+	
+	switch t in target {
+		case nil:
+			panic("!?!?");
+		case ^Frame_buffer:
+			w, h = cast(f32)t.width, cast(f32)t.height;
+		case ^Window:
+			w, h = cast(f32)t.width, cast(f32)t.height;
+	}
+	
+	aspect := w / h;
+
+	cam = {
+		position 		= {w/2, h/2},
+		target_relative = {0,0},
+		rotation		= 0,
+		zoom			= 2/(h),
+
+		near			= -1,
+		far 			= 1,
+	}
+
+	return cam;
+}
+
+///////////////////////////////////////////
+
+camera_forward :: proc(cam : Camera3D) -> [3]f32 {
+	res := linalg.normalize(cam.target - cam.position);
+	return res;
+} 
+
+camera_forward_horizontal :: proc(cam : Camera3D) -> [3]f32 {
+	forward := camera_forward(cam);
+	res := linalg.normalize([3]f32{forward.x, 0, forward.z});
+	return res;
+}
+
+camera_right :: proc(cam : Camera3D) -> [3]f32 {
+	forward := camera_forward(cam);
+	return linalg.normalize(linalg.cross(cam.up, forward));
+}
+
+camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {
+	using linalg;
+
+	yaw := -math.to_radians(yaw);
+	pitch := -math.to_radians(pitch);
+
+	direction : [3]f32;
+
+	direction.x = cos(yaw) * cos(pitch);
+	direction.y = sin(pitch);
+	direction.z = sin(yaw) * cos(pitch);
+
+	cam.target = direction + cam.position;
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -117,73 +182,3 @@ camera_bind :: proc (camera : Camera, loc := #caller_location) {
 		panic("??");
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////////////
-
-//Z space is -1 to 1
-camera_get_pixel_space :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
-
-	w, h : f32;
-	
-	switch t in target {
-		case nil:
-			panic("!?!?");
-		case ^Frame_buffer:
-			w, h = cast(f32)t.width, cast(f32)t.height;
-		case ^Window:
-			w, h = cast(f32)t.width, cast(f32)t.height;
-	}
-	
-	aspect := w / h;
-
-	cam = {
-		position 		= {w/2, h/2},
-		target_relative = {0,0},
-		rotation		= 0,
-		zoom			= 2/(h),
-
-		near			= -1,
-		far 			= 1,
-	}
-
-	return cam;
-}
-
-///////////////////////////////////////////
-
-camera_forward :: proc(cam : Camera3D) -> [3]f32 {
-	res := linalg.normalize(cam.target - cam.position);
-	return res;
-} 
-
-camera_forward_horizontal :: proc(cam : Camera3D) -> [3]f32 {
-	forward := camera_forward(cam);
-	res := linalg.normalize([3]f32{forward.x, 0, forward.z});
-	return res;
-}
-
-camera_right :: proc(cam : Camera3D) -> [3]f32 {
-	forward := camera_forward(cam);
-	return linalg.normalize(linalg.cross(cam.up, forward));
-}
-
-camera_move :: proc(cam : ^Camera3D, movement : [3]f32) {
-	cam.position += movement;
-	cam.target += movement;
-}
-
-camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {
-	using linalg;
-
-	yaw := -math.to_radians(yaw);
-	pitch := -math.to_radians(pitch);
-
-	direction : [3]f32;
-
-	direction.x = cos(yaw) * cos(pitch);
-	direction.y = sin(pitch);
-	direction.z = sin(yaw) * cos(pitch);
-
-	cam.target = direction + cam.position;
-}
-

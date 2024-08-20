@@ -44,23 +44,23 @@ make_rect :: proc (parent : Parent, dest : Destination, show : bool = true, tool
 		}
 	}
 
-	return {auto_cast element_make(parent, container, loc)};
+	return auto_cast element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// BUTTON ////////////////////////////////////////////////////////////// 
 
 button_is_hover :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(button.e, Button_info, loc);
+	info, container := element_get(auto_cast button, Button_info, loc);
 	return container.is_hover;
 }
 
 button_is_selected :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(button.e, Button_info, loc);
+	info, container := element_get(auto_cast button, Button_info, loc);
 	return container.is_selected;
 }
 
 button_is_pressed :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(button.e, Button_info, loc);
+	info, container := element_get(auto_cast button, Button_info, loc);
 	return container.is_active;
 }
 
@@ -92,23 +92,23 @@ make_button :: proc (parent : Parent, dest : Destination, text : string, clicked
 		}
 	}
 	
-	return {auto_cast element_make(parent, container, loc)};
+	return auto_cast element_make(parent, container, loc);
 }
 
 /////////////////////////////////////////////////////////////// CHECKBOX /////////////////////////////////////////////////////////////// 
 
 checkbox_is_hover :: proc (checkbox : Checkbox, loc := #caller_location) -> bool {
-	info, container := element_get(checkbox.e, Checkbox_info, loc);
+	info, container := element_get(auto_cast checkbox, Checkbox_info, loc);
 	return container.is_hover;
 }
 
 checkbox_is_selected :: proc (checkbox : Checkbox, loc := #caller_location) -> bool {
-	info, container := element_get(checkbox.e, Checkbox_info, loc);
+	info, container := element_get(auto_cast checkbox, Checkbox_info, loc);
 	return container.is_active;
 }
 
 checkbox_is_checked :: proc (checkbox : Checkbox, loc := #caller_location) -> bool {
-	info, container := element_get(checkbox.e, Checkbox_info, loc);
+	info, container := element_get(auto_cast checkbox, Checkbox_info, loc);
 	return info.checked;
 }
 
@@ -137,7 +137,7 @@ make_checkbox :: proc (parent : Parent, dest : Destination, initial_checked : bo
 		}
 	}
 
-	return {auto_cast element_make(parent, container, loc)};
+	return auto_cast element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// LABEL ////////////////////////////////////////////////////////////// 
@@ -166,7 +166,7 @@ make_label :: proc (parent : Parent, dest : Destination, text : string, show : b
 		}
 	}
 
-	return {auto_cast element_make(parent, container, loc)};
+	return auto_cast element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// SLIDER ////////////////////////////////////////////////////////////// 
@@ -198,7 +198,7 @@ make_slider :: proc (parent : Parent, dest : Destination, init_value, min_value,
 		}
 	}
 
-	return {auto_cast element_make(parent, container, loc)};
+	return auto_cast element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// INT SLIDER ////////////////////////////////////////////////////////////// 
@@ -230,7 +230,7 @@ make_int_slider :: proc (parent : Parent, dest : Destination, init_value, min_va
 		}
 	}
 
-	return {auto_cast element_make(parent, container, loc)};
+	return auto_cast element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// TEXT FEILD ////////////////////////////////////////////////////////////// 
@@ -268,7 +268,7 @@ make_text_field :: proc (parent : Parent, dest : Destination, init_text : string
 		}
 	}
 
-	return {auto_cast element_make(parent, container, loc)};
+	return auto_cast element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// PANEL ////////////////////////////////////////////////////////////// 
@@ -297,7 +297,7 @@ make_panel :: proc (parent : Parent, dest : Destination, show : bool = true, too
 		}
 	}
 
-	return {auto_cast element_make(parent, container, loc)};
+	return auto_cast element_make(parent, container, loc);
 }
 
 

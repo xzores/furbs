@@ -70,11 +70,15 @@ Uniform_type :: enum u64 {
 	sampler_2d		= gl.SAMPLER_2D,
 	sampler_3d		= gl.SAMPLER_3D,
 	sampler_cube	= gl.SAMPLER_CUBE,
-	isampler_1d	= gl.INT_SAMPLER_1D,
-	isampler_2d	= gl.INT_SAMPLER_2D,
-	isampler_3d	= gl.INT_SAMPLER_3D,
+	isampler_1d		= gl.INT_SAMPLER_1D,
+	isampler_2d		= gl.INT_SAMPLER_2D,
+	isampler_3d		= gl.INT_SAMPLER_3D,
 	isampler_cube	= gl.INT_SAMPLER_CUBE,
 	isampler_buffer = gl.INT_SAMPLER_BUFFER,
+	//...
+	usampler_1d		= gl.UNSIGNED_INT_SAMPLER_1D,
+	usampler_2d		= gl.UNSIGNED_INT_SAMPLER_2D,
+	usampler_3d		= gl.UNSIGNED_INT_SAMPLER_3D,
 	//TODO should we support more? : https://registry.khronos.org/OpenGL-Refpages/gl4/html/glGetActiveUniform.xhtml
 }
 
@@ -589,7 +593,7 @@ Resource :: struct {
 // Pixel formats
 Pixel_format_internal :: enum i32 {
 	invalid = 0,
-
+	
 	//the ussual float formats
 	RGB4 = gl.RGB4,
 	RGBA4 = gl.RGBA4,
@@ -598,11 +602,17 @@ Pixel_format_internal :: enum i32 {
 	RG8 = gl.RG8,
 	RGB8 = gl.RGB8,
 	RGBA8 = gl.RGBA8,
-
+	
 	R16 = gl.R16,
 	RG16 = gl.RG16,
 	RGB16 = gl.RGB16,
 	RGBA16 = gl.RGBA16,
+	
+	//These don't exists, they are eqvivilent to ****32_float (see below)
+	//R32 = gl.R32,		//dont exists
+	//RG32 = gl.RG32,		//dont exists
+	//RGB32 = gl.RGB32,	//dont exists
+	//RGBA32 = gl.RGBA32,	//dont exists
 	
 	//These are hints and will fallback to R8, RG8, RGB8, RGBA8 (TODO)
 	compressed_R8 = gl.COMPRESSED_RED,
@@ -614,7 +624,7 @@ Pixel_format_internal :: enum i32 {
 	S_RGB8 = gl.SRGB8,
 	S_RGBA8 = gl.SRGB8_ALPHA8,
 
-	RGB5_A1 = gl.RGB5_A1, //float format, use when you need an on off alpha.
+	RGB5_A1 = gl.RGB5_A1, //float format, use when you need an on/off alpha.
 	
 	//Depth formats (only used with framebuffers)
 	depth_component16 = gl.DEPTH_COMPONENT16,
@@ -667,7 +677,8 @@ Pixel_format_internal :: enum i32 {
 
 Pixel_format_upload :: enum i32 {
 	no_upload,
-
+	
+	//When uploading a 0-x range as usinged ints to an internal float format.
 	R8,
 	RG8,
 	RGB8,
@@ -684,10 +695,42 @@ Pixel_format_upload :: enum i32 {
 	RGBA32,
 	
 	//No half floats only full floats
+	//Use then the upload data is in float format
 	R32_float,
 	RG32_float,
 	RGB32_float,
 	RGBA32_float, 
+	
+	//When uploading int and uint's to the internal uint format
+	R8_int,
+	RG8_int,
+	RGB8_int,
+	RGBA8_int,
+
+	R16_int,
+	RG16_int,
+	RGB16_int,
+	RGBA16_int,
+
+	R32_int,
+	RG32_int,
+	RGB32_int,
+	RGBA32_int,
+	
+	R8_uint,
+	RG8_uint,
+	RGB8_uint,
+	RGBA8_uint,
+
+	R16_uint,
+	RG16_uint,
+	RGB16_uint,
+	RGBA16_uint,
+
+	R32_uint,
+	RG32_uint,
+	RGB32_uint,
+	RGBA32_uint,
 }
 
 Texture_type :: enum {
@@ -733,7 +776,38 @@ internal_format_channel_cnt :: proc (format : Pixel_format_internal, loc := #cal
 		case .invalid:
 			panic("Invalid format", loc);
 		case:
-			panic("Invalid format", loc);
+			panic("Unimplemented format", loc);
+	}
+
+	unreachable();
+}
+
+@(require_results)
+internal_format_gl_channel_format :: proc (f : Pixel_format_internal) -> (gl_channel_format : gl.GLenum) {
+	
+	switch f {
+		case .depth_component16, .depth_component24, .depth_component32:
+			return .DEPTH_COMPONENT;
+		case .R8, .R16, .compressed_R8, .R32_float, .R16_float:
+			return .RED;
+		case .RG8, .RG16, .compressed_RG8, .RG32_float, .RG16_float:
+			return .RG;
+		case .RGB8, .RGB16, .compressed_RGB8, .RGB32_float, .RGB4, .S_RGB8, .RGB16_float:
+			return .RGB;
+		case .RGBA8, .RGBA16, .compressed_RGBA8, .RGBA32_float, .RGBA4, .S_RGBA8, .RGB5_A1, .RGBA16_float:
+			return .RGBA;
+		case .R8_int, .R16_int, .R32_int, .R8_uint, .R16_uint, .R32_uint:
+			return .RED_INTEGER;
+		case .RG8_int, .RG16_int, .RG32_int, .RG8_uint, .RG16_uint, .RG32_uint:
+			return .RG_INTEGER;
+		case .RGB8_int, .RGB16_int, .RGB32_int, .RGB8_uint, .RGB16_uint, .RGB32_uint:
+			return .RGB_INTEGER;
+		case .RGBA8_int, .RGBA16_int, .RGBA32_int, .RGBA8_uint, .RGBA16_uint, .RGBA32_uint:
+			return .RGBA_INTEGER;
+		case .invalid:
+			return nil;
+		case:
+			panic("Invalid format");
 	}
 
 	unreachable();
@@ -743,13 +817,13 @@ internal_format_channel_cnt :: proc (format : Pixel_format_internal, loc := #cal
 upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) {
 	
 	switch f {
-		case .R8, .R16, .R32, .R32_float:
+		case .R8, .R16, .R32, .R32_float, .R8_int, .R16_int, .R32_int, .R8_uint, .R16_uint, .R32_uint:
 			return 1;
-		case .RG8, .RG16, .RG32, .RG32_float:
+		case .RG8, .RG16, .RG32, .RG32_float, .RG8_int, .RG16_int, .RG32_int, .RG8_uint, .RG16_uint, .RG32_uint:
 			return 2;
-		case .RGB8, .RGB16, .RGB32, .RGB32_float:
+		case .RGB8, .RGB16, .RGB32, .RGB32_float, .RGB8_int, .RGB16_int, .RGB32_int, .RGB8_uint, .RGB16_uint, .RGB32_uint:
 			return 3;
-		case .RGBA8, .RGBA16, .RGBA32, .RGBA32_float:
+		case .RGBA8, .RGBA16, .RGBA32, .RGBA32_float, .RGBA8_int, .RGBA16_int, .RGBA32_int, .RGBA8_uint, .RGBA16_uint, .RGBA32_uint:
 			return 4;
 		case .no_upload:
 			return 0;
@@ -761,7 +835,7 @@ upload_format_channel_cnt :: proc (f : Pixel_format_upload) -> (channels : int) 
 }
 
 @(require_results)
-upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components : gl.GLenum) {
+upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (gl_channel_format : gl.GLenum) {
 	
 	switch f {
 		case .R8, .R16, .R32, .R32_float:
@@ -772,6 +846,14 @@ upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components
 			return .RGB;
 		case .RGBA8, .RGBA16, .RGBA32, .RGBA32_float:
 			return .RGBA;
+		case .R8_int, .R16_int, .R32_int, .R8_uint, .R16_uint, .R32_uint:
+			return .RED_INTEGER;
+		case .RG8_int, .RG16_int, .RG32_int, .RG8_uint, .RG16_uint, .RG32_uint:
+			return .RG_INTEGER;
+		case .RGB8_int, .RGB16_int, .RGB32_int, .RGB8_uint, .RGB16_uint, .RGB32_uint:
+			return .RGB_INTEGER;
+		case .RGBA8_int, .RGBA16_int, .RGBA32_int, .RGBA8_uint, .RGBA16_uint, .RGBA32_uint:
+			return .RGBA_INTEGER;
 		case .no_upload:
 			return nil;
 		case:
@@ -785,14 +867,24 @@ upload_format_gl_channel_format :: proc (f : Pixel_format_upload) -> (components
 upload_format_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 
 	switch f {
-		case .R8, .RG8, .RGB8, .RGBA8:
+		case .R8, .RG8, .RGB8, .RGBA8, .R8_uint, .RG8_uint, .RGB8_uint, .RGBA8_uint:
 			return .UNSIGNED_BYTE;
-		case .R16, .RG16, .RGB16, .RGBA16:
+		case .R8_int, .RG8_int, .RGB8_int, .RGBA8_int:
+			return .BYTE;
+			
+		case .R16, .RG16, .RGB16, .RGBA16, .R16_uint, .RG16_uint, .RGB16_uint, .RGBA16_uint:
 			return .UNSIGNED_SHORT;
-		case .R32, .RG32, .RGB32, .RGBA32:
+		case .R16_int, .RG16_int, .RGB16_int, .RGBA16_int:
+			return .SHORT;
+			
+		case .R32, .RG32, .RGB32, .RGBA32, .R32_uint, .RG32_uint, .RGB32_uint, .RGBA32_uint:
 			return .UNSIGNED_INT;
+		case .R32_int, .RG32_int, .RGB32_int, .RGBA32_int:
+			return .INT;
+			
 		case .R32_float, .RG32_float, .RGB32_float, .RGBA32_float:
 			return .FLOAT;
+			
 		case .no_upload:
 			return nil;
 		case:
@@ -807,11 +899,11 @@ upload_format_gl_type :: proc (f : Pixel_format_upload) -> (size : gl.GLenum) {
 upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes_per_component : int) {
 
 	switch f {
-		case .R8, .RG8, .RGB8, .RGBA8:
+		case .R8, .RG8, .RGB8, .RGBA8, .R8_int, .RG8_int, .RGB8_int, .RGBA8_int, .R8_uint, .RG8_uint, .RGB8_uint, .RGBA8_uint:
 			return 1;
-		case .R16, .RG16, .RGB16, .RGBA16:
+		case .R16, .RG16, .RGB16, .RGBA16, .R16_int, .RG16_int, .RGB16_int, .RGBA16_int, .R16_uint, .RG16_uint, .RGB16_uint, .RGBA16_uint:
 			return 2;
-		case .R32, .RG32, .RGB32, .RGBA32, .R32_float, .RG32_float, .RGB32_float, .RGBA32_float:
+		case .R32, .RG32, .RGB32, .RGBA32, .R32_int, .RG32_int, .RGB32_int, .RGBA32_int, .R32_uint, .RG32_uint, .RGB32_uint, .RGBA32_uint, .R32_float, .RG32_float, .RGB32_float, .RGBA32_float:
 			return 4;
 		case .no_upload:
 			return 0;
@@ -819,6 +911,277 @@ upload_format_component_size :: proc (f : Pixel_format_upload) -> (size_in_bytes
 			panic("Invalid format");
 	}
 
+	unreachable();
+}
+
+@(require_results)
+upload_format_from_odin_type :: proc ($N : int, $T : typeid) -> (upload_format : Pixel_format_upload) {
+	
+	when N == 1 {
+		when T == i8 {
+			upload_format = .R8_int;
+		}
+		else when T == u8 {
+			upload_format = .R8_uint;
+		}
+		else when T == i16 {
+			upload_format = .R16_int;
+		}
+		else when T == u16 {
+			upload_format = .R16_uint;
+		}
+		else when T == i32 {
+			upload_format = .R32_int;
+		}
+		else when T == u32 {
+			upload_format = .R32_uint;
+		}
+		else when T == f32 {
+			upload_format = .R32_float;
+		}
+		else {
+			#panic("Unsupported type");
+		}
+	}
+	else when N == 2 {
+		when T == i8 {
+			upload_format = .RG8_int;
+		}
+		else when T == u8 {
+			upload_format = .RG8_uint;
+		}
+		else when T == i16 {
+			upload_format = .RG16_int;
+		}
+		else when T == u16 {
+			upload_format = .RG16_uint;
+		}
+		else when T == i32 {
+			upload_format = .RG32_int;
+		}
+		else when T == u32 {
+			upload_format = .RG32_uint;
+		}
+		else when T == f32 {
+			upload_format = .RG32_float;
+		}
+		else {
+			#panic("Unsupported type");
+		}
+	}
+	else when N == 3 {
+		when T == i8 {
+			upload_format = .RGB8_int;
+		}
+		else when T == u8 {
+			upload_format = .RGB8_uint;
+		}
+		else when T == i16 {
+			upload_format = .RGB16_int;
+		}
+		else when T == u16 {
+			upload_format = .RGB16_uint;
+		}
+		else when T == i32 {
+			upload_format = .RGB32_int;
+		}
+		else when T == u32 {
+			upload_format = .RGB32_uint;
+		}
+		else when T == f32 {
+			upload_format = .RGB32_float;
+		}
+		else {
+			#panic("Unsupported type");
+		}
+	}
+	else when N == 4 {
+		when T == i8 {
+			upload_format = .RGBA8_int;
+		}
+		else when T == u8 {
+			upload_format = .RGBA8_uint;
+		}
+		else when T == i16 {
+			upload_format = .RGBA16_int;
+		}
+		else when T == u16 {
+			upload_format = .RGBA16_uint;
+		}
+		else when T == i32 {
+			upload_format = .RGBA32_int;
+		}
+		else when T == u32 {
+			upload_format = .RGBA32_uint;
+		}
+		else when T == f32 {
+			upload_format = .RGBA32_float;
+		}
+		else {
+			#panic("Unsupported type");
+		}
+	}
+	else {
+		#panic("Unsupported type");
+	}
+	
+	return;
+}
+
+@(require_results)
+gl_type_from_odin_type :: proc ($T : typeid) -> (t : gl.GLenum) {
+	
+	when T == i8 {
+		t = .BYTE;
+	}
+	else when T == u8 {
+		t = .UNSIGNED_BYTE;
+	}
+	else when T == i16 {
+		t = .SHORT;
+	}
+	else when T == u16 {
+		t = .UNSIGNED_SHORT;
+	}
+	else when T == i32 {
+		t = .INT;
+	}
+	else when T == u32 {
+		t = .UNSIGNED_INT;
+	}
+	else when T == f32 {
+		t = .FLOAT;
+	}
+	else {
+		#panic("Unsupported type");
+	}
+	
+	return;
+}
+
+@(require_results)
+odin_type_from_upload_format :: proc($f : Pixel_format_upload) -> (T : typeid) {
+	
+	switch f {
+		case .no_upload:
+			panic("invalid format");
+		case .R8:
+			return u8;
+		case .RG8:
+			return [2]u8;
+		case .RGB8:
+			return [3]u8;
+		case .RGBA8:
+			return [4]u8;
+		case .R16:
+			return u16;
+		case .RG16:
+			return [2]u16;
+		case .RGB16:
+			return [3]u16;
+		case .RGBA16:
+			return [4]u16;
+		case .R32:
+			return u32;
+		case .RG32:
+			return [2]u32;
+		case .RGB32:
+			return [3]u32;
+		case .RGBA32:
+			return [4]u32;
+		case .R32_float:
+			return f32;
+		case .RG32_float:
+			return [2]f32;
+		case .RGB32_float:
+			return [3]f32;
+		case .RGBA32_float:
+			return [4]f32;
+		case .R8_int:
+			return i8;
+		case .RG8_int:
+			return [2]i8;
+		case .RGB8_int:
+			return [3]i8;
+		case .RGBA8_int:
+			return [4]i8;
+		case .R16_int:
+			return i16;
+		case .RG16_int:
+			return [2]i16;
+		case .RGB16_int:
+			return [3]i16;
+		case .RGBA16_int:
+			return [4]i16;
+		case .R32_int:
+			return i32;
+		case .RG32_int:
+			return [2]i32;
+		case .RGB32_int:
+			return [3]i32;
+		case .RGBA32_int:
+			return [4]i32;
+		case .R8_uint:
+			return u8;
+		case .RG8_uint:
+			return [2]u8;
+		case .RGB8_uint:
+			return [3]u8;
+		case .RGBA8_uint:
+			return [4]u8;
+		case .R16_uint:
+			return u16;
+		case .RG16_uint:
+			return [2]u16;
+		case .RGB16_uint:
+			return [3]u16;
+		case .RGBA16_uint:
+			return [4]u16;
+		case .R32_uint:
+			return u32;
+		case .RG32_uint:
+			return [2]u32;
+		case .RGB32_uint:
+			return [3]u32;
+		case .RGBA32_uint:
+			return [4]u32;
+		case:
+			panic("invalid");
+	}
+	
+	unreachable();
+}
+
+@(require_results)
+odin_type_from_upload_format_channelless :: proc($f : Pixel_format_upload) -> (T : typeid) {
+	
+	switch f {
+		case .no_upload:
+			panic("invalid format");
+		case .R8, .RG8, .RGB8, .RGBA8:
+			return u8;
+		case .R16, .RG16, .RGB16, .RGBA16:
+			return u16;
+		case .R32, .RG32, .RGB32, .RGBA32:
+			return u32;
+		case .R32_float, .RG32_float, .RGB32_float, .RGBA32_float:
+			return f32;
+		case .R8_int, .RG8_int, .RGB8_int, .RGBA8_int:
+			return i8;
+		case .R16_int, .RG16_int, .RGB16_int, .RGBA16_int:
+			return i16;
+		case .R32_int, .RG32_int, .RGB32_int, .RGBA32_int:
+			return i32;
+		case .R8_uint, .RG8_uint, .RGB8_uint, .RGBA8_uint:
+			return u8;
+		case .R16_uint, .RG16_uint, .RGB16_uint, .RGBA16_uint:
+			return u16;
+		case .R32_uint, .RG32_uint, .RGB32_uint, .RGBA32_uint:
+			return u32;
+		case:
+			panic("invalid");
+	}
+	
 	unreachable();
 }
 
@@ -3012,7 +3375,8 @@ setup_texure_1D :: proc (tex : Tex1d_id, mipmaps : bool, width : gl.GLsizei, for
 	}
 	else {
 		bind_texture1D(tex);
-		gl.TexImage1D(.TEXTURE_1D, 0, auto_cast format, width, 0, .RGBA, .UNSIGNED_BYTE, nil);
+
+		gl.TexImage1D(.TEXTURE_1D, 0, auto_cast format, width, 0, internal_format_gl_channel_format(format), .UNSIGNED_BYTE, nil);
 		unbind_texture1D();
 	}
 }
@@ -3239,7 +3603,8 @@ setup_texture_2D :: proc (tex : Tex2d_id, mipmaps : bool, width, height : gl.GLs
 			case .depth_component16, .depth_component24, .depth_component32:
 				gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, .DEPTH_COMPONENT, .UNSIGNED_BYTE, nil);
 			case:
-				gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, .RGBA, .UNSIGNED_BYTE, nil);
+				//TODO: .RGBA should match format, so for format=.R16, then it should be .R, not RGBA!
+				gl.TexImage2D(.TEXTURE_2D, 0, auto_cast format, width, height, 0, internal_format_gl_channel_format(format), .UNSIGNED_BYTE, nil);
 		}
 		unbind_texture2D();
 	}
@@ -3323,15 +3688,30 @@ active_texture :: proc(slot : i32) {
 	
 	gpu_state.texture_slot = slot;
 
-
 	gl.ActiveTexture(auto_cast (gl.TEXTURE0 + slot));
+}
 
+//activates a texture slot and binds a the texture to that slot.
+active_bind_texture1D :: proc (tex : Tex1d_id, slot : i32) {
+	active_texture(slot);
+	bind_texture1D(tex);
 }
 
 //activates a texture slot and binds a the texture to that slot.
 active_bind_texture2D :: proc (tex : Tex2d_id, slot : i32) {
 	active_texture(slot);
 	bind_texture2D(tex);
+}
+
+//activates a texture slot and binds a the texture to that slot.
+active_bind_texture3D :: proc (tex : Tex3d_id, slot : i32) {
+	active_texture(slot);
+	bind_texture3D(tex);
+}
+
+//TODO move up to 1D stuff
+clear_texture_1D :: proc (tex : Tex1d_id, clear_color : [$N]$T, format : Pixel_format_upload, loc := #caller_location) {
+	panic("TODO");
 }
 
 //Clear mipmap level 0 of a texture
@@ -3352,32 +3732,7 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : T
 	
 	if cpu_state.gl_version >= .opengl_4_4 {
 		clear_color := clear_color;
-		t : gl.GLenum;
-
-		when T == i8 {
-			t = .BYTE;
-		}
-		else when T == u8 {
-			t = .UNSIGNED_BYTE;
-		}
-		else when T == i16 {
-			t = .SHORT;
-		}
-		else when T == u16 {
-			t = .UNSIGNED_SHORT;
-		}
-		else when T == i32 {
-			t = .INT;
-		}
-		else when T == u32 {
-			t = .UNSIGNED_INT;
-		}
-		else when T == f32 {
-			t = .FLOAT;
-		}
-		else {
-			#panic("Unsupported type");
-		}
+		t : gl.GLenum = gl_type_from_odin_type(T);
 		
 		upload_format : gl.GLenum;
 		
@@ -3425,23 +3780,7 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : T
 			unbind_texture2D();
 		}
 		
-		upload_format : Pixel_format_upload;
-		
-		when N == 1 {
-			upload_format = .R32_float;
-		}
-		else when N == 2 {
-			upload_format = .RG32_float;
-		}
-		else when N == 3 {
-			upload_format = .RGB32_float;
-		}
-		else when N == 4 {
-			upload_format = .RGBA32_float;
-		}
-		else {
-			#panic("Unsupported type");
-		}
+		upload_format := upload_format_from_odin_type(N, T);
 		
 		assert(width != 0, "width is zero, internal error");
 		assert(height != 0, "height is zero, internal error");
@@ -3457,14 +3796,88 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : T
 	}
 }
 
-//TODO move up to 1D stuff
-clear_texture_1D :: proc (tex : Tex1d_id, clear_color : [$N]$T, format : Pixel_format_upload, loc := #caller_location) {
-	panic("TODO");
-}
-
 //TODO move down to 3d stuff
-clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [$N]$T, format : Pixel_format_upload, loc := #caller_location) {
-	panic("TODO");
+clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [$N]$T, texture_type : Texture_type, loc := #caller_location) {
+	//assert(cpu_state.bound_texture[cpu_state.texture_slot] == 0, "There cannot be a bound texture, while clearing a texture", loc);
+	format : Pixel_format_internal;
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
+	} else {
+		bind_texture3D(tex); //TODO should we bind for the active texture? we could also always just use texture slot 0, but that might slower.
+		gl.GetTexLevelParameteriv(.TEXTURE_3D, 0, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
+		unbind_texture3D();
+	}
+	
+	assert(N == internal_format_channel_cnt(format), "The clear_color does not have the same amount of channels as the format", loc = loc);
+	
+	if cpu_state.gl_version >= .opengl_4_4 {
+		clear_color := clear_color;
+		t : gl.GLenum = gl_type_from_odin_type(T);
+		
+		upload_format : gl.GLenum;
+		
+		when N == 1 {
+			if texture_type == .color {
+				upload_format = .RED;
+			}
+			else if texture_type == .depth {
+				upload_format = .DEPTH_COMPONENT;
+			}
+			else if texture_type == .stencil_index {
+				upload_format = .STENCIL_INDEX;
+			}
+			else if texture_type == .stencil_depth {
+				upload_format = .DEPTH_STENCIL;
+			}
+			else {
+				panic("Unimplemented");
+			}
+		}
+		else when N == 2 {
+			upload_format = .RG;
+		}
+		else when N == 3 {
+			upload_format = .RGB;
+		}
+		else when N == 4 {
+			upload_format = .RGBA;
+		}
+		else {
+			#panic("Unsupported type");
+		}
+		
+		gl.ClearTexImage(auto_cast tex, 0, upload_format, t, &clear_color[0]);
+	}
+	else {
+		width, height, depth : i32;
+		if cpu_state.gl_version >= .opengl_4_5 {
+			gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_WIDTH, &width);
+			gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_HEIGHT, &height);
+			gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_DEPTH, &depth);
+		} else {
+			bind_texture3D(tex);
+			gl.GetTexLevelParameteriv(.TEXTURE_3D, 0, .TEXTURE_WIDTH, &width);
+			gl.GetTexLevelParameteriv(.TEXTURE_3D, 0, .TEXTURE_HEIGHT, &height);
+			gl.GetTexLevelParameteriv(.TEXTURE_3D, 0, .TEXTURE_DEPTH, &depth);
+			unbind_texture3D();
+		}
+		
+		upload_format := upload_format_from_odin_type(N, T);
+		
+		assert(width != 0, "width is zero, internal error");
+		assert(height != 0, "height is zero, internal error");
+		assert(depth != 0, "depth is zero, internal error");
+		pixels := make([][N]T, width * height * depth);
+		defer delete(pixels);
+		
+		for &p in pixels {
+			p = clear_color;
+		}
+		
+		assert(pixels != nil, "fallback pixels are nil, internal error");
+		write_texure_data_3D(tex, 0, 0, 0, 0, width, height, depth, upload_format, slice.reinterpret([]u8, pixels));
+	}
 }
 
 /* TODO, allow binding many textures at a time
@@ -3593,7 +4006,7 @@ unbind_texture3D  :: proc() {
 
 write_texure_data_3D :: proc (tex : Tex3d_id, level, xoffset, yoffset, zoffset : i32, width, height, depth : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
 	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
-
+	
 	data_ptr : rawptr;
 	
 	if d, ok := data.([]u8); ok {
@@ -3606,7 +4019,7 @@ write_texure_data_3D :: proc (tex : Tex3d_id, level, xoffset, yoffset, zoffset :
 	else {
 		panic("???");
 	}
-
+	
 	if cpu_state.gl_version >= .opengl_4_5 { 
 		gl.TextureSubImage3D(cast(u32)tex, level, xoffset, yoffset, zoffset, width, height, depth, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
 	}
@@ -3637,7 +4050,8 @@ setup_texure_3D :: proc (tex : Tex3d_id, mipmaps : bool, width, height, depth : 
 	}
 	else {
 		bind_texture3D(tex);
-		gl.TexImage3D(.TEXTURE_3D, 0, auto_cast format, width, height, depth, 0, .RGBA, .UNSIGNED_BYTE, nil);
+		//TODO: .RGBA should match format, so for format=.R16, then it should be .R, not RGBA!
+		gl.TexImage3D(.TEXTURE_3D, 0, auto_cast format, width, height, depth, 0, internal_format_gl_channel_format(format), .UNSIGNED_BYTE, nil);
 		unbind_texture3D();
 	}
 }

@@ -94,6 +94,115 @@ end :: proc (state : ^Scene, loc := #caller_location) {
 	bound_scene = nil;
 }
 
+//generic way to change stuff, maybe do something else later...
+get_element_data :: proc (state : ^Scene, handle : Handle, $type_info : typeid, loc := #caller_location) -> type_info {
+	
+	switch h in handle {
+		case Rect:
+			assert(type_info == Rect_info, "type_info does not match the handle", loc);
+			when type_info == Rect_info {
+				v := active_elements[cast(Element)handle.(Rect)].element;
+				r, ok := v.(Rect_info);
+				assert(ok, "the handle type does not match the internal type", loc);
+				return r;
+			}
+		case Button:
+			assert(type_info == Button_info, "type_info does not match the handle", loc);
+			when type_info == Rect_info {
+				v := active_elements[cast(Element)handle.(Button)].element;
+				r, ok := v.(Button_info);
+				assert(ok, "the handle type does not match the internal type", loc);
+				return r;
+			}
+		case Checkbox:
+			assert(type_info == Checkbox_info, "type_info does not match the handle", loc);
+			when type_info == Rect_info {
+				v := active_elements[cast(Element)handle.(Checkbox)].element;
+				r, ok := v.(Checkbox_info);
+				assert(ok, "the handle type does not match the internal type", loc);
+				return r;
+			}
+		case Label:
+			assert(type_info == Label_info, "type_info does not match the handle", loc);
+			when type_info == Label_info {
+				v := active_elements[cast(Element)handle.(Label)].element;
+				r, ok := v.(Label_info);
+				assert(ok, "the handle type does not match the internal type", loc);
+				return r;
+			}
+		case Slider:
+			assert(type_info == Slider_info, "type_info does not match the handle", loc);
+			when type_info == Slider_info {
+				v := active_elements[cast(Element)handle.(Slider)].element;
+				r, ok := v.(Slider_info);
+				assert(ok, "the handle type does not match the internal type", loc);
+				return r;
+			}
+		case Int_slider:
+			assert(type_info == Int_slider, "type_info does not match the handle", loc);
+			when type_info == Int_slider_info {
+				v := active_elements[cast(Element)handle.(Int_slider)].element;
+				r, ok := v.(Int_slider_info);
+				assert(ok, "the handle type does not match the internal type", loc);
+				return r;
+			}
+		case Text_field:
+			assert(type_info == Text_field_info, "type_info does not match the handle", loc);
+			when type_info == Rect_info {
+				v := active_elements[cast(Element)handle.(Text_field)].element;
+				r, ok := v.(Text_field_info);
+				assert(ok, "the handle type does not match the internal type", loc);
+				return r;
+			}
+		/*case Int_field:
+		case Float_field:
+		case Radio_buttons:
+		case Dropdown:
+			owned_elements[]
+			assert(type_info == )*/
+		case:
+			panic("not a valid handle");
+	}
+	
+	unreachable();
+}
+
+//generic way to change stuff, maybe do something else later...
+set_element_data :: proc (state : ^Scene, handle : Handle, info : $type_info, loc := #caller_location) {
+	
+	switch h in handle {
+		case Rect:
+			assert(type_info == Rect_info, "type_info does not match the handle", loc);
+			(&active_elements[cast(Element)handle.(Rect)]).element = info;
+		case Button:
+			assert(type_info == Button_info, "type_info does not match the handle", loc);
+			(&active_elements[cast(Element)handle.(Button)]).element = info;
+		case Checkbox:
+			assert(type_info == Checkbox_info, "type_info does not match the handle", loc);
+			(&active_elements[cast(Element)handle.(Checkbox)]).element = info;
+		case Label:
+			assert(type_info == Label_info, "type_info does not match the handle", loc);
+			(&active_elements[cast(Element)handle.(Label)]).element = info;
+		case Slider:
+			assert(type_info == Slider_info, "type_info does not match the handle", loc);
+			(&active_elements[cast(Element)handle.(Slider)]).element = info;
+		case Int_slider:
+			assert(type_info == Int_slider, "type_info does not match the handle", loc);
+			(&active_elements[cast(Element)handle.(Int_slider)]).element = info;
+		case Text_field:
+			assert(type_info == Text_field_info, "type_info does not match the handle", loc);
+			(&active_elements[cast(Element)handle.(Text_field)]).element = info;
+		/*case Int_field:
+		case Float_field:
+		case Radio_buttons:
+		case Dropdown:
+			owned_elements[]
+			assert(type_info == )*/
+		case:
+			panic("not a valid handle");
+	}
+}
+
 ////////////////// TYPES ////////////////////
 
 Font_appearance :: struct {
@@ -213,34 +322,45 @@ Destination :: struct {
 Element :: distinct i64;
 
 //These are GUI primitives handles
-Rect :: struct { e : Element, };
-Button :: struct { e : Element, };
-Checkbox :: struct { e : Element, };
-Label :: struct { e : Element, };
-Slider :: struct { e : Element, };
-Int_slider :: struct { e : Element, };
-Text_field :: struct { e : Element, };
-Int_field :: struct { e : Element, }; 	//TODO
-Float_field :: struct { e : Element, };	//TODO
-Text_area :: struct { e : Element, };	
-Radio_buttons :: struct { e : Element, };
-Dropdown :: struct { e : Element, };
+Rect :: distinct i64;
+Button :: distinct i64;
+Checkbox :: distinct i64;
+Label :: distinct i64;
+Slider :: distinct i64;
+Int_slider :: distinct i64;
+Text_field :: distinct i64;
+Int_field :: distinct i64; 	//TODO
+Float_field :: distinct i64;	//TODO
+Text_area :: distinct i64;	
+Radio_buttons :: distinct i64;
+Dropdown :: distinct i64;
 
 //There are kinda special, used mainly in games
-Bar :: struct { e : Element, };
-Slot :: struct { e : Element, };
-Color_picker :: struct { e : Element, };
-Gradient_picker :: struct { e : Element, };
-Text_editor :: struct { e : Element, };
-Custom :: struct { e : Element, };
+Bar :: distinct i64;
+Slot :: distinct i64;
+Color_picker :: distinct i64;
+Gradient_picker :: distinct i64;
+Text_editor :: distinct i64;
+Custom :: distinct i64;
 
 //These panels handles 
-Panel :: struct { e : Element, };			//A panel contains other elements
-Split_panel :: struct { e : Element, }; 	//This is panel with multiable smaller panels, they can be resized and moved around by the user.
-Accordion :: struct { e : Element, };		//This can be opened to revieal more (kinda like a "spoiler")
-Screen_panel :: struct { e : Element, };	//This takes up the entire screen, used to bundle elements together that needs to be hidden/shown. Good for menus
-Horizontal_bar :: struct { e : Element, }; //These fill the entire screen in a dimension and act as a panel
-Vertical_bar :: struct { e : Element, };	//These fill the entire screen in a dimension and act as a panel
+Panel :: distinct i64;			//A panel contains other elements
+Split_panel :: distinct i64; 	//This is panel with multiable smaller panels, they can be resized and moved around by the user.
+Accordion :: distinct i64;		//This can be opened to revieal more (kinda like a "spoiler")
+Screen_panel :: distinct i64;	//This takes up the entire screen, used to bundle elements together that needs to be hidden/shown. Good for menus
+Horizontal_bar :: distinct i64; //These fill the entire screen in a dimension and act as a panel
+Vertical_bar :: distinct i64;	//These fill the entire screen in a dimension and act as a panel
+
+Handle :: union {
+	Rect,
+	Button,
+	Checkbox,
+	Label,
+	Slider,
+	Int_slider,
+	Text_field,
+	//TODO rest
+}
 
 ////////////////////////////////////////////////////////////
 
@@ -427,12 +547,12 @@ element_make :: proc (parent : Parent, container : Element_container, loc := #ca
 		 	append(&v.owned_elements, current_element_index);
 			
 		case Panel:
-			contrainer : ^Element_container = &active_elements[v.e];
+			contrainer : ^Element_container = &active_elements[auto_cast v];
 			
 			ok : bool;
 			e : ^Panel_info;
 			e, ok = &(&contrainer.element).(Panel_info);
-			fmt.assertf(ok, "The handle %v is not of type %v. Handle data : %v", v.e, type_info_of(Panel_info), contrainer.element);
+			fmt.assertf(ok, "The handle %v is not of type %v. Handle data : %v", v, type_info_of(Panel_info), contrainer.element);
 			
 			append_elem(&e.sub_elements, current_element_index);
 	}
@@ -684,7 +804,7 @@ get_appearences :: proc (parent : Parent, appearance, hover_appearance, selected
 			default_style = v.default_style;
 			
 		case Panel:
-			p, cont := element_get(v.e, Panel_info);
+			p, cont := element_get(auto_cast v, Panel_info);
 		 	default_style = cont.style;
 			
 	}

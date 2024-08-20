@@ -60,9 +60,8 @@ compile_dll :: proc (src_path, filename, dll_src_folder, defines : string) {
 	}
 }
 
-dll_pre_fix : bool = false;
 //call this every frame, it will only update if it needs to.
-load_api_calls :: proc($Calls : typeid, filename, dll_src_folder, dll_dst_folder : string, last_modification_time : os.File_Time,
+load_api_calls :: proc($Calls : typeid, filename, dll_src_folder, dll_dst_folder : string, version : int, last_modification_time : os.File_Time,
 						 symbol_prefix := "", dynlib_member_name := "__handle") -> (api: Calls, new_modification_time : os.File_Time, success: bool) {
 	
 	game_src_dll_name := fmt.tprintf("%v/%v.%v", dll_src_folder, filename, DLL_EXT);
@@ -80,13 +79,7 @@ load_api_calls :: proc($Calls : typeid, filename, dll_src_folder, dll_dst_folder
 		return {}, mod_time, false;
 	}
 	
-	pre_fix : string = "_";
-	
-	if dll_pre_fix {
-		pre_fix = "__";
-	}
-	
-	game_dst_dll_name := fmt.tprintf("%v/%v%v.%v", dll_dst_folder, pre_fix, filename, DLL_EXT);
+	game_dst_dll_name := fmt.tprintf("%v/%v%v.%v", dll_dst_folder, filename, version, DLL_EXT);
 	when ODIN_OS == .Windows {
 		game_dst_pdb_name := fmt.tprintf("%v/%v.pdb", dll_dst_folder, filename);
 		game_src_pdb_name := fmt.tprintf("%v/%v.pdb", dll_src_folder, filename);
@@ -110,8 +103,6 @@ load_api_calls :: proc($Calls : typeid, filename, dll_src_folder, dll_dst_folder
 				log.logf(.Error, "Failed to copy PDB file : %v", game_src_pdb_name);
 			}
 		}
-		
-		dll_pre_fix = !dll_pre_fix;
 	}
 	
 	//Load the symbols from the DLL (This is smart)

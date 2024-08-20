@@ -56,6 +56,7 @@ texture1D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 
 @(require_results)
 texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture1D {
+	assert(state.is_init, "You must init first", loc);
 
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
@@ -300,6 +301,7 @@ texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 //Clear color is only used if data is nil
 @(require_results)
 texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture2D {
+	assert(state.is_init, "You must init first", loc);
 	assert(wrapmode != nil, "wrapmode is nil", loc);
 	assert(filtermode != nil, "filtermode is nil", loc);
 	assert(format != nil, "format is nil", loc);
@@ -446,7 +448,7 @@ Texture3D :: struct {
 @(require_results)
 texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
 							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture3D {
-
+	
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
 		wrapmode 		= wrapmode,
@@ -459,8 +461,9 @@ texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 
 @(require_results)
 texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture3D {
-
-	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
+	assert(state.is_init, "You must init first", loc);
+	
+	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO this is done at startup is that enough?
 
 	id : gl.Tex3d_id = gl.gen_texture3D(loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
@@ -476,8 +479,29 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
+		
+		//TODO I dont like this way to clear, make it simpler at some point.
 		if cc, ok := clear_color.([4]f32); ok {
-			gl.clear_texture_3D(id, cc, upload_format, loc);
+			
+			channels := gl.internal_format_channel_cnt(desc.format);
+			tex_type := gl.internal_format_to_texture_type(desc.format);
+			TYPE :: gl.odin_type_from_upload_format_channelless(desc.format);
+			
+			if channels == 1 {
+				gl.clear_texture_3D(id, [1]f32{cc.x}, tex_type, loc);
+			}
+			else if channels == 2 {
+				gl.clear_texture_3D(id, cc.xy, tex_type, loc);
+			}
+			else if channels == 3 {
+				gl.clear_texture_3D(id, cc.xyz, tex_type, loc);
+			}
+			else if channels == 4 {
+				gl.clear_texture_3D(id, cc.xyzw, tex_type, loc);
+			}
+			else {
+				panic("!?!?");
+			}
 		}
 	}
 	else {

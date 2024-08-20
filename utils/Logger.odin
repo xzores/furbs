@@ -7,6 +7,7 @@ import "core:strings"
 import "core:os"
 import "core:time"
 import "core:log"
+import "core:sync"
 
 Level_Headers := [?]string{
 	 0..<10 = "[DEBUG] ",
@@ -35,6 +36,7 @@ Default_File_Logger_Opts :: log.Options{
 File_Console_Logger_Data :: struct {
 	file_handle:  os.Handle,
 	ident: string,
+	mutex : sync.Mutex,
 }
 
 create_file_logger :: proc(h: os.Handle, lowest := log.Level.Debug, opt := log.Default_File_Logger_Opts, ident := "") -> log.Logger {
@@ -65,6 +67,8 @@ destroy_console_logger :: proc(log: log.Logger) {
 
 console_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string, options: log.Options, location := #caller_location) {
 	data := cast(^File_Console_Logger_Data)logger_data
+	sync.mutex_guard(&data.mutex);
+	
 	h: os.Handle = os.stdout if level <= log.Level.Error else os.stderr
 	if data.file_handle != os.INVALID_HANDLE {
 		h = data.file_handle
@@ -98,6 +102,9 @@ console_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string,
 
 file_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string, options: log.Options, location := #caller_location) {
 	data := cast(^File_Console_Logger_Data)logger_data
+	
+	sync.mutex_guard(&data.mutex);
+	
 	h: os.Handle = os.stdout if level <= log.Level.Error else os.stderr
 	if data.file_handle != os.INVALID_HANDLE {
 		h = data.file_handle

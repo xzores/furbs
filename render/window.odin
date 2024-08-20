@@ -12,10 +12,10 @@ import "vendor:glfw"
 import "gl"
 
 Mouse_mode :: enum {
-	locked 	= glfw.CURSOR_DISABLED,
-	hidden 	= glfw.CURSOR_HIDDEN,
 	normal 	= glfw.CURSOR_NORMAL,
-	bound,	//The cursor will not be able to exit the window.
+	hidden 	= glfw.CURSOR_HIDDEN,
+	locked 	= glfw.CURSOR_DISABLED,
+	bound	= glfw.CURSOR_CAPTURED,	//The cursor will not be able to exit the window.
 }
 
 /*

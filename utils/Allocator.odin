@@ -23,7 +23,9 @@ make_tracking_allocator :: proc(backing_alloc := context.allocator, internals_al
 	
 	append(&tracking_allcoators, Pair(^mem.Tracking_Allocator, int){tracker, sync.current_thread_id()});
 	
-	tracker_res^ = tracker; //Return the optinal result.
+	if tracker_res != nil {
+		tracker_res^ = tracker; //Return the optinal result.
+	}
 	
 	return  mem.tracking_allocator(tracker);
 }
@@ -175,14 +177,14 @@ print_investigator_memory_results :: proc(using self: Investigator_Allocator, si
 	fmt.printf("Concluding investigator memory results.\n");
 }
 
+
 print_tracking_memory_results :: proc() -> (found_leak : bool) {
+
+	//internal
+	print_tracking_memory_result :: proc(using a : ^mem.Tracking_Allocator) -> (found_leak : bool) {
 		
-	found_leak = false;
-	
-	fmt.printf("%sTracking memory results:%s\n", BLUE, RESET);
-	for t in tracking_allcoators {
-		using t.a;
-		fmt.printf("%sThread : %i%s\n", BLUE, t.b, RESET);
+		found_leak = false;
+		
 		if len(allocation_map) == 0 {
 			fmt.printf("\t%sNo leaks found%s\n", GREEN, RESET);
 		}
@@ -217,6 +219,18 @@ print_tracking_memory_results :: proc() -> (found_leak : bool) {
 			fmt.printf(RESET);
 		}
 		fmt.printf("\n");
+		
+		return found_leak;
+	}
+		
+	found_leak = false;
+	
+	fmt.printf("%sTracking memory results:%s\n", BLUE, RESET);
+	for t in tracking_allcoators {
+		fmt.printf("%sThread : %i%s\n", BLUE, t.b, RESET);
+		if print_tracking_memory_result(t.a) {
+			found_leak = true;
+		}
 	}
 	
 	fmt.printf("Concluding tracking memory results.\n");
