@@ -42,7 +42,7 @@ Texture1D :: struct {
 
 @(require_results)
 texture1D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							 width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture1D {
+							 width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture1D {
 
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -50,12 +50,12 @@ texture1D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 		filtermode 		= filtermode,
 		format 			= internal_format,
 	};
-
+	
 	return texture1D_make_desc(desc, width, upload_format, data, loc = loc);
 }
 
 @(require_results)
-texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture1D {
+texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture1D {
 	assert(state.is_init, "You must init first", loc);
 
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
@@ -74,8 +74,8 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
-		if cc, ok := clear_color.([4]f32); ok {
-			gl.clear_texture_1D(id, cc, upload_format, loc);
+		if cc, ok := clear_color.([4]f64); ok {
+			gl.clear_texture_1D(id, cc, loc);
 		}
 	}
 	else {
@@ -286,7 +286,7 @@ texture2D_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textur
 //Clear color is only used if data is nil
 @(require_results)
 texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							#any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture2D {
+							#any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture2D {
 
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -300,7 +300,7 @@ texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 
 //Clear color is only used if data is nil
 @(require_results)
-texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f32) = [4]f32{0,0,0,0}, loc := #caller_location) -> Texture2D {
+texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture2D {
 	assert(state.is_init, "You must init first", loc);
 	assert(wrapmode != nil, "wrapmode is nil", loc);
 	assert(filtermode != nil, "filtermode is nil", loc);
@@ -327,27 +327,8 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
 		
-		//TODO I dont like this way to clear, make it simpler at some point.
-		if cc, ok := clear_color.([4]f32); ok {
-			
-			channels := gl.internal_format_channel_cnt(desc.format);
-			tex_type := gl.internal_format_to_texture_type(desc.format);
-			
-			if channels == 1 {
-				gl.clear_texture_2D(id, [1]f32{cc.x}, tex_type, loc);
-			}
-			else if channels == 2 {
-				gl.clear_texture_2D(id, cc.xy, tex_type, loc);
-			}
-			else if channels == 3 {
-				gl.clear_texture_2D(id, cc.xyz, tex_type, loc);
-			}
-			else if channels == 4 {
-				gl.clear_texture_2D(id, cc.xyzw, tex_type, loc);
-			}
-			else {
-				panic("!?!?");
-			}
+		if cc, ok := clear_color.([4]f64); ok {
+			gl.clear_texture_2D(id, cc, loc);
 		}
 	}
 	else {
@@ -495,7 +476,7 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
 		gl.generate_mip_maps_3D(id);
 	}
-
+	
 	tex : Texture3D = {
 		id, 
 		width,

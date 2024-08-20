@@ -3899,13 +3899,78 @@ active_bind_texture3D :: proc (tex : Tex3d_id, slot : i32) {
 }
 
 //TODO move up to 1D stuff
-clear_texture_1D :: proc (tex : Tex1d_id, clear_color : [$N]$T, format : Pixel_format_upload, loc := #caller_location) {
-	panic("TODO");
+clear_texture_1D :: proc (tex : Tex1d_id, clear_color : [4]f64, loc := #caller_location) {
+	format : Pixel_format_internal;
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
+	} else {
+		bind_texture1D(tex); //TODO should we bind for the active texture? we could also always just use texture slot 0, but that might slower.
+		gl.GetTexLevelParameteriv(.TEXTURE_1D, 0, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
+		unbind_texture1D();
+	}
+	
+	if !is_internal_format_float(format) {
+		assert(clear_color.x >= 0 && clear_color.x <= 1, "clear_color out of range, x range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.y >= 0 && clear_color.y <= 1, "clear_color out of range, y range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.z >= 0 && clear_color.z <= 1, "clear_color out of range, z range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.w >= 0 && clear_color.w <= 1, "clear_color out of range, w range is 0 to 1 for non-float formats", loc);
+	}
+	
+	channels := internal_format_channel_cnt(format);
+	texture_type := internal_format_to_texture_type(format);
+	
+	if is_internal_format_compressed(format) {
+		panic("TODO, this is not legal, maybe use fallback, see : https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearTexImage.xhtml");
+	}
+	
+	if cpu_state.gl_version >= .opengl_4_4 {
+		clear_color := clear_color;
+		t : gl.GLenum = upload_format_gl_type(upload_format_from_internal_format(format));
+		upload_format : gl.GLenum = internal_format_gl_channel_format(format);
+		gl.ClearTexImage(auto_cast tex, 0, upload_format, t, &clear_color[0]);
+	}
+	else {
+		width : i32;
+		if cpu_state.gl_version >= .opengl_4_5 {
+			gl.GetTextureLevelParameteriv(auto_cast tex, 0, .TEXTURE_WIDTH, &width);
+		} else {
+			bind_texture1D(tex);
+			gl.GetTexLevelParameteriv(.TEXTURE_1D, 0, .TEXTURE_WIDTH, &width);
+			unbind_texture1D();
+		}
+		
+		upload_format := upload_format_from_internal_format(format);
+		
+		upload_channel_count := upload_format_channel_cnt(upload_format);
+		upload_component_size := upload_format_component_size(upload_format);
+		
+		assert(width != 0, "width is zero, internal error");
+		
+		pixels := make([]u8, upload_channel_count * upload_component_size * cast(int)width);
+		defer delete(pixels);
+		
+		converted_color, color_len, to_free := convert_color_to_upload_format(clear_color, upload_format);
+		defer free(to_free);
+		
+		assert(color_len == upload_component_size, "Internal error: color_len and upload_component_size does not match");
+		
+		offset : int = 0;
+		for i : int = 0; i < cast(int)width; i += 1 {
+			for c in 0..<upload_channel_count {
+				mem.copy(&pixels[offset], converted_color[c], upload_component_size);
+				offset += upload_component_size;
+			}
+		}
+		
+		assert(pixels != nil, "fallback pixels are nil, internal error");
+		write_texure_data_1D(tex, 0, 0, width, upload_format, pixels);
+	}
 }
 
 //Clear mipmap level 0 of a texture
-clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : Texture_type, loc := #caller_location) {
-	//assert(cpu_state.bound_texture[cpu_state.texture_slot] == 0, "There cannot be a bound texture, while clearing a texture", loc);
+clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [4]f64, loc := #caller_location) {
+	
 	format : Pixel_format_internal;
 	
 	if cpu_state.gl_version >= .opengl_4_5 { 
@@ -3916,44 +3981,24 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : T
 		unbind_texture2D();
 	}
 	
-	assert(N == internal_format_channel_cnt(format), "The clear_color does not have the same amount of channels as the format", loc = loc);
+	if !is_internal_format_float(format) {
+		assert(clear_color.x >= 0 && clear_color.x <= 1, "clear_color out of range, x range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.y >= 0 && clear_color.y <= 1, "clear_color out of range, y range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.z >= 0 && clear_color.z <= 1, "clear_color out of range, z range is 0 to 1 for non-float formats", loc);
+		assert(clear_color.w >= 0 && clear_color.w <= 1, "clear_color out of range, w range is 0 to 1 for non-float formats", loc);
+	}
+	
+	channels := internal_format_channel_cnt(format);
+	texture_type := internal_format_to_texture_type(format);
+	
+	if is_internal_format_compressed(format) {
+		panic("TODO, this is not legal, maybe use fallback, see : https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearTexImage.xhtml");
+	}
 	
 	if cpu_state.gl_version >= .opengl_4_4 {
 		clear_color := clear_color;
-		t : gl.GLenum = gl_type_from_odin_type(T);
-		
-		upload_format : gl.GLenum;
-		
-		when N == 1 {
-			if texture_type == .color {
-				upload_format = .RED;
-			}
-			else if texture_type == .depth {
-				upload_format = .DEPTH_COMPONENT;
-			}
-			else if texture_type == .stencil_index {
-				upload_format = .STENCIL_INDEX;
-			}
-			else if texture_type == .stencil_depth {
-				upload_format = .DEPTH_STENCIL;
-			}
-			else {
-				panic("Unimplemented");
-			}
-		}
-		else when N == 2 {
-			upload_format = .RG;
-		}
-		else when N == 3 {
-			upload_format = .RGB;
-		}
-		else when N == 4 {
-			upload_format = .RGBA;
-		}
-		else {
-			#panic("Unsupported type");
-		}
-		
+		t : gl.GLenum = upload_format_gl_type(upload_format_from_internal_format(format));
+		upload_format : gl.GLenum = internal_format_gl_channel_format(format);
 		gl.ClearTexImage(auto_cast tex, 0, upload_format, t, &clear_color[0]);
 	}
 	else {
@@ -3968,25 +4013,37 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [$N]$T, texture_type : T
 			unbind_texture2D();
 		}
 		
-		upload_format := upload_format_from_odin_type(N, T);
+		upload_format := upload_format_from_internal_format(format);
+		
+		upload_channel_count := upload_format_channel_cnt(upload_format);
+		upload_component_size := upload_format_component_size(upload_format);
 		
 		assert(width != 0, "width is zero, internal error");
 		assert(height != 0, "height is zero, internal error");
-		pixels := make([][N]T, width * height);
+		
+		pixels := make([]u8, upload_channel_count * upload_component_size * cast(int)width * cast(int)height);
 		defer delete(pixels);
 		
-		for &p in pixels {
-			p = clear_color;
+		converted_color, color_len, to_free := convert_color_to_upload_format(clear_color, upload_format);
+		defer free(to_free);
+		
+		assert(color_len == upload_component_size, "Internal error: color_len and upload_component_size does not match");
+		
+		offset : int = 0;
+		for i : int = 0; i < cast(int)width * cast(int)height; i += 1 {
+			for c in 0..<upload_channel_count {
+				mem.copy(&pixels[offset], converted_color[c], upload_component_size);
+				offset += upload_component_size;
+			}
 		}
 		
 		assert(pixels != nil, "fallback pixels are nil, internal error");
-		write_texure_data_2D(tex, 0, 0, 0, width, height, upload_format, slice.reinterpret([]u8, pixels));
+		write_texure_data_2D(tex, 0, 0, 0, width, height, upload_format, pixels);
 	}
 }
 
 //TODO move down to 3d stuff
 clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [4]f64, loc := #caller_location) {
-	//assert(cpu_state.bound_texture[cpu_state.texture_slot] == 0, "There cannot be a bound texture, while clearing a texture", loc);
 	format : Pixel_format_internal;
 	
 	if cpu_state.gl_version >= .opengl_4_5 { 
@@ -4057,7 +4114,7 @@ clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [4]f64, loc := #caller_l
 		}
 		
 		assert(pixels != nil, "fallback pixels are nil, internal error");
-		write_texure_data_3D(tex, 0, 0, 0, 0, width, height, depth, upload_format, slice.reinterpret([]u8, pixels));
+		write_texure_data_3D(tex, 0, 0, 0, 0, width, height, depth, upload_format, pixels);
 	}
 }
 
