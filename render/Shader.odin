@@ -272,7 +272,15 @@ set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : Unifor
 }
 
 set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc := #caller_location) {
-
+	
+	when ODIN_DEBUG {
+		assert(state.bound_shader != nil, "A shader must be bound before setting the texture", loc);
+	}
+	
+	if !state.bound_shader.texture_locations[location].active {
+		return;
+	}
+	
 	switch v in value {
 		case nil:
 			gl.active_bind_texture2D(0, cast(i32)location);
@@ -285,6 +293,10 @@ set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc 
 		case:
 			panic("TODO");
 	}
+	
+	//THIS IS NOT NEEDED, we set it at shader load (aka startup)
+	//u_loc : i32 = cast(i32) state.bound_shader.texture_locations[location].location;
+	//glgl.Uniform1i(u_loc, cast(i32)location);
 }
 
 //You must destoy the error. (if it is there)
@@ -549,6 +561,8 @@ shader_load_from_path :: proc(path : string, loc := #caller_location) -> (shader
 	return shader_load_from_src(file.name, string(data), Shader_load_desc{strings.clone(path), time.now()});
 }
 
+SHADER_VERSION :: "#version 430 core\n";
+
 //You must destoy the error. (if it is there)
 @(require_results)
 shader_load_from_src :: proc(name : string, combined_src : string, loaded : Maybe(Shader_load_desc), loc := #caller_location) -> (shader : ^Shader, err : Shader_load_error) {
@@ -572,8 +586,8 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 		strings.builder_destroy(&preprocessor.current_identifier);
 	}
 
-	strings.write_string(&preprocessor.vertex_builder, "#version 330 core\n");
-	strings.write_string(&preprocessor.fragment_builder, "#version 330 core\n");
+	strings.write_string(&preprocessor.vertex_builder, SHADER_VERSION);
+	strings.write_string(&preprocessor.fragment_builder, SHADER_VERSION);
 	
 	path := "";
 
@@ -672,13 +686,17 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 			log.errorf("The attribute '%v' has an invalid placement, use 'layout(location = %v)' in shader : %v to fix", a_name, cast(int)value, name);
 			return nil, Shader_invalid_attribute{.illigal_placement, cast(i32)value, strings.clone(a_name)};
 		};
+		
+		log.debugf("shader contains attribute : %v : %#v\n", a_name, attrib);
 	}
 	
 	for u_name, uniform in get_shader_uniforms(shader_id, context.temp_allocator, loc) {
 
 		if (u_name in uniform_names) {
+			fmt.assertf(!(u_name in texture_names), "The uniform: %v, is both a texture and a uniform, it should not be both", u_name);
 			value := uniform_names[u_name];
 			shader.uniform_locations[value] = uniform;
+			log.debugf("shader contains uniform : %v : %#v\n", u_name, uniform);
 		}
 		else if (u_name in texture_names) {
 			value : Texture_location = texture_names[u_name];
@@ -686,6 +704,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 			gl.bind_shader_program(shader_id);
 			glgl.Uniform1i(uniform.location, cast(i32)value); //The uniform will always be bound to this texture slot. Static assignment.
 			gl.unbind_shader_program();
+			log.debugf("shader contains texture uniform : %v : %#v\n", u_name, uniform);
 		}
 		else {
 			free(shader);
@@ -696,6 +715,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 			log.errorf("Shader %s contains illigal uniform/texture \"%s\"", name, u_name);
 			return nil, Shader_invalid_uniform{.illigal_name, strings.clone(u_name)};
 		}
+		
 	}
 
 	shader.id = shader_id;

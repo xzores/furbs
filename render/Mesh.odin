@@ -961,7 +961,7 @@ get_attribute_info_from_typeid :: proc (t : typeid, loc := #caller_location) -> 
 					fmt.panicf("%v ignore tag must have the value of 'true' or 'false'", t, loc = loc);
 				}
 			}
-
+			
 			if val, ok := reflect.struct_tag_lookup(field.tag, "normalized"); ok {
 				if val == "true" {
 					normalized = true;
@@ -983,7 +983,6 @@ get_attribute_info_from_typeid :: proc (t : typeid, loc := #caller_location) -> 
 			}
 			
 			fmt.assertf(attrib_ex.attribute_type != .invalid, "The odin type %v, does not a have an equivalent opengl type\n", field.type.id, loc = loc);
-			log.debugf("attrib_ex : %#v\n", attrib_ex);
 
 			append(&attribs, attrib_ex);
 		}

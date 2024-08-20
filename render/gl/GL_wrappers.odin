@@ -4217,11 +4217,11 @@ delete_texture3D :: proc (texture : Tex3d_id, loc := #caller_location) {
 }
 
 bind_texture3D :: proc(tex : Tex3d_id, loc := #caller_location) {
-	
+
 	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 	
 	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
-		return;
+		//return;
 	}
 	
 	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
