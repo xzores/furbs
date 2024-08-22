@@ -98,6 +98,10 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 	return tex;
 }
 
+texture1D_clear :: proc(tex : ^Texture1D, clear_color : [4]f64, loc := #caller_location) {
+	gl.clear_texture_1D(tex.id, clear_color, loc);
+}
+
 texture1D_destroy :: proc(tex : ^Texture1D) {
 	gl.delete_texture1D(tex.id);
 	tex^ = {};
@@ -361,6 +365,10 @@ texture2D_upload_data :: proc(tex : ^Texture2D, upload_format : gl.Pixel_format_
 	}
 }
 
+texture2D_clear :: proc(tex : ^Texture2D, clear_color : [4]f64, loc := #caller_location) {
+	gl.clear_texture_2D(tex.id, clear_color, loc);
+}
+
 //TODO should this require the pointer?
 texture2D_destroy :: proc(tex : Texture2D) {
 	gl.delete_texture2D(tex.id);
@@ -486,6 +494,10 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 	}
 
 	return tex;
+}
+
+texture3D_clear :: proc(tex : ^Texture3D, clear_color : [4]f64, loc := #caller_location) {
+	gl.clear_texture_3D(tex.id, clear_color, loc);
 }
 
 texture3D_destroy :: proc(tex : ^Texture3D) {
