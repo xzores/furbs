@@ -228,7 +228,7 @@ set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : Unifor
 		odin_type :=  reflect.union_variant_type_info(value).id;
 		bind_type := gl.odin_type_to_uniform_type(odin_type);
 		target_type := shader.uniform_locations[uniform].uniform_type;
-		fmt.assertf(target_type == bind_type, "Cannot bind a uniform of type %v to a %v.", target_type, bind_type,loc = loc);
+		fmt.assertf(target_type == bind_type, "Cannot bind a uniform of type %v (in shader) to a %v (from program).", target_type, bind_type,loc = loc);
 	}
 
 	u_loc : i32 = cast(i32) shader.uniform_locations[uniform].location;
@@ -561,7 +561,7 @@ shader_load_from_path :: proc(path : string, loc := #caller_location) -> (shader
 	return shader_load_from_src(file.name, string(data), Shader_load_desc{strings.clone(path), time.now()});
 }
 
-SHADER_VERSION :: "#version 430 core\n";
+SHADER_VERSION :: "#version 330 core\n";
 
 //You must destoy the error. (if it is there)
 @(require_results)
@@ -693,12 +693,14 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 	for u_name, uniform in get_shader_uniforms(shader_id, context.temp_allocator, loc) {
 
 		if (u_name in uniform_names) {
+			fmt.assertf(!is_uniform_type_texture(uniform.uniform_type), "The uniform: %v is a texture (%v)", u_name, uniform.uniform_type);
 			fmt.assertf(!(u_name in texture_names), "The uniform: %v, is both a texture and a uniform, it should not be both", u_name);
 			value := uniform_names[u_name];
 			shader.uniform_locations[value] = uniform;
 			log.debugf("shader contains uniform : %v : %#v\n", u_name, uniform);
 		}
 		else if (u_name in texture_names) {
+			fmt.assertf(is_uniform_type_texture(uniform.uniform_type), "The texture: %v is not a texture, but a %v", u_name, uniform.uniform_type);
 			value : Texture_location = texture_names[u_name];
 			shader.texture_locations[value] = uniform;
 			gl.bind_shader_program(shader_id);

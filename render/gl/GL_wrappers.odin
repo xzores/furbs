@@ -127,6 +127,72 @@ Attribute_info_ex :: struct {
 	using _ : Attribute_info,
 }
 
+is_uniform_type_texture :: proc (u : Uniform_type) -> bool {
+
+	switch u {
+		case .invalid:
+			return false;
+		case .float:
+			return false;
+		case .vec2:
+			return false;
+		case .vec3:
+			return false;
+		case .vec4:
+			return false;
+		case .int:
+			return false;
+		case .ivec2:
+			return false;
+		case .ivec3:
+			return false;
+		case .ivec4:
+			return false;
+		case .uint:
+			return false;
+		case .uvec2:
+			return false;
+		case .uvec3:
+			return false;
+		case .uvec4:
+			return false;
+		case .bool:
+			return false;
+		case .mat2:
+			return false;
+		case .mat3:
+			return false;
+		case .mat4:
+			return false;
+		case .sampler_1d:
+			return true;
+		case .sampler_2d:
+			return true;
+		case .sampler_3d:
+			return true;
+		case .sampler_cube:
+			return true;
+		case .isampler_1d:
+			return true;
+		case .isampler_2d:
+			return true;
+		case .isampler_3d:
+			return true;
+		case .isampler_cube:
+			return true;
+		case .isampler_buffer:
+			return true;
+		case .usampler_1d:
+			return true;
+		case .usampler_2d:
+			return true;
+		case .usampler_3d:
+			return true;
+	}
+	
+	unreachable();
+}
+
 @(require_results)
 odin_type_to_uniform_type :: proc (odin_type : typeid) -> Uniform_type {
 	switch odin_type {
