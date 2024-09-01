@@ -19,6 +19,8 @@ import utils "../utils"
 @(require_results)
 init :: proc (fallback_appearance := default_appearance, loc := #caller_location) -> (state : Scene) {
 	
+	assert(render.state.is_init, "The render library is not initialized", loc);
+		
 	state = {
 		gui_pipeline = render.pipeline_make(render.get_default_shader(), .blend, false, false),
 		default_style = {
@@ -58,6 +60,7 @@ begin :: proc (state : ^Scene, target_window : ^render.Window, loc := #caller_lo
 	assert(bound_scene == nil, "begin has already been called.", loc);
 	assert(render.state.is_begin_frame == true, "regui's begin must be called after render's begin_frame", loc);
 	assert(render.state.current_target != nil, "You must set the target with render.target_begin(some_window) before calling gui.begin", loc);
+	assert(state.gui_pipeline != {}, "gui_scene is not initialized", loc)
 	
 	bound_scene = state;
 	
@@ -77,10 +80,9 @@ end :: proc (state : ^Scene, loc := #caller_location) {
 	assert(bound_scene != nil, "begin has not been called.", loc);
 	assert(bound_scene == state, "The passed gui state does not match the begin's statement.", loc);
 	assert(render.state.is_begin_frame == true, "regui's begin must be called before render's end_frame", loc);
-	
 	style : Style = state.default_style;
 	
-	render.pipeline_begin(state.gui_pipeline, render.camera_get_pixel_space( state.window));
+	render.pipeline_begin(state.gui_pipeline, render.camera_get_pixel_space(state.window));
 	
 	//Draw
 	for k in state.owned_elements {
@@ -89,7 +91,7 @@ end :: proc (state : ^Scene, loc := #caller_location) {
 	}
 	
 	render.pipeline_end();
-
+	
 	state.window = nil;
 	bound_scene = nil;
 }

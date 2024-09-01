@@ -32,6 +32,8 @@ pipeline_make :: proc(	shader : ^Shader,
 						depth_clamp : Maybe([2]f64) = nil,
 						loc := #caller_location) -> (pipeline : Pipeline) {
 	
+	assert(shader != nil, "shader is nil", loc);
+	
 	desc : Pipeline_desc = {
 		shader = shader,
 		blend_mode = blend_mode,
@@ -41,7 +43,7 @@ pipeline_make :: proc(	shader : ^Shader,
 		culling = culling,
 		depth_clamp = depth_clamp,
 	};
-
+	
 	return pipeline_make_desc(desc, loc);
 }
 
@@ -66,7 +68,7 @@ pipeline_begin :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 	
 	{
 		shader_bind(pipeline.shader);
-
+		
 		gl.set_blend_mode(pipeline.blend_mode);
 		gl.set_depth_write(pipeline.depth_write);
 		gl.set_depth_test(pipeline.depth_test);
@@ -115,7 +117,7 @@ pipeline_end :: proc (loc := #caller_location) {
 //Following draw commands will draw the the given taret, clear method maybe be nil if clearing is not wanted. Clearing will clear both color and depth buffer if default falgs are used.
 target_begin :: proc (render_target : Render_target, clear_method : Maybe([4]f32) = [4]f32{0,0,0,0}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
 	assert(state.current_target == {}, "There must not be a bound target before calling begin_target (remember to call end_target).", loc);
-	
+	assert(state.is_begin_frame, "You must begin frame before target_begin", loc);
 	using gl;
 
 	if clear_method != nil {
