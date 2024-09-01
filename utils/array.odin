@@ -3,6 +3,7 @@ package utils;
 import "base:runtime"
 import "base:intrinsics"
 import "core:slice"
+import "core:math/rand"
 
 insert_ordered :: proc(arr: ^$A/[dynamic]$E, e: E) -> (index: int, err: runtime.Allocator_Error) where intrinsics.type_is_ordered(E) #optional_allocator_error {
 	return insert_ordered_by(arr, e, slice.cmp_proc(E));
@@ -31,4 +32,10 @@ make_2d_slice :: proc(#any_int y, x: int, $T: typeid, allocator := context.alloc
 delete_2d_slice :: proc(slice: [][]$T, allocator := context.allocator) {
 	delete(slice[0], allocator)
 	delete(slice,	allocator)
+}
+
+randomize_slice :: proc (v : []$T, range_low : f64 = -1, range_upper : f64 = 1) where intrinsics.type_is_numeric(T) {
+	for &e in v {
+		e = cast(T)rand.float64_range(range_low, range_upper);
+	}
 }
