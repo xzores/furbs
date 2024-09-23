@@ -103,7 +103,7 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 		panic("Could not init glfw\n");
 	}
 	
-	state.shader_defines = make(map[string]string);
+	state.shader_defines = make(map[string]string, loc = loc);
 	if shader_defines != nil {
 		for e, v in shader_defines {
 			set_shader_define(e,v);
@@ -200,8 +200,8 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	assert(supported_attribs <= len(static_attrib_info) + len(dynamic_attrib_info), "The GPU does not support the amount of attributes needed", loc);
 	*/
 	
-	shaders_init();
-	text_init();
+	shaders_init(loc = loc);
+	text_init(loc = loc);
 	
 	return window;
 }

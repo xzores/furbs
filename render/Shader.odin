@@ -157,14 +157,14 @@ Texture_odin_type :: union {
 	//Texture2DArray,
 }
 
-shaders_init :: proc() {
+shaders_init :: proc(loc := #caller_location) {
 
 	state.loaded_shaders = make([dynamic]^Shader);
 	e : Shader_load_error;
 	
-	state.default_shader, e 			= shader_load_from_src("default_shader.glsl", #load("default_shader.glsl"), nil);
-	state.default_text_shader, e 		= shader_load_from_src("default_text_shader.glsl", #load("default_text_shader.glsl"), nil);
-	state.default_instance_shader, e 	= shader_load_from_src("default_instance_shader.glsl", #load("default_instance_shader.glsl"), nil);
+	state.default_shader, e 			= shader_load_from_src("default_shader.glsl", #load("default_shader.glsl"), nil, loc = loc);
+	state.default_text_shader, e 		= shader_load_from_src("default_text_shader.glsl", #load("default_text_shader.glsl"), nil, loc = loc);
+	state.default_instance_shader, e 	= shader_load_from_src("default_instance_shader.glsl", #load("default_instance_shader.glsl"), nil, loc = loc);
 	
 	if e != nil {
 		panic("Failed to load default shader!, this is internal bad error");
@@ -568,7 +568,7 @@ SHADER_VERSION :: "#version 330 core\n";
 shader_load_from_src :: proc(name : string, combined_src : string, loaded : Maybe(Shader_load_desc), loc := #caller_location) -> (shader : ^Shader, err : Shader_load_error) {
 	using gl;
 
-	shader = new(Shader);
+	shader = new(Shader, loc = loc);
 
 	//the preprocessor for the shaders.
 	preprocessor : Preprocessor = {
@@ -724,7 +724,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 	shader.name = fmt.aprint(name);
 	shader.loaded = loaded;
 	
-	append(&state.loaded_shaders, shader);
+	append(&state.loaded_shaders, shader, loc = loc);
 	
 	return shader, nil;
 }

@@ -222,7 +222,7 @@ window_make_desc :: proc(desc : Window_desc, loc := #caller_location) -> (window
 
 	_make_context_current(nil);
 
-	append(&state.active_windows, window);
+	append(&state.active_windows, window, loc = loc);
 
 	return;
 }

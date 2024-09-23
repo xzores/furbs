@@ -64,10 +64,10 @@ atlas_make :: proc (#any_int size, margin : i32, loc := #caller_location) -> (at
 		margin = margin,
 		
 		current_handle_counter = 0,
-		handles = make(map[Atlas_handle]Atlas_entry),
-		rows = make([dynamic]Atlas_row),
+		handles = make(map[Atlas_handle]Atlas_entry, loc = loc),
+		rows = make([dynamic]Atlas_row, loc = loc),
 		
-		free_rects = make([dynamic]Atlas_index),
+		free_rects = make([dynamic]Atlas_index, loc = loc),
 	};
 }
 
@@ -374,7 +374,7 @@ client_atlas_make :: proc (#any_int channel_cnt, component_size, init_size, max_
 		impl = atlas_make(init_size, margin, loc),
 		component_size = component_size,
 		channel_cnt = channel_cnt,
-		pixels = make([]u8, component_size * channel_cnt * init_size * init_size),
+		pixels = make([]u8, component_size * channel_cnt * init_size * init_size, loc = loc),
 		max_size = max_size,
 	}
 	
@@ -388,13 +388,13 @@ client_atlas_add :: proc (atlas : ^Client_atlas, pixel_cnt : [2]i32, data : []u8
 	handle, rect, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
 	
 	for !success { //if we fail, then we grow then prune at max size.
-		grew := client_atlas_grow(atlas);
+		grew := client_atlas_grow(atlas, loc = loc);
 		handle, rect, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
 		if grew {
 			resized = true;
 		}
 		else {
-			pruned := client_atlas_prune(atlas);
+			pruned := client_atlas_prune(atlas, loc = loc);
 			handle, rect, success = atlas_add(&atlas.impl, pixel_cnt, loc = loc);
 			break;
 		}

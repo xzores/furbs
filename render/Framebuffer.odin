@@ -117,7 +117,7 @@ frame_buffer_make_render_buffers :: proc (#any_int color_attachemet_cnt, width, 
 //if textures is not nil, textures will be filled with the texture attachments.
 frame_buffer_make_textures :: proc (#any_int color_attachemet_cnt, width, height : i32, color_format : Color_format, depth_format : Depth_format,
 														 mipmaps : bool, filtermode : gl.Filtermode, use_depth_texture := true, wrapmode : Wrapmode = .clamp_to_border, loc := #caller_location) -> (fbo : Frame_buffer){
-
+	
 	assert(width != 0, "width is 0", loc);
 	assert(height != 0, "height is 0", loc);
 	assert(color_format != nil, "color_format is nil", loc);
@@ -163,6 +163,31 @@ frame_buffer_make_textures :: proc (#any_int color_attachemet_cnt, width, height
 	assert(gl.validate_frame_buffer(fbo.id) == true, "Framebuffer is not complete!", loc);
 
 	return;
+}
+
+frame_resize_buffer :: proc (fbo : ^Frame_buffer, new_size : [2]i32, loc := #caller_location) {
+	
+	frame_buffer_destroy(fbo^);
+	
+	use_depth_texture : bool;
+	
+	if use_depth_texture {
+		switch atch in fbo.depth_attachment {
+			case Depth_render_buffer:
+				use_depth_texture = true;
+			case Texture2D:
+				use_depth_texture = true;
+			case:
+				use_depth_texture = false;
+		}
+	}
+	
+	if texture, use_textures := fbo.color_attachments[0].(Texture2D); use_textures {
+		fbo^ = frame_buffer_make_textures(1, new_size.x, new_size.y, fbo.color_format, fbo.depth_format, texture.mipmaps, texture.filtermode, use_depth_texture, texture.wrapmode, loc = loc);
+	}
+	else {
+		fbo^ = frame_buffer_make_render_buffers(1, new_size.x, new_size.y, fbo.samples, fbo.color_format, fbo.depth_format, loc = loc);
+	}
 }
 
 frame_buffer_destroy :: proc(fbo : Frame_buffer) {

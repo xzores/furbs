@@ -165,11 +165,11 @@ font_init :: proc(max_texture_size : i32, loc := #caller_location) -> (ctx : Fon
 	ctx = Font_context {
 		scale = 0,
 		uploaded_size = 0,
-		atlas = client_atlas_make(1, 1, 128, max_texture_size, 1),
-		font_stack = make([dynamic]Font),
-		fonts = make(map[Font]tt.fontinfo),
-		owned_font_data = make([dynamic][]u8),
-		glyphs = make(map[Glyph]Atlas_handle),
+		atlas = client_atlas_make(1, 1, 128, max_texture_size, 1, loc = loc),
+		font_stack = make([dynamic]Font, loc = loc),
+		fonts = make(map[Font]tt.fontinfo, loc = loc),
+		owned_font_data = make([dynamic][]u8, loc = loc),
+		glyphs = make(map[Glyph]Atlas_handle, loc = loc),
 	};
 	
 	return;

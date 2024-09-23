@@ -1,7 +1,7 @@
 package audio;
 
 Sound :: struct {
-
+	
 }
 
 Music :: struct {

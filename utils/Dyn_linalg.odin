@@ -111,7 +111,7 @@ vec_columb_vec_row_mul :: proc(A, B : []$T, loc := #caller_location) -> Matrix(T
     result := Matrix(T) {
         rows = len(A),
         cols = len(B),
-        data = make([]T, len(A) * len(B), loc),
+        data = make([]T, len(A) * len(B), loc=loc),
     };
 
     // Perform column-vector x row-vector multiplication
@@ -125,28 +125,33 @@ vec_columb_vec_row_mul :: proc(A, B : []$T, loc := #caller_location) -> Matrix(T
 }
 
 //This will first transpose the matrix a then multiply with the vector.
-matrix_transposed_vec_mul :: proc(B : []$T, A : Matrix(T), loc := #caller_location) -> []T where intrinsics.type_is_numeric(T) {
-    // Ensure the vector and matrix can be multiplied (len(B) == A.rows)
-    if len(B) != A.rows {
-        fmt.panicf("Vector and matrix dimensions do not align for multiplication, Matrix : (%v, %v). The vector has length %v and the matrix has %v rows", A.rows, A.cols, len(B), A.rows);
+matrix_transposed_vec_mul :: proc(col_vec : Matrix($T), row_vec : []T, loc := #caller_location) -> []T where intrinsics.type_is_numeric(T) {
+	A := col_vec; B := row_vec;
+	
+    // Ensure the matrix and vector can be multiplied (A.rows == len(B) after transpose)
+    if A.rows != len(B) {
+        fmt.panicf("Matrix and vector dimensions do not align for multiplication after transpose, Matrix: (%v, %v). The vector has length %v and the matrix has %v rows", A.rows, A.cols, len(B), A.rows);
     }
 
     // Initialize result vector
-    result := make([]T, A.cols, loc);
+    result := make([]T, A.cols, loc = loc);  // After transpose, we have A.cols rows
 
-    // Perform vector-matrix multiplication
-    for j in 0 ..< A.cols {
+    // Perform transposed matrix-vector multiplication
+    for j in 0 ..< A.cols { // Iterate over what will be rows after transpose
         sum : T;
-        
-        for i in 0 ..< A.rows {
-            // Access elements in flattened arrays
-            b_elem := B[i];
+
+        for i in 0 ..< A.rows { // Iterate over what will be columns after transpose
+            // Access elements in flattened arrays as if the matrix were transposed
             a_elem := A.data[i * A.cols + j];
-            sum += b_elem * a_elem;
+            b_elem := B[i];
+            sum += a_elem * b_elem;
         }
-        result[j] = sum;
+        result[j] = sum;  // Result has A.cols elements (since A^T has A.cols rows)
     }
 
     return result;
 }
+
+
+
 mul :: proc {matrix_mul, matrix_vec_mul, vec_matrix_mul};

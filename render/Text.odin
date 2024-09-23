@@ -19,9 +19,9 @@ Fonts :: struct {
 }
 
 @(private)
-text_init :: proc () {
+text_init :: proc (loc := #caller_location) {
 	
-	state.font_context = fs.font_init(8192);	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
+	state.font_context = fs.font_init(8192, loc = loc);	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
 
 	//If we want fontstash to handle loading the font
 	//my_font_index := AddFontPath(font_context, name: string, path: string);
@@ -72,10 +72,10 @@ text_init :: proc () {
 	font_RI_data 	:= #load("font/LinLibertine_RI.ttf", []u8);
 	font_RBI_data 	:= #load("font/LinLibertine_RBI.ttf", []u8);
 	
-	font_norm 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_norm_data, false);
-	font_RB 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RB_data, false);
-	font_RI 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RI_data, false);
-	font_RBI 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RBI_data, false);
+	font_norm 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_norm_data, false, loc = loc);
+	font_RB 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RB_data, false, loc = loc);
+	font_RI 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RI_data, false, loc = loc);
+	font_RBI 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RBI_data, false, loc = loc);
 	
 	state.default_fonts = Fonts {
 		normal 		= font_norm,
@@ -94,7 +94,7 @@ text_init :: proc () {
 	verts, indices := generate_quad({1,1,1}, {0,0,0}, true);
 	defer delete(verts);
 	defer indices_delete(indices);
-	state.char_mesh = mesh_make_single(verts, indices, .static_use, .triangles, instance_desc);
+	state.char_mesh = mesh_make_single(verts, indices, .static_use, .triangles, instance_desc, loc = loc);
 
 	log.info("Text initialized!");
 }

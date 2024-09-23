@@ -61,8 +61,8 @@ out vec4 FragColor;
 void main() {
 	vec4 tex_color = texture(texture_diffuse, texture_coords);
 	
-	vec3 lightDir = normalize(-sun);
-	float illumination = max(dot(normals, lightDir), 0.0);
+	//vec3 lightDir = normalize(-sun);
+	//float illumination = max(dot(normals, lightDir), 0.0);
 
 	FragColor = color_diffuse * tex_color;
 }
