@@ -312,21 +312,18 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
-	id : gl.Tex2d_id = gl.gen_texture2D(loc);
-	assert(id > 0, "TEXTURE: Failed to load texture", loc);
-	
 	if upload_format != .no_upload {
 		assert(data != nil, "Data must not be nil if upload_format is not .no_upload", loc = loc);
 	}
 	
+	id : gl.Tex2d_id = gl.gen_texture2D(loc);
+	assert(id > 0, "TEXTURE: Failed to load texture", loc);
+	
 	gl.wrapmode_texture2D(id, desc.wrapmode);
-	gl.filtermode_texture2D(id, desc.filtermode, mipmaps);
-	
-	size_per_component, channels : int;
-	size_per_component = gl.upload_format_component_size(upload_format);
-	channels = gl.upload_format_channel_cnt(upload_format);
-	
+	gl.filtermode_texture2D(id, desc.filtermode, mipmaps);	
 	gl.setup_texture_2D(id, mipmaps, width, height, format);
+	
+	channels := gl.upload_format_channel_cnt(upload_format);
 	
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);

@@ -3460,21 +3460,63 @@ validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid 
 }
 
 //Will blit the first color attachment to the screen.
-blit_fbo_color_to_screen :: proc(fbo : Fbo_id, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
+blit_fbo_color_to_screen :: proc(fbo : Fbo_id, #any_int src_color_attach, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
 	
 	interpolation : gl.GLenum = .NEAREST;
-
+	
 	if use_linear_interpolation {
 		interpolation = .LINEAR;
 	}
 	
 	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.NamedFramebufferReadBuffer(auto_cast fbo, gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)src_color_attach);
 		gl.BlitNamedFramebuffer(auto_cast fbo, 0, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation);
 	}
 	else {
 		bind_frame_buffer_read(fbo);
 		bind_frame_buffer_draw(0);
+		gl.ReadBuffer(gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)src_color_attach);
 		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); 
+		bind_frame_buffer_draw(0);
+		bind_frame_buffer_read(0);
+	}
+}
+
+//Will blit the first color attachment to the screen.
+blit_fbo_color_attach :: proc(src, dst : Fbo_id, #any_int src_color_attach, dst_color_attach : i32, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
+	
+	interpolation : gl.GLenum = .NEAREST;
+	
+	if use_linear_interpolation {
+		interpolation = .LINEAR; 
+	}
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.NamedFramebufferReadBuffer(auto_cast src, gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)src_color_attach);
+		gl.NamedFramebufferReadBuffer(auto_cast dst, gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)dst_color_attach);
+		gl.BlitNamedFramebuffer(auto_cast src, auto_cast dst, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation);
+	}
+	else {
+		bind_frame_buffer_read(src);
+		bind_frame_buffer_draw(dst);
+		gl.ReadBuffer(gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)src_color_attach);
+		gl.DrawBuffer(gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)dst_color_attach);
+		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); 
+		bind_frame_buffer_draw(0);
+		bind_frame_buffer_read(0);
+	}
+}
+
+//Will blit the first color attachment to the screen.
+blit_fbo_depth_attach :: proc(src, dst : Fbo_id, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height : i32, use_linear_interpolation := false) {
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.BlitNamedFramebuffer(auto_cast src, auto_cast dst, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .DEPTH_ATTACHMENT, .NEAREST);
+	}
+	else {
+		bind_frame_buffer_read(src);
+		bind_frame_buffer_draw(dst);
+		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .DEPTH_ATTACHMENT, .NEAREST); 
 		bind_frame_buffer_draw(0);
 		bind_frame_buffer_read(0);
 	}

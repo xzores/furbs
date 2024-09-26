@@ -346,13 +346,14 @@ begin_frame :: proc() {
 	state.is_begin_frame = true;
 
 	for w in &state.active_windows {
-
+		
 		sw, sh := window_get_size(w);
-
+		
 		if w.framebuffer.width != sw || w.framebuffer.height != sh {
 			frame_buffer_destroy(w.framebuffer);
-			assert(w.framebuffer.color_format != nil, "window.framebuffer.color_format is nil");
-			w.framebuffer = frame_buffer_make_render_buffers(1, sw, sh, w.framebuffer.samples, w.framebuffer.color_format, w.framebuffer.depth_format);
+			render_buffer, ok := w.framebuffer.color_attachments[0].(Color_render_buffer);
+			assert(ok == true, "window.framebuffer.color_format is nil");
+			w.framebuffer = frame_buffer_make_render_buffers({render_buffer.format}, sw, sh, w.framebuffer.samples, w.framebuffer.depth_format);
 			w.width, w.height = sw, sh;
 			
 			_make_context_current(w);
@@ -361,7 +362,6 @@ begin_frame :: proc() {
 			frame_buffer_recreate(&w.context_framebuffer, w.framebuffer);
 			_make_context_current(nil);
 		}
-
 	}
 	
 	if state.main_window != nil {
@@ -403,7 +403,7 @@ end_frame :: proc(loc := #caller_location) {
 		dst_width, dst_height : i32;
 
 		dst_width, dst_height = window_get_size(w);
-		gl.blit_fbo_color_to_screen(w.context_framebuffer.id, 0, 0, w.framebuffer.width, w.framebuffer.height, 0, 0, dst_width, dst_height, true);
+		gl.blit_fbo_color_to_screen(w.context_framebuffer.id, 0, 0, 0, w.framebuffer.width, w.framebuffer.height, 0, 0, dst_width, dst_height, true);
 
 		_swap_buffers(loc, w.glfw_window);
 	}

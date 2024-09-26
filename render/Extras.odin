@@ -6,7 +6,6 @@ import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:time"
 
-
 //Used internally
 get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 = {256,256}, loc := #caller_location) -> Texture2D {
 	
@@ -14,7 +13,7 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 		//s, ok := load_shader_from_path("my_shader.glsl"); assert(ok == nil);
 		state.shapes_pipeline = pipeline_make(get_default_shader(), .blend, true, true, .fill, .no_cull);
 		state.overlay_pipeline = pipeline_make(get_default_shader(), .blend, false, false, .fill, .no_cull);
-		state.arrow_fbo = frame_buffer_make_textures(1, texture_size.x, texture_size.y, .RGBA8, .depth_component16, false, .linear);
+		state.arrow_fbo = frame_buffer_make_textures({Fbo_color_tex_desc{.clamp_to_edge, .linear, .RGBA8}}, texture_size.x, texture_size.y, .depth_component16, nil);
 		state.overlay_init = true;
 	}
 	
@@ -43,7 +42,7 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 		pipeline_end();
 	target_end();
 
-	return state.arrow_fbo.color_attachments[0].(Texture2D);
+	return frame_buffer_color_attach_as_texture(&state.arrow_fbo, 0);
 	//return arrow_fbo.depth_attachment.(Texture2D);
 }
 

@@ -208,16 +208,14 @@ window_make_desc :: proc(desc : Window_desc, loc := #caller_location) -> (window
 	setup_window_no_backbuffer(desc, window);
 	
 	//Make a framebuffer in each context shareing the underlaying buffers.
-	window.framebuffer = frame_buffer_make_render_buffers(1, desc.width, desc.height, auto_cast desc.antialiasing, .RGBA8, .depth_component24);
+	window.framebuffer = frame_buffer_make_render_buffers({.RGBA8}, desc.width, desc.height, auto_cast desc.antialiasing, .depth_component24);
 	assert(window.framebuffer.id != 0, "something went wrong");
-	assert(window.framebuffer.color_format != nil, "something went wrong, color format is nil");
 	assert(window.framebuffer.depth_format != nil, "something went wrong, depth format is nil");
 	
 	_make_context_current(window);
 	
 	frame_buffer_recreate(&window.context_framebuffer, window.framebuffer);
 	assert(window.context_framebuffer.id != 0, "something went wrong");		
-	assert(window.context_framebuffer.color_format != nil, "something went wrong, color format is nil");
 	assert(window.context_framebuffer.depth_format != nil, "something went wrong, depth format is nil");
 
 	_make_context_current(nil);

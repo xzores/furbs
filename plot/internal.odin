@@ -63,7 +63,7 @@ hold :: proc () {
 			
 			//TODO multi smaple texture
 			if w.plot_framebuffer.width != target_size.x || w.plot_framebuffer.height != target_size.y {
-				render.frame_resize_buffer(&w.plot_framebuffer, target_size);
+				render.frame_buffer_resize(&w.plot_framebuffer, target_size);
 			}
 			
 			//Calculate normalized space coordinates.
@@ -127,7 +127,7 @@ hold :: proc () {
 			render.target_begin(w.window, [4]f32{0.2,0.2,0.2,1});
 				render.pipeline_begin(draw_pipeline, cam_2d);
 				
-				t := w.plot_framebuffer.color_attachments[0].(render.Texture2D);
+				t := render.frame_buffer_color_attach_as_texture(&w.plot_framebuffer, 0);
 				render.set_texture(.texture_diffuse, t)
 				render.draw_quad_rect({0, 0, width, height}, 0)
 				
@@ -186,7 +186,7 @@ make_plot_window :: proc (pt : Plot_type, loc := #caller_location) -> ^Plot_wind
 		w,
 		pt,
 		gui.init(),
-		render.frame_buffer_make_textures(1, 1000, 1000, .RGBA8, .depth_component32, true, .linear, loc = loc),
+		render.frame_buffer_make_textures({{.clamp_to_edge, .linear, .RGBA8}}, 1000, 1000, .depth_component32, nil, loc = loc),
 	}
 	
 	append_elem(&plot_windows, pw, loc = loc);
