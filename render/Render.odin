@@ -200,6 +200,8 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	assert(supported_attribs <= len(static_attrib_info) + len(dynamic_attrib_info), "The GPU does not support the amount of attributes needed", loc);
 	*/
 	
+	state.default_copy_fbo = gl.gen_frame_buffer();
+	
 	shaders_init(loc = loc);
 	text_init(loc = loc);
 	
@@ -244,6 +246,8 @@ destroy :: proc (loc := #caller_location) {
 	pipeline_destroy(state.shapes_pipeline);		state.shapes_pipeline = {};
 	pipeline_destroy(state.overlay_pipeline);		state.overlay_pipeline = {};
 
+	gl.delete_frame_buffer(state.default_copy_fbo); state.default_copy_fbo = 0;
+	
 	//Destroy shaders defines
 	for e, v in state.shader_defines {
 		delete_key(&state.shader_defines, e);

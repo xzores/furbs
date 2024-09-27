@@ -362,6 +362,11 @@ texture2D_upload_data :: proc(tex : ^Texture2D, upload_format : gl.Pixel_format_
 	}
 }
 
+texture2D_resize :: proc (tex : ^Texture2D, new_size : [2]i32) {
+	texture2D_destroy(tex^);
+	tex^ = texture2D_make(tex.mipmaps, tex.wrapmode, tex.filtermode, tex.format, new_size.x, new_size.y, .no_upload, nil, nil);
+}
+
 texture2D_clear :: proc(tex : ^Texture2D, clear_color : [4]f64, loc := #caller_location) {
 	gl.clear_texture_2D(tex.id, clear_color, loc);
 }

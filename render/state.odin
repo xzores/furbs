@@ -116,6 +116,8 @@ State :: struct {
 	//Textures stuff
 	white_texture : Texture2D,
 	black_texture : Texture2D,
+	
+	default_copy_fbo : gl.Fbo_id,
 
 	//Shader stuff
 	is_init_shader : bool,

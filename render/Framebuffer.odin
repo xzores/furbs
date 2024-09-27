@@ -99,6 +99,7 @@ frame_buffer_make_render_buffers :: proc (color_formats : []Color_format, width,
 		is_color_attachment_texture = false,
 		is_depth_attachment_texture = false,
 		depth_format = depth_format,
+		color_attachments_cnt = auto_cast len(color_formats),
 	};
 	
 	assert(len(color_formats) <= len(fbo.color_attachments), "too many color attachments", loc = loc);
@@ -145,6 +146,7 @@ frame_buffer_make_textures :: proc (color_descs : []Fbo_color_tex_desc, width, h
 		is_color_attachment_texture = true,
 		is_depth_attachment_texture = (depth_tex_desc != nil),
 		depth_format = depth_format,
+		color_attachments_cnt = auto_cast len(color_descs),
 	};
 	
 	assert(len(color_descs) <= len(fbo.color_attachments), "too many color attachments", loc = loc);
@@ -191,21 +193,80 @@ frame_buffer_make_textures :: proc (color_descs : []Fbo_color_tex_desc, width, h
 }
 
 //The texture is owned by the frame_buffer object, do not delete it.
-frame_buffer_color_attach_as_texture :: proc (fbo : ^Frame_buffer, #any_int attach : i32) -> Texture2D {
-	return {};
+frame_buffer_color_attach_as_texture :: proc (fbo : ^Frame_buffer, #any_int attach : i32, loc := #caller_location) -> Texture2D {
+	fmt.assertf(attach < fbo.color_attachments_cnt, "Attachment index out of bounds, index : %v, count : %v\n", attach, fbo.color_attachments_cnt, loc = loc);
+	
+	tex, ok := fbo.color_attachments[attach].(Color_render_texture);
+	
+	return Texture2D{
+		tex.id,
+		fbo.width,			   		// Texture base width
+		fbo.height,			   		// Texture base heights
+		{
+			tex.wrapmode,
+			tex.filtermode,
+			false,					// Is mipmaps enabled?
+			auto_cast tex.format,	// Data format (PixelFormat type)
+		}
+	};
 }
 
 //The texture is owned by the frame_buffer object, do not delete it.
 frame_buffer_depth_attach_as_texture :: proc (fbo : ^Frame_buffer) -> Texture2D {
-	return {};
+
+	tex, ok := fbo.depth_attachment.(Depth_render_texture);
+	
+	return Texture2D{
+		tex.id,
+		fbo.width,			   			// Texture base width
+		fbo.height,			   			// Texture base heights
+		{
+			tex.wrapmode,
+			tex.filtermode,
+			false,						// Is mipmaps enabled?
+			auto_cast fbo.depth_format,	// Data format (PixelFormat type)
+		}
+	};
 }
 
-frame_buffer_blit_color_attach_to_texture :: proc (fbo : ^Frame_buffer, #any_int attach_index : int, tex : Texture2D) {
+frame_buffer_blit_color_attach_to_texture :: proc (fbo : ^Frame_buffer, #any_int attach_index : int, tex : Texture2D, linear_interpolation := true, loc := #caller_location) {
 	
+	assert(tex.width == fbo.width, "Width of the texture and FBO does not match", loc);
+	assert(tex.height == fbo.height, "Height of the texture and FBO does not match", loc);
+	
+	fbo_format : Pixel_format_internal;
+	
+	switch v in fbo.color_attachments[attach_index] {
+		case Color_render_buffer:
+			fbo_format = auto_cast v.format;
+		case Color_render_texture:
+			fbo_format = auto_cast v.format;
+	}
+	
+	assert(gl.internal_format_to_texture_type(fbo_format) == gl.internal_format_to_texture_type(tex.format), "Cannot blit from/to a color format to/from a depth format", loc);
+	
+	fbo_channels := gl.internal_format_channel_cnt(fbo_format);
+	tex_channels := gl.internal_format_channel_cnt(tex.format);
+	fmt.assertf(fbo_channels == tex_channels, "The FBO's color attachment and the texture does not have the same amount of channels. The FBO has %v and the texture has %v.", fbo_channels, tex_channels, loc = loc);
+	
+	//attach the texture to the default fbo
+	gl.associate_color_texture_with_frame_buffer(state.default_copy_fbo, {tex.id});
+	
+	gl.blit_fbo_color_attach(fbo.id, state.default_copy_fbo, 0, 0, 0, 0, fbo.width, fbo.height, 0, 0, tex.width, tex.height, linear_interpolation);
+	
+	//unattach the texture from the default fbo
+	gl.associate_color_texture_with_frame_buffer(state.default_copy_fbo, {0});
 }
 
 frame_buffer_blit_depth_attach_to_texture :: proc (fbo : ^Frame_buffer, tex : Texture2D) {
 	
+	//attach the texture to the default fbo
+	gl.associate_depth_texture_with_frame_buffer(state.default_copy_fbo, tex.id);
+	
+	gl.blit_fbo_depth_attach(fbo.id, state.default_copy_fbo, 0, 0, fbo.width, fbo.height, 0, 0, tex.width, tex.height);
+	
+	//unattach the texture from the default fbo
+	gl.associate_depth_texture_with_frame_buffer(state.default_copy_fbo, 0);
 }
 
 //Destroy and recreate a FBO
@@ -228,6 +289,7 @@ frame_buffer_resize :: proc (fbo : ^Frame_buffer, new_size : [2]i32, loc := #cal
 	
 	if fbo.is_color_attachment_texture {
 		color_descs := make([]Fbo_color_tex_desc, fbo.color_attachments_cnt);
+		defer delete(color_descs);
 		depth_format : Depth_format;
 		depth_desc : Maybe(Fbo_depth_tex_desc);
 		
@@ -249,6 +311,7 @@ frame_buffer_resize :: proc (fbo : ^Frame_buffer, new_size : [2]i32, loc := #cal
 	}
 	else {
 		color_formats := make([]Color_format, fbo.color_attachments_cnt);
+		defer delete(color_formats);
 		
 		for &cd, i in color_formats {
 			cd = fbo.color_attachments[i].(Color_render_buffer).format;
