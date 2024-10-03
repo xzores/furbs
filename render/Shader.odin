@@ -158,17 +158,16 @@ Texture_odin_type :: union {
 }
 
 shaders_init :: proc(loc := #caller_location) {
-
+	
 	state.loaded_shaders = make([dynamic]^Shader);
 	e : Shader_load_error;
 	
 	state.default_shader, e 			= shader_load_from_src("default_shader.glsl", #load("default_shader.glsl"), nil, loc = loc);
+	if e != nil { fmt.panicf("Failed to load default shader!, this is internal bad error: %v", e); }
 	state.default_text_shader, e 		= shader_load_from_src("default_text_shader.glsl", #load("default_text_shader.glsl"), nil, loc = loc);
+	if e != nil { fmt.panicf("Failed to load default text shader!, this is internal bad error: %v", e); }
 	state.default_instance_shader, e 	= shader_load_from_src("default_instance_shader.glsl", #load("default_instance_shader.glsl"), nil, loc = loc);
-	
-	if e != nil {
-		panic("Failed to load default shader!, this is internal bad error");
-	}
+	if e != nil { fmt.panicf("Failed to load default instance shader!, this is internal bad error: %v", e); }
 
 	//TODO look at glValidateProgram 
 }
@@ -187,7 +186,8 @@ shaders_destroy :: proc() {
 	state.loaded_shaders = {};
 }
 
-get_default_shader :: proc() -> ^Shader {
+get_default_shader :: proc(loc := #caller_location) -> ^Shader {
+	assert(state.default_shader != nil, "Default shader not initialized", loc = loc);
 	return state.default_shader;
 }
 

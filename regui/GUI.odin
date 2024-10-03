@@ -20,7 +20,7 @@ import utils "../utils"
 init :: proc (fallback_appearance := default_appearance, loc := #caller_location) -> (state : Scene) {
 	
 	assert(render.state.is_init, "The render library is not initialized", loc);
-		
+	
 	state = {
 		gui_pipeline = render.pipeline_make(render.get_default_shader(), .blend, false, false),
 		default_style = {

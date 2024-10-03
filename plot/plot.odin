@@ -2,11 +2,14 @@ package plot;
 
 import "../render"
 import gui "../regui"
+
 import "core:time"
 import "core:fmt"
 import "core:math"
 import "core:unicode/utf8"
 import "core:slice"
+
+import "base:intrinsics"
 
 Grid_desc :: struct {
 	color : [4]f32,
@@ -19,16 +22,26 @@ Axis_desc :: struct {
 	unit : string,
 }
 
+Trace :: struct {
+	abscissa : []f64,
+	ordinate : []f64,
+}
+
+Marker_style :: enum {
+	line,
+	circle,
+	square,
+}
+
 Plot_xy :: struct {
-	abscissa : []f32,
-	ordinate : []f32,
+	traces : []Trace,
 	
 	//plot_desc : 
 	grid_desc : Grid_desc,
 	axis_desc : [2]Maybe(Axis_desc),
 	
-	x_view : [2]f32,
-	y_view : [2]f32,
+	x_view : [2]f64,
+	y_view : [2]f64,
 	
 	top_bar : gui.Panel,
 }
@@ -84,7 +97,11 @@ Abscissa :: union {
 
 Signal :: struct {
 	name : string,
+	
+	ordinate_label : string,
 	ordinate : Ordinate, //y-coordinate
+	
+	abscissa_label : string,
 	abscissa : Abscissa, //x-coordinate
 }
 
@@ -109,7 +126,7 @@ set_signal_name :: proc () {
 	
 }
 
-fill_signal :: proc (s : ^Signal, span : Span($T), func : Math_func_1D, loc := #caller_location) {
+fill_signal :: proc (s : ^Signal, span : Span($T), func : Math_func_1D, time_mul : f64 = 1, amp_mul : f64 = 1, loc := #caller_location) {
 	
 	s.abscissa = span;
 	
@@ -118,7 +135,7 @@ fill_signal :: proc (s : ^Signal, span : Span($T), func : Math_func_1D, loc := #
 	
 	ordinate := make([]T, len(arr));
 	for e, i in arr {
-		ordinate[i] = cast(T)func(cast(f64)e);
+		ordinate[i] = amp_mul * cast(T)func(cast(f64)e * time_mul);
 	}
 	s.ordinate = ordinate;
 	
@@ -192,79 +209,85 @@ destroy_signal :: proc (s : Signal, loc := #caller_location) {
 	}
 }
 
-plot_xy :: proc (signal : Signal, loc := #caller_location) {
+xy_plots :: proc (signals : []Signal, loc := #caller_location) {
 	
-	span_pos : []f32;
+	traces := make([]Trace, len(signals));
+	xlow, xhigh : f64 = max(f64), min(f64);
+	ylow, yhigh : f64 = max(f64), min(f64);
 	
-	switch abscissa in signal.abscissa {
-		case Span(int):
-			span_pos = array_from_span(convert_span(abscissa, f32));
-		case Span(f32):
-			span_pos = array_from_span(convert_span(abscissa, f32));
-		case Span(f64):
-			span_pos = array_from_span(convert_span(abscissa, f32));
-		case []int:
-			span_pos = make([]f32, len(abscissa));
-			for e, i in abscissa {
-				span_pos[i] = cast(f32)e;
-			}
-		case []f32:
-			span_pos = slice.clone(abscissa);
-		case []f64:
-			span_pos = make([]f32, len(abscissa));
-			for e, i in abscissa {
-				span_pos[i] = cast(f32)e;
-			}
-		case []string:
-			panic("Cannot do an xy plot for a string abscissa");
-	}
-	
-	value_pos : []f32;
-	
-	switch ordinate in signal.ordinate {
-		case []int:
-			value_pos = make([]f32, len(ordinate));
-			for e, i in ordinate {
-				value_pos[i] = cast(f32)e;
-			}
-		case []f32:
-			value_pos = slice.clone(ordinate);
-		case []f64:
-			value_pos = make([]f32, len(ordinate));
-			for e, i in ordinate {
-				value_pos[i] = cast(f32)e;
-			}
-		case [][2]f64:
-			panic("Cannot do an xy plot for a 2D signal");
-		case [][3]f64:
-			panic("Cannot do an xy plot for a 3D signal");
-		case []complex128:
-			panic("Cannot do an xy plot for a complex signal");
-	}
-	
-	xlow, xhigh := get_extremes(span_pos);
-	ylow, yhigh := get_extremes(value_pos);
-	
-	total_y : f32 = yhigh - ylow;
+	for signal, i in signals {
 		
+		span_pos : []f64 = abscissa_to_array(signal.abscissa);
+		
+		xl, xh := get_extremes(span_pos);
+		xlow, xhigh = math.min(xlow, xl), math.max(xhigh, xh);
+		
+		value_pos : []f64 = ordinate_to_array(signal.ordinate);
+		
+		yl, yh := get_extremes(value_pos);
+		ylow, yhigh = math.min(ylow, yl), math.max(yhigh, yh);
+		
+		traces[i] = {span_pos, value_pos};
+	}
+	
 	pt := Plot_xy{
-		span_pos,											//X coord
-		value_pos,											//Y coord
-		Grid_desc{line_width = 0.001, color = {0.5, 0.5, 0.5, 0.5}}, //Grid desc
+		traces,															//Y coord
+		Grid_desc{line_width = 0.001, color = {0.5, 0.5, 0.5, 0.5}}, 	//Grid desc
 		[2]Maybe(Axis_desc){nil, nil},
-		{xlow, xhigh},										//x_view
-		{ylow - 0.1 * total_y, yhigh + 0.1 * total_y},		//y_view
-		{},													//Top bar panel
+		{cast(f64)xlow, cast(f64)xhigh},								//x_view
+		find_good_display_extremes(ylow, yhigh),						//y_view
+		{},																//Top bar panel
 	}
 	
 	make_plot_window(pt);
+}
+
+trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
 	
+	span_pos : []f64 = abscissa_to_array(signal.abscissa);	//The y-value
+	value_pos : []f64 = ordinate_to_array(signal.ordinate);	//The x-value
+	defer delete(span_pos);
+	defer delete(value_pos);
+	
+	freq_text : string;
+	
+	if use_hertz {
+		freq_text = "Frequency [Hz]";
+	}
+	else {
+		freq_text = "Frequency [rad/s]";
+	}
+	
+	a_coeff, b_coeff, freq_span := calculate_trig_dft(span_pos, value_pos, use_hertz);
+	defer delete(a_coeff);
+	defer delete(b_coeff);
+	defer delete(freq_span);
+	
+	signal_a_coeff := Signal {
+	 	"",
+		
+		freq_text,
+		a_coeff, 		//y-coordinate
+		
+		"",
+		freq_span, 		//x-coordinate
+	};
+	signal_b_coeff := Signal {
+	 	"",				//Name
+		
+		freq_text,		//y-label
+		b_coeff, 		//y-coordinate
+		
+		"",				//x-label
+		freq_span, 		//x-coordinate
+	};
+	
+	xy_plots({signal_a_coeff, signal_b_coeff});
 }
 
 plot_surface :: proc () {
 	//...
 }
-
 
 plot_windows : [dynamic]^Plot_window;
 //Pauses execution until all windows are closed, and continuesly updates the windows.
@@ -330,7 +353,9 @@ hold :: proc () {
 			
 			render.target_begin(&w.plot_framebuffer, plot_bg_color);
 				render.pipeline_begin(draw_pipeline, cam_2d);
-					pv_pos, pv_size, x_view, y_view, grid_cnt := plot_inner(&w.plot_type, width_i, height_i);
+					pv_pos, pv_size, x_view, y_view, x_callout, y_callout := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
+					defer delete(x_callout);
+					defer delete(y_callout);
 				render.pipeline_end();
 			render.target_end();
 			
@@ -342,27 +367,13 @@ hold :: proc () {
 					render.draw_quad_rect({pv_pos.x, pv_pos.y, pv_size.x, pv_size.y}, 0)
 					
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
-					for grid_x in 0..=grid_cnt.x {
-						x := pv_pos.x + ((cast(f32)(grid_x) / cast(f32)grid_cnt.x) * pv_size.x);
-						render.draw_line_2D({x, pv_pos.y}, {x, pv_pos.y - 0.03}, 0.003, 0, inverse_color);
-						
-						if grid_x != grid_cnt.x {
-							for sub_x in 1..<5 {
-								diff := (pv_pos.x + ((cast(f32)(grid_x + 1) / cast(f32)grid_cnt.x) * pv_size.x) - x) / 5;
-								render.draw_line_2D({x + diff * cast(f32)sub_x, pv_pos.y}, {x + diff * cast(f32)sub_x, pv_pos.y - 0.01}, 0.001, 0, inverse_color);
-							}
-						}
+					for call in x_callout {
+						x := pv_pos.x + (cast(f32)call.placement * pv_size.x);
+						render.draw_line_2D({x, pv_pos.y}, {x, pv_pos.y - call.length}, call.thickness, 0, inverse_color);
 					}
-					for grid_y in 0..=grid_cnt.y {
-						y := pv_pos.y + ((cast(f32)(grid_y) / cast(f32)grid_cnt.y) * pv_size.y);						
-						render.draw_line_2D({pv_pos.x, y}, {pv_pos.x - 0.03, y}, 0.003, 0, inverse_color);
-						
-						if grid_y != grid_cnt.y {
-							for sub_y in 1..<5 {
-								diff := (pv_pos.y + ((cast(f32)(grid_y + 1) / cast(f32)grid_cnt.y) * pv_size.y) - y) / 5.0;
-								render.draw_line_2D({pv_pos.x, y + diff * cast(f32)sub_y}, {pv_pos.x - 0.01, y + diff * cast(f32)sub_y}, 0.001, 0, inverse_color);
-							}
-						}
+					for call in y_callout {
+						y := pv_pos.y + (cast(f32)call.placement * pv_size.y);						
+						render.draw_line_2D({pv_pos.x, y}, {pv_pos.x - call.length, y}, call.thickness, 0, inverse_color);
 					}
 					
 					render.draw_line_2D({pv_pos.x, pv_pos.y}, {pv_pos.x + pv_size.x, pv_pos.y}, 0.003, 0, inverse_color);
@@ -370,30 +381,34 @@ hold :: proc () {
 				
 				render.pipeline_end();
 				
-				//Draw the lines around the plot, including the entries (like numbers).
+				//Draw the callout lines around the plot, including the entries (like numbers).
 				{
-					text_size : f32 = cast(f32)target_size.y / 27;
-					for grid_x in 0..=grid_cnt.x {
-						x := pv_pos.x + ((cast(f32)(grid_x) / cast(f32)grid_cnt.x) * pv_size.x);
-						
-						low_p, high_p := x_view[0], x_view[1];
-						
-						val := low_p + cast(f32)(grid_x) / cast(f32)grid_cnt.x * (high_p - low_p);						
-						s_val := format_val(val);
-						bounds := render.text_get_visible_bounds(s_val, render.get_default_fonts().normal, text_size);
-						text_pos : [2]f32 = ({x, pv_pos.y - 0.03} * cast(f32)target_size.y) - ({bounds.z/2, bounds.w} * 1.1);
-						render.text_draw(s_val, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});						
+					text_size : f32 = cast(f32)target_size.y / 26;
+					for call in x_callout {
+						if call.display_value {
+							x := pv_pos.x + (cast(f32)call.placement * pv_size.x);
+							
+							low_p, high_p := x_view[0], x_view[1];
+							
+							val := low_p + call.placement * (high_p - low_p);						
+							s_val := format_val(val);
+							bounds := render.text_get_visible_bounds(s_val, render.get_default_fonts().normal, text_size);
+							text_pos : [2]f32 = ({x, pv_pos.y - call.length} * cast(f32)target_size.y) - ({bounds.z/2, bounds.w} * 1.1);
+							render.text_draw(s_val, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
+						}				
 					}
-					for grid_y in 0..=grid_cnt.y {
-						y := pv_pos.y + ((cast(f32)(grid_y) / cast(f32)grid_cnt.y) * pv_size.y);
-						
-						low_p, high_p := y_view[0], y_view[1];
-						
-						val := low_p + cast(f32)(grid_y) / cast(f32)grid_cnt.y * (high_p - low_p);
-						s_val := format_val(val);
-						bounds := render.text_get_visible_bounds(s_val, render.get_default_fonts().normal, text_size);
-						text_pos : [2]f32 = ({pv_pos.x - 0.03, y} * cast(f32)target_size.y) - ([2]f32{bounds.z, bounds.w/2} * 1.1);
-						render.text_draw(s_val, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
+					for call in y_callout {
+						if call.display_value {
+							y := pv_pos.y + (cast(f32)call.placement * pv_size.y);
+							
+							low_p, high_p := y_view[0], y_view[1];
+							
+							val := low_p + call.placement * (high_p - low_p);
+							s_val := format_val(val);
+							bounds := render.text_get_visible_bounds(s_val, render.get_default_fonts().normal, text_size);
+							text_pos : [2]f32 = ({pv_pos.x - call.length, y} * cast(f32)target_size.y) - ([2]f32{bounds.z, bounds.w/2} * 1.1);
+							render.text_draw(s_val, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
+						}
 					}
 				}
 				
@@ -415,9 +430,125 @@ hold :: proc () {
 	}
 }
 
+end :: proc () {
+	render.destroy();
+	delete(plot_windows);
+}
+
+
+
+
+
+//////////////////////////////////////// PRIVATE ////////////////////////////////////////
+
+@(private, require_results)
+abscissa_to_array :: proc (a : Abscissa, alloc := context.allocator, loc := #caller_location) -> []f64 {
+	context.allocator = alloc;
+	
+	span_pos : []f64;
+	
+	switch abscissa in a {
+		case Span(int):
+			span_pos = array_from_span(convert_span(abscissa, f64), loc);
+		case Span(f32):
+			span_pos = array_from_span(convert_span(abscissa, f64), loc);
+		case Span(f64):
+			span_pos = array_from_span(convert_span(abscissa, f64), loc);
+		case []int:
+			span_pos = make([]f64, len(abscissa));
+			for e, i in abscissa {
+				span_pos[i] = cast(f64)e;
+			}
+		case []f32:
+			span_pos = make([]f64, len(abscissa));
+			for e, i in abscissa {
+				span_pos[i] = cast(f64)e;
+			}
+		case []f64:
+			span_pos = slice.clone(abscissa, loc = loc);
+		case []string:
+			panic("Cannot do an xy plot for a string abscissa");
+	}
+	
+	return span_pos;
+}
+
+@(private, require_results)
+ordinate_to_array :: proc (o : Ordinate, alloc := context.allocator, loc := #caller_location) -> []f64 {
+	context.allocator = alloc;
+	
+	value_pos : []f64;
+	
+	switch ordinate in o {
+		case []int:
+			value_pos = make([]f64, len(ordinate));
+			for e, i in ordinate {
+				value_pos[i] = cast(f64)e;
+			}
+		case []f32:
+			value_pos = make([]f64, len(ordinate));
+			for e, i in ordinate {
+				value_pos[i] = cast(f64)e;
+			}
+		case []f64:
+			value_pos = slice.clone(ordinate, loc = loc);
+		case [][2]f64:
+			panic("Cannot do an xy plot for a 2D signal");
+		case [][3]f64:
+			panic("Cannot do an xy plot for a 3D signal");
+		case []complex128:
+			panic("Cannot do an xy plot for a complex signal");
+	}
+	
+	return value_pos;
+}
+
+
+@(private, require_results)
+nice_round :: proc (val : $T, round_amount : f64 = 10) -> f64 where intrinsics.type_is_numeric(T) {
+	
+	sign :=  math.sign(cast(f64)val);
+	val : f64 = math.abs(cast(f64)val);
+	exp : int = 0;
+	
+	for val >= 1000.0 && exp < 12 {
+		val /= 1000.0;
+		exp += 3;
+	}
+	if val != 0 {
+		for val < 1.0 && val > -1.0 && exp > -12 {
+			val = val * 1000.0;
+			exp -= 3;
+		}
+	}
+	
+	val *= round_amount;
+	val = math.round(val);
+	
+	return sign * val * math.pow10(cast(f64)exp) / round_amount;
+}
+
+@(private, require_results)
+find_good_display_extremes :: proc (ylow, yhigh : f64) -> [2]f64 {
+	
+	low_exp : int = 0;
+	high_exp : int = 0;
+	
+	total_y := yhigh - ylow;
+	
+	if total_y <= 1e-12 {
+		return {ylow-1e-12, yhigh+1e-12};
+	}
+	
+	fmt.printf("total_y : %v\n", total_y)
+	
+	return {nice_round(ylow - total_y * 0.1), nice_round(yhigh + total_y * 0.1)};
+}
+
+@(private, require_results)
 get_extremes :: proc (arr : []$T) -> (low, high : T){
 	
-	low, high = math.inf_f32(1), math.inf_f32(-1);
+	low, high = math.inf_f64(1), math.inf_f64(-1);
 	
 	for e, i in arr {
 		if e < low {
@@ -431,33 +562,12 @@ get_extremes :: proc (arr : []$T) -> (low, high : T){
 	return;
 }
 
-end :: proc () {
-	render.destroy();
-	delete(plot_windows);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//////////////////////////////////////// PRIVATE ////////////////////////////////////////
-
 //Uses temp alloc
-@(private)
-format_val :: proc (val : f32) -> string {
-	val : f64 = cast(f64)val;
+@(private, require_results)
+format_val :: proc (val : f64) -> string {
+	
+	sign :=  math.sign(cast(f64)val);
+	val : f64 = math.abs(cast(f64)val);
 	prefix : i64 = 0; //In base 10
 	
 	if math.is_inf(val, 1) {
@@ -474,12 +584,16 @@ format_val :: proc (val : f32) -> string {
 		val /= 1000.0;
 		prefix += 3;
 	}
-	/*for val < 1.0 && prefix > -12 {
-		val *= 1000.0;
-		prefix -= 3;
-	}*/
+	if val != 0 {
+		for val < 1.0 && val > -1.0 && prefix > -12 {
+			val = val * 1000.0;
+			prefix -= 3;
+		}
+	}
 	
-	s_val := fmt.tprintf("%.7f", val);
+	val *= 10000.0;
+	val = math.round(val) / 10000;
+	s_val := fmt.tprintf("%.5f", sign * val);
 	
 	//Find the where the "." is, if there is any.
 	dot_loc := max(int)
@@ -512,7 +626,34 @@ format_val :: proc (val : f32) -> string {
 	}
 	defer delete(si_prefixes);
 	
+	if s_val == "0" {
+		return "0";
+	}
+	if s_val == "-0" {
+		return "0";
+	}
+	
 	return fmt.tprintf("%s%c", s_val, si_prefixes[prefix]);
+}
+
+default_trace_colors := [?][4]f32{
+	[4]f32{0.9, 0.2, 0.2, 1},
+	[4]f32{0.1, 0.4, 0.9, 1},
+	[4]f32{0.9, 0.5, 0.1, 1},
+	[4]f32{0.05, 0.4, 0.05, 1},
+	[4]f32{0.8, 0.2, 0.8, 1},
+	
+	[4]f32{0.2, 0.8, 0.8, 1},
+	[4]f32{0.6, 0.3, 0.1, 1},
+	[4]f32{0.3, 1.0, 0.3, 1},
+	[4]f32{0.5, 0.2, 0.9, 1},
+	[4]f32{0.9, 0.9, 0.2, 1},
+};
+
+@(private, require_results)
+get_trace_info :: proc(index : int) -> ([4]f32, Marker_style) {
+	
+	return default_trace_colors[index %% 10], .line;
 }
 
 @(private)
@@ -537,24 +678,24 @@ make_plot_window :: proc (pt : Plot_type, loc := #caller_location) -> ^Plot_wind
 }
 
 
-@(private)
+@(private, require_results)
 convert_span :: proc (span : Span($T), $TT : typeid) -> Span(TT) {
 	
-	return Span(f32){
-		begin = cast(f32)span.begin,
-		end = cast(f32)span.end,
-		dist = cast(f32)span.dist,
+	return Span(f64){
+		begin = cast(f64)span.begin,
+		end = cast(f64)span.end,
+		dist = cast(f64)span.dist,
 	};
 }
 
-@(private)
+@(private, require_results)
 array_from_span :: proc (span : Span($T), loc := #caller_location) -> []T {
 	
 	assert(span.begin < span.end, "The begining of the span must be higher then the end of the span", loc)
 	
 	steps : int = cast(int)((span.end - span.begin) / span.dist);
 	
-	arr := make([]T, steps + 1);
+	arr := make([]T, steps + 1, loc = loc);
 	
 	for i in 0..=steps{
 		arr[i] = cast(T)(cast(f64)i * cast(f64)span.dist + cast(f64)span.begin);
@@ -580,8 +721,11 @@ destroy_plot_window :: proc (w : ^Plot_window) {
 	
 	switch p in w.plot_type {
 		case Plot_xy:
-			delete(p.abscissa);
-			delete(p.ordinate);
+			for t in p.traces {
+				delete(t.abscissa);
+				delete(t.ordinate);
+			}
+			delete(p.traces)
 	}
 	
 	render.texture2D_destroy(w.plot_texture);

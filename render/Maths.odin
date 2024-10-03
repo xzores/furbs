@@ -157,3 +157,40 @@ get_mouse_cast :: proc (camera : Camera3D, window : ^Window) -> (direction : [3]
 
 	return linalg.normalize(ray_world);
 }
+
+// plane is 3 3D points spanning a plane
+// ray is origin and then a direction
+@require_results
+plane_ray_intersection :: proc (plane: [3][3]f32, ray: [2][3]f32) -> (intersection: [3]f32, hit: bool) {
+    origin := ray[0];
+    dir := ray[1];
+
+    // Calculate the normal of the plane
+    v0 := plane[1] - plane[0];
+    v1 := plane[2] - plane[0];
+    normal := linalg.cross(v0, v1); // normal = cross product of two vectors on the plane
+
+    // Plane equation: N dot (P - P0) = 0, where P0 is a point on the plane (plane[0])
+    // Ray equation: P(t) = origin + t * dir
+    // Substituting into the plane equation, we get N dot (origin + t * dir - P0) = 0
+    // Rearranging for t: t = (N dot (P0 - origin)) / (N dot dir)
+
+    denom := linalg.dot(normal, dir);
+    
+    // If the denominator is close to 0, the ray is parallel to the plane (no intersection)
+    if abs(denom) < 1e-6 {
+        return [3]f32{}, false; // No hit
+    }
+
+    t := linalg.dot(normal, plane[0] - origin) / denom;
+
+    // If t is negative, the intersection is behind the ray's origin
+    if t < 0 {
+        return [3]f32{}, false; // No hit
+    }
+
+    // Calculate intersection point
+    intersection = origin + t * dir;
+    
+    return intersection, true;
+}

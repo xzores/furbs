@@ -53,8 +53,6 @@ in vec3 normals;
 uniform sampler2D texture_diffuse;
 uniform vec4 color_diffuse = vec4(1,1,1,1);
 
-uniform vec3 sun = {0,0,1};
-
 //// Outputs ////
 out vec4 FragColor;
 

@@ -6,7 +6,99 @@ import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:time"
 
-//TODO delete draw char
+draw_quad_mat :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded(loc);
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_quad, loc);
+}
+
+draw_quad_rect:: proc(rect : [4]f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	mat : matrix[4,4]f32 = linalg.matrix4_from_trs_f32({rect.x, rect.y, z} + {rect.z/2, rect.w/2, 0}, 1, {rect.z, rect.w, 1});
+	draw_quad_mat(mat, color, loc);
+}
+
+draw_quad :: proc {draw_quad_mat, draw_quad_rect};
+
+//Rot is in degrees
+draw_quad_instanced :: proc (instances : []Default_instance_data, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	panic("ToDO");	
+}
+
+//Draw as quad between two points presented as a line.
+draw_line_2D :: proc (p1 : [2]f32, p2 : [2]f32, width : f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+   
+	// Calculate the difference vector and its length
+	diff := p2 - p1;
+	length := linalg.length(diff);
+	
+	// Calculate the angle of rotation needed
+	angle := math.atan2(diff.y, diff.x);
+	
+	// Create the transformation matrix
+	translation := linalg.matrix4_translate_f32({p1.x, p1.y, z});
+	rotation := linalg.matrix4_from_quaternion_f32(linalg.quaternion_from_pitch_yaw_roll_f32(0, 0, angle));
+	scale := linalg.matrix4_scale_f32({length, width, 1});
+	
+	// Offset the quad, so we draw from the x-left, y-center.
+	offset := linalg.matrix4_translate_f32({0.5, 0, 0});
+	
+	// Combine the transformations in the correct order
+	mat := translation * rotation * scale * offset;
+	
+	draw_quad_mat(mat, color);
+}
+
+//TODO
+//draw_line_3D :: proc () {}
+
+//TODO not needed, should it be deleted?
+draw_char :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_char);
+}
+
+draw_circle :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_circle);
+}
+
+draw_cube :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_cube);
+}
+
+draw_cylinder :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_cylinder);
+}
+
+draw_sphere :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_sphere);
+}
+
+draw_cone :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_cone);
+}
+
+draw_arrow :: proc(position : [3]f32, direction : [3]f32, color : [4]f32 = {1,1,1,1}, up : [3]f32 = {0,1,0}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	
+	using linalg;
+
+	arb := up;
+	if math.abs(linalg.dot(arb, direction)) >= 0.9999 {
+		arb = [3]f32{1,0,0}; //is there something better? likely...
+	}
+	
+	mat := look_at(position, position + direction, arb);
+
+	mesh_draw_single(&state.shapes, mat, color, state.shape_arrow);
+}
+
+
+////////////////////////////////////////// PRIVATE //////////////////////////////////////////
+
 @(private)
 _ensure_shapes_loaded :: proc (loc := #caller_location) {
 	
@@ -90,89 +182,3 @@ shapes_destroy :: proc() {
 		state.shape_arrow		= {};
 	}
 }
-
-draw_quad_mat :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	_ensure_shapes_loaded(loc);
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_quad, loc);
-}
-
-draw_quad_rect:: proc(rect : [4]f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	mat : matrix[4,4]f32 = linalg.matrix4_from_trs_f32({rect.x, rect.y, z} + {rect.z/2, rect.w/2, 0}, 1, {rect.z, rect.w, 1});
-	draw_quad_mat(mat, color, loc);
-}
-
-draw_quad :: proc {draw_quad_mat, draw_quad_rect};
-
-//Draw as quad between two points presented as a line.
-draw_line_2D :: proc (p1 : [2]f32, p2 : [2]f32, width : f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-   
-	// Calculate the difference vector and its length
-	diff := p2 - p1;
-	length := linalg.length(diff);
-	
-	// Calculate the angle of rotation needed
-	angle := math.atan2(diff.y, diff.x);
-	
-	// Create the transformation matrix
-	translation := linalg.matrix4_translate_f32({p1.x, p1.y, z});
-	rotation := linalg.matrix4_from_quaternion_f32(linalg.quaternion_from_pitch_yaw_roll_f32(0, 0, angle));
-	scale := linalg.matrix4_scale_f32({length, width, 1});
-	
-	// Offset the quad, so we draw from the x-left, y-center.
-	offset := linalg.matrix4_translate_f32({0.5, 0, 0});
-	
-	// Combine the transformations in the correct order
-	mat := translation * rotation * scale * offset;
-	
-	draw_quad_mat(mat, color);
-}
-
-//TODO
-//draw_line_3D :: proc () {}
-
-//TODO not needed, should it be deleted?
-draw_char :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	_ensure_shapes_loaded();
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_char);
-}
-
-draw_circle :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	_ensure_shapes_loaded();
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_circle);
-}
-
-draw_cube :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	_ensure_shapes_loaded();
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_cube);
-}
-
-draw_cylinder :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	_ensure_shapes_loaded();
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_cylinder);
-}
-
-draw_sphere :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	_ensure_shapes_loaded();
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_sphere);
-}
-
-draw_cone :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	_ensure_shapes_loaded();
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_cone);
-}
-
-draw_arrow :: proc(position : [3]f32, direction : [3]f32, color : [4]f32 = {1,1,1,1}, up : [3]f32 = {0,1,0}, loc := #caller_location) {
-	_ensure_shapes_loaded();
-	
-	using linalg;
-
-	arb := up;
-	if math.abs(linalg.dot(arb, direction)) >= 0.9999 {
-		arb = [3]f32{1,0,0}; //is there something better? likely...
-	}
-	
-	mat := look_at(position, position + direction, arb);
-
-	mesh_draw_single(&state.shapes, mat, color, state.shape_arrow);
-}
-
