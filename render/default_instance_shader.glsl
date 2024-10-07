@@ -63,7 +63,7 @@ mat3 rotation_matrix(vec3 euler_angles) {
 void main() {
 	texture_coords = (texcoord * instance_tex_pos_scale.zw) + instance_tex_pos_scale.xy;
 	normals = normal;
-	vec4 pos = vec4(((rotation_matrix(instance_rotation) * position) * instance_scale) + instance_position, 1.0);
+	vec4 pos = vec4(((rotation_matrix(instance_rotation) * (position * instance_scale))) + instance_position, 1.0);
 	gl_Position = mvp * pos;
 }
 

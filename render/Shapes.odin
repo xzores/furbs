@@ -19,32 +19,23 @@ draw_quad_rect:: proc(rect : [4]f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, lo
 draw_quad :: proc {draw_quad_mat, draw_quad_rect};
 
 //Rot is in degrees
-draw_quad_instanced :: proc (instances : []Default_instance_data, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	panic("ToDO");	
+//Single use draw quads, reasonably fast, but custom solutions can be much faster.
+draw_quad_instanced :: proc (instances : []Default_instance_data, color : [4]f32 = {1,1,1,1}, offset : [3]f32 = {}, use_index_buffer := true, loc := #caller_location) {
+	
+	qv, qi := generate_quad({1,1,1}, offset, use_index_buffer);
+	defer { delete(qv); indices_delete(qi); }
+	instance_desc := Instance_data_desc{Default_instance_data, len(instances), .dynamic_upload};
+	
+	quad_instaces : Mesh_single = mesh_make_single(qv, qi, .static_use, .triangles, instance_desc);
+	defer mesh_destroy(&quad_instaces);
+	
+	upload_instance_data(&quad_instaces, 0, instances);
+	mesh_draw_instanced(&quad_instaces, len(instances), color, loc = loc);
 }
 
 //Draw as quad between two points presented as a line.
 draw_line_2D :: proc (p1 : [2]f32, p2 : [2]f32, width : f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-   
-	// Calculate the difference vector and its length
-	diff := p2 - p1;
-	length := linalg.length(diff);
-	
-	// Calculate the angle of rotation needed
-	angle := math.atan2(diff.y, diff.x);
-	
-	// Create the transformation matrix
-	translation := linalg.matrix4_translate_f32({p1.x, p1.y, z});
-	rotation := linalg.matrix4_from_quaternion_f32(linalg.quaternion_from_pitch_yaw_roll_f32(0, 0, angle));
-	scale := linalg.matrix4_scale_f32({length, width, 1});
-	
-	// Offset the quad, so we draw from the x-left, y-center.
-	offset := linalg.matrix4_translate_f32({0.5, 0, 0});
-	
-	// Combine the transformations in the correct order
-	mat := translation * rotation * scale * offset;
-	
-	draw_quad_mat(mat, color);
+	draw_quad_mat(line_2D_to_quad_mat(p1, p2, width, z), color);
 }
 
 //TODO

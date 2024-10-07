@@ -99,6 +99,15 @@ extract_rotation_from_matrix3 :: proc "contextless" (mat : matrix[3,3]f32) -> [3
 }
 
 @require_results
+extract_translation_from_matrix4 :: proc "contextless" (mat : matrix[4,4]f32) -> [3]f32 {
+	return {mat[0,3], mat[1,3], mat[2,3]};
+}
+
+extract_scale_from_matrix4 :: proc "contextless" (mat : matrix[4,4]f32) -> [3]f32 {
+	return {mat[0,0], mat[1,1], mat[2,2]};
+}
+
+@require_results
 extract_rotation_from_matrix4 :: proc "contextless" (mat : matrix[4,4]f32) -> [3]f32 {
 	return extract_rotation_from_matrix3(matrix[3,3]f32{
 		mat[0,0], mat[0,1], mat[0,2],
@@ -193,4 +202,48 @@ plane_ray_intersection :: proc (plane: [3][3]f32, ray: [2][3]f32) -> (intersecti
     intersection = origin + t * dir;
     
     return intersection, true;
+}
+
+@(optimization_mode="favor_size")
+line_2D_to_quad_mat :: proc (p1 : [2]f32, p2 : [2]f32, width : f32, z : f32 = 0) -> matrix[4,4]f32 {
+
+	// Calculate the difference vector and its length
+	diff := p2 - p1;
+	length := linalg.length(diff);
+	
+	// Calculate the angle of rotation needed
+	angle := #force_inline math.atan2(diff.y, diff.x);
+	
+	// Create the transformation matrix
+	translation := #force_inline linalg.matrix4_translate_f32({p1.x, p1.y, z});
+	rotation := #force_inline linalg.matrix4_from_quaternion_f32( #force_inline linalg.quaternion_from_pitch_yaw_roll_f32(0, 0, angle));
+	scale := #force_inline linalg.matrix4_scale_f32({length, width, 1});
+	
+	// Offset the quad, so we draw from the x-left, y-center.
+	offset := #force_inline linalg.matrix4_translate_f32({0.5, 0, 0});
+	
+	// Combine the transformations in the correct order
+	mat := translation * rotation * scale * offset;
+	
+	return mat;
+}
+
+//Will not provide any offset to the quad, this must be done in mesh creation.
+@(optimization_mode="favor_size")
+line_2D_to_quad_trans_rot_scale :: proc (p1 : [2]f32, p2 : [2]f32, width : f32, z : f32 = 0) -> (trans : [3]f32, rot : [3]f32, scale : [3]f32) {
+	
+	// Calculate the difference vector and its length
+	diff := p2 - p1;
+	length := #force_inline linalg.length(diff);
+	
+	// Calculate the angle of rotation needed
+	angle := #force_inline math.atan2(diff.y, diff.x);
+	
+	// Create the transformation matrix
+	trans = {p1.x, p1.y, z};
+	rot =  {0, 0, angle} * 180 / math.PI;
+	
+	scale = {length, width, 1};
+	
+	return trans, rot, scale;
 }

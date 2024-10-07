@@ -218,6 +218,10 @@ xy_plots :: proc (signals : []Signal, loc := #caller_location) {
 	for signal, i in signals {
 		
 		span_pos : []f64 = abscissa_to_array(signal.abscissa);
+		if len(span_pos) == 0 {
+			delete(span_pos);
+			continue;
+		}
 		
 		xl, xh := get_extremes(span_pos);
 		xlow, xhigh = math.min(xlow, xl), math.max(xhigh, xh);
@@ -285,6 +289,42 @@ trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
 	xy_plots({signal_a_coeff, signal_b_coeff});
 }
 
+bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, loc := #caller_location) {
+	
+	span_pos : []f64 = abscissa_to_array(signal.abscissa);	//The y-value
+	value_pos : []f64 = ordinate_to_array(signal.ordinate);	//The x-value
+	defer delete(span_pos);
+	defer delete(value_pos);
+	
+	freq_text : string;
+	
+	if use_hertz {
+		freq_text = "Frequency [Hz]";
+	}
+	else {
+		freq_text = "Frequency [rad/s]";
+	}
+	
+	phasors, freq_span := calculate_complex_dft(span_pos, value_pos, use_hertz, range);
+	defer delete(phasors);
+	defer delete(freq_span);
+	magnetude, phase := complex_to_mag_and_phase(phasors);
+	defer delete(magnetude);
+	defer delete(phase);
+	
+	signal_mag := Signal {
+	 	"",
+		
+		freq_text,
+		magnetude, 		//y-coordinate
+		
+		"",
+		freq_span, 		//x-coordinate
+	};
+	
+	xy_plots({signal_mag});
+}
+
 plot_surface :: proc () {
 	//...
 }
@@ -342,6 +382,12 @@ hold :: proc () {
 			aspect_ratio := width_f / height_f;
 			width, height : f32 = aspect_ratio, 1.0;
 			
+			render.target_begin(&w.plot_framebuffer, plot_bg_color);
+					pv_pos, pv_size, x_view, y_view, x_callout, y_callout := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
+					defer delete(x_callout);
+					defer delete(y_callout);
+			render.target_end();
+			
 			cam_2d : render.Camera2D = {
 				position		= {width / 2, height / 2},
 				target_relative	= {width / 2, height / 2},
@@ -350,14 +396,6 @@ hold :: proc () {
 				near 			= -1,
 				far 			= 1,
 			};
-			
-			render.target_begin(&w.plot_framebuffer, plot_bg_color);
-				render.pipeline_begin(draw_pipeline, cam_2d);
-					pv_pos, pv_size, x_view, y_view, x_callout, y_callout := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
-					defer delete(x_callout);
-					defer delete(y_callout);
-				render.pipeline_end();
-			render.target_end();
 			
 			render.target_begin(w.window, base_color);
 				render.pipeline_begin(draw_pipeline, cam_2d);
@@ -427,6 +465,8 @@ hold :: proc () {
 			free(plot_windows[i]);
 			unordered_remove(&plot_windows, i);
 		}
+		
+		free_all(context.temp_allocator);
 	}
 }
 
@@ -539,8 +579,6 @@ find_good_display_extremes :: proc (ylow, yhigh : f64) -> [2]f64 {
 	if total_y <= 1e-12 {
 		return {ylow-1e-12, yhigh+1e-12};
 	}
-	
-	fmt.printf("total_y : %v\n", total_y)
 	
 	return {nice_round(ylow - total_y * 0.1), nice_round(yhigh + total_y * 0.1)};
 }
