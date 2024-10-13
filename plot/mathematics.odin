@@ -103,8 +103,6 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 		}
 	}
 	
-	fmt.printf("phasors : %#v\n, freqs : %#v\n", phasors, freqs);
-	
 	return;
 }
 

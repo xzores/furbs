@@ -59,7 +59,6 @@ user_pick_file :: proc (file_types : [][2]string, initial_directory : Maybe(stri
 		}
 	}
 	
-	
 	// Initialize the structure for file dialog
 	ofn : win32.OPENFILENAMEW = {
 		lStructSize 		= size_of(win32.OPENFILENAMEW),
