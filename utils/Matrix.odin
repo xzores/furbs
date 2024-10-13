@@ -24,7 +24,6 @@ matrix_destroy :: proc (m : Matrix($T)) {
 }
 
 
-
 when AUTO_REGISITER_UTILS_MATRIX {
 
 	_formatters : map[typeid]fmt.User_Formatter;
