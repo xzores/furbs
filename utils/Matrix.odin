@@ -3,6 +3,8 @@ package utils;
 import "base:intrinsics"
 
 import "core:fmt"
+import "core:math"
+import "core:slice"
 
 AUTO_REGISITER_UTILS_MATRIX	:: #config(AUTO_REGISISTER_UTILS_MATRIX, true);
 
@@ -21,14 +23,16 @@ matrix_destroy :: proc (m : Matrix($T)) {
 	delete(m.data);
 }
 
+
+
 when AUTO_REGISITER_UTILS_MATRIX {
 
+	_formatters : map[typeid]fmt.User_Formatter;
 	@(init,private="file")
 	auto_reg_utils_mats :: proc () {
 		
 		if fmt._user_formatters == nil {
-			formatter := new(map[typeid]fmt.User_Formatter);
-			fmt.set_user_formatters(formatter);
+			fmt.set_user_formatters(&_formatters);
 		}
 		
 		matrix_set_formatter(f16);
@@ -414,10 +418,10 @@ normalize :: #force_inline proc(m : ^Matrix($T), n : int) {
 	if(n >= m.columns){
 		return
 	}
-
+	
 	v := matrix_get(m, n, n);
-	r := matrix_get_row(m, n);
-
+	r := matrix_get_row_values(m, n);
+	
 	if(v == 0){
 		return;
 	}
@@ -433,8 +437,8 @@ normalize :: #force_inline proc(m : ^Matrix($T), n : int) {
 @(private="file")
 swap_rows :: #force_inline proc(m : ^Matrix($T), n : int, k : int){
 
-	r1 := matrix_get_row(m, n)
-	r2 := matrix_get_row(m, k)
+	r1 := matrix_get_row_values(m, n)
+	r2 := matrix_get_row_values(m, k)
 
 	slice.swap_between(r1, r2)
 }
@@ -446,7 +450,7 @@ ensure_number_in_row :: #force_inline proc(m : ^Matrix($T), n : int) {
 		return;
 	}
 
-	row := matrix_get_row(m, n);
+	row := matrix_get_row_values(m, n);
 
 	val : f64 = 1.0 / row[n];
 	if(math.is_inf_f64(val) || math.is_nan(val)){
@@ -459,7 +463,7 @@ ensure_number_in_row :: #force_inline proc(m : ^Matrix($T), n : int) {
 
 	for i := n + 1; i < m.rows; i+=1 {
 		//swap with a row below
-		swap_row := matrix_get_row(m, i);
+		swap_row := matrix_get_row_values(m, i);
 		if swap_row[n] != 0 {
 			swap_rows(m, n, i)
 			break;
@@ -483,8 +487,8 @@ elimination :: #force_inline proc(m : ^Matrix($T), column : int, row : int) {
 		v : T = matrix_get(m, column, i);
 		if v != 0 && i != row {
 			
-			minuend : []T = matrix_get_row(m, i);
-			subtrahend : []T = matrix_get_row(m, row);
+			minuend : []T = matrix_get_row_values(m, i);
+			subtrahend : []T = matrix_get_row_values(m, row);
 
 			multiplier := minuend[column] / subtrahend[column];
 			for min, index in minuend {
