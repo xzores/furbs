@@ -15,7 +15,7 @@ import "core:time"
 import "vendor:glfw"
 import fs "vendor:fontstash"
 
-import ex_defs "../../user_defs"
+import ex_defs "../../furbs_defs"
 import "gl"
 
 ////////////////////////////// Defines //////////////////////////////
