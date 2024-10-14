@@ -12,7 +12,7 @@ import "core:log"
 import "gl"
 
 import glgl "gl/OpenGL"
-import ex_defs "../../user_defs"
+import ex_defs "../../furbs_defs"
 
 Shader_file_error :: enum {
 	invalid_path,
