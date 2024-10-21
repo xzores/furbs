@@ -47,10 +47,16 @@ draw_char :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc
 	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_char);
 }
 
-draw_circle :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+draw_circle_mat :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
 	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_circle);
 }
+
+draw_circle_position :: proc(position : [3]f32, scale : f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	draw_circle_mat(linalg.matrix4_from_trs_f32(position, 1, scale * [3]f32{1,1,1}), color, loc);
+}
+
+draw_circle :: proc {draw_circle_mat, draw_circle_position};
 
 draw_cube :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();

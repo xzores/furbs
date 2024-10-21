@@ -203,7 +203,7 @@ window_make_desc :: proc(desc : Window_desc, loc := #caller_location) -> (window
 		assert(desc.antialiasing == .none, "it is not possiable to do multisampling (MSAA) while having a scaling backbuffer.", loc);
 	}*/
 
-	window = new(Window);
+	window = new(Window, loc = loc);
 	window.gl_states = gl.init_state();
 	setup_window_no_backbuffer(desc, window);
 	
@@ -464,6 +464,10 @@ window_focus :: proc "contextless" (window : ^Window) {
 
 window_request_attention :: proc "contextless" (window : ^Window) {
 	glfw.RequestWindowAttention(window.glfw_window);
+}
+
+window_is_any_focus :: proc "contextless" () -> bool {
+	return state.window_in_focus != nil;
 }
 
 window_is_focus :: proc "contextless" (window : ^Window) -> bool {

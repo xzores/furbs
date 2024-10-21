@@ -69,6 +69,23 @@ base_colors : [Light_mode][4]f32 = 		{.dark_mode = [4]f32{0.17, 0.17, 0.17, 1}, 
 inverse_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0.8, 0.8, 0.8, 1}, 			.bright_mode = [4]f32{0, 0, 0, 1}};
 backdrop_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0, 0, 0, 1}, 			.bright_mode = [4]f32{1, 1, 1, 1}};
 
+default_trace_colors := [?][4]f32{
+	[4]f32{0.9, 0.2, 0.2, 1},
+	[4]f32{0.1, 0.4, 0.9, 1},
+	[4]f32{0.9, 0.5, 0.1, 1},
+	[4]f32{0.05, 0.4, 0.05, 1},
+	[4]f32{0.8, 0.2, 0.8, 1},
+	
+	[4]f32{0.2, 0.8, 0.8, 1},
+	[4]f32{0.6, 0.3, 0.1, 1},
+	[4]f32{0.3, 1.0, 0.3, 1},
+	[4]f32{0.5, 0.2, 0.9, 1},
+	[4]f32{0.9, 0.9, 0.2, 1},
+};
+
+
+light_mode : Light_mode = .dark_mode;
+
 Span :: struct(T : typeid) {
 	begin : T,
 	end : T,
@@ -333,13 +350,11 @@ plot_windows : [dynamic]^Plot_window;
 //Pauses execution until all windows are closed, and continuesly updates the windows.
 hold :: proc () {
 	
-	light_mode : Light_mode = .dark_mode;
-	
 	for len(plot_windows) != 0 {
 		render.begin_frame();
 		
 		//Handle changing color mode
-		{
+		if render.window_is_any_focus() {
 			if render.is_key_pressed(.l) || render.is_key_pressed(.d) {
 				if light_mode == .bright_mode {
 					light_mode = .dark_mode;
@@ -430,7 +445,7 @@ hold :: proc () {
 							
 							val := low_p + call.placement * (high_p - low_p);						
 							s_val := format_val(val);
-							bounds := render.text_get_visible_bounds(s_val, render.get_default_fonts().normal, text_size);
+							bounds := render.text_get_visible_bounds(s_val, text_size, render.get_default_fonts().normal);
 							text_pos : [2]f32 = ({x, pv_pos.y - call.length} * cast(f32)target_size.y) - ({bounds.z/2, bounds.w} * 1.1);
 							render.text_draw(s_val, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
 						}				
@@ -443,7 +458,7 @@ hold :: proc () {
 							
 							val := low_p + call.placement * (high_p - low_p);
 							s_val := format_val(val);
-							bounds := render.text_get_visible_bounds(s_val, render.get_default_fonts().normal, text_size);
+							bounds := render.text_get_visible_bounds(s_val, text_size, render.get_default_fonts().normal);
 							text_pos : [2]f32 = ({pv_pos.x - call.length, y} * cast(f32)target_size.y) - ([2]f32{bounds.z, bounds.w/2} * 1.1);
 							render.text_draw(s_val, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
 						}
@@ -673,20 +688,6 @@ format_val :: proc (val : f64) -> string {
 	
 	return fmt.tprintf("%s%c", s_val, si_prefixes[prefix]);
 }
-
-default_trace_colors := [?][4]f32{
-	[4]f32{0.9, 0.2, 0.2, 1},
-	[4]f32{0.1, 0.4, 0.9, 1},
-	[4]f32{0.9, 0.5, 0.1, 1},
-	[4]f32{0.05, 0.4, 0.05, 1},
-	[4]f32{0.8, 0.2, 0.8, 1},
-	
-	[4]f32{0.2, 0.8, 0.8, 1},
-	[4]f32{0.6, 0.3, 0.1, 1},
-	[4]f32{0.3, 1.0, 0.3, 1},
-	[4]f32{0.5, 0.2, 0.9, 1},
-	[4]f32{0.9, 0.9, 0.2, 1},
-};
 
 @(private, require_results)
 get_trace_info :: proc(index : int) -> ([4]f32, Marker_style) {
