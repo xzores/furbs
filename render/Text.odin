@@ -205,15 +205,15 @@ Text_backdrop :: struct {
 //Has its own pipeline call outisde of a pipeline, but inside a target.
 //This will be drawn in pixel space.
 text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : [4]f32 = {1,1,1,1}, backdrop : Text_backdrop = {},
-							font : Font = state.default_fonts.normal, shader := state.default_text_shader, loc := #caller_location) {
+							font : Font = state.default_fonts.normal, rotation : f32 = 0, shader := state.default_text_shader, loc := #caller_location) {
 	
 	assert(shader != nil, "shader may not be nil", loc);
 	assert(state.current_pipeline == {}, "A pipeline is already bound, text must be drawn outside of pipeline begin/end.", loc);
 	assert(state.current_target != nil, "A render target is not bound.", loc);
 	
-	instance_data : [dynamic]Default_instance_data = text_get_draw_instance_data(text, position, size, font);
+	instance_data : [dynamic]Default_instance_data = text_get_draw_instance_data(text, position, size, rotation, font);
 	defer delete(instance_data);
-
+	
 	pipeline := pipeline_make(shader, .blend, false, false, .fill, culling = .back_cull);
 	defer pipeline_destroy(pipeline);
 	
@@ -256,9 +256,9 @@ text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : 
 	pipeline_end();
 }
 
-text_draw :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, color : [4]f32 = {0,0,0,1}, backdrop : Text_backdrop = {}, font : Fonts = state.default_fonts, shader := state.default_text_shader, loc := #caller_location) {
+text_draw :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, color : [4]f32 = {0,0,0,1}, backdrop : Text_backdrop = {}, font : Fonts = state.default_fonts, rotation : f32 = 0, shader := state.default_text_shader, loc := #caller_location) {
 	font := text_get_font_from_fonts(bold, italic, font);
-	text_draw_simple(text, position, size, color, backdrop, font, shader, loc);
+	text_draw_simple(text, position, size, color, backdrop, font, rotation, shader, loc);
 }
 
 font_tex_desc :: Texture_desc {
@@ -270,7 +270,7 @@ font_tex_desc :: Texture_desc {
 
 //used internally
 @require_results
-text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
+text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, rotation : f32, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
 	using state;
 	
 	fs.push_font(&font_context, font);
@@ -302,10 +302,14 @@ text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f3
 	instance_data = make([dynamic]Default_instance_data);
 	
 	for q, coords in fs.font_iter_next(&font_context, &iter) {
+	
+		rot_mat := linalg.matrix2_rotate_f32(rotation / 180 * math.PI);
+		pos := rot_mat * q.xy; 
+		
 		append(&instance_data, Default_instance_data {
-			instance_position 	= {q.x + position.x, q.y + position.y, 0},
+			instance_position 	= {pos.x + position.x, pos.y + position.y, 0},
 			instance_scale 		= {q.z, q.w, 1},
-			instance_rotation 	= {0, 0, 0}, //Euler rotation
+			instance_rotation 	= {0, 0, rotation}, //Euler rotation
 			instance_tex_pos_scale 	= coords,
 		});
 	}

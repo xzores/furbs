@@ -51,8 +51,8 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 					title = p.title;
 				
 					//plot view
-					pv_pos = {0.15, 0.10};
-					size : [2]f32 = {0.78, 0.85};
+					pv_pos = {0.20, 0.10};
+					size : [2]f32 = {0.75, 0.82};
 					pv_size = {width - (1.0 - size.x), height - (1.0 - size.y)};
 					
 					//inner view

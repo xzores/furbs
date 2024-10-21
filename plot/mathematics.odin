@@ -6,6 +6,8 @@ import "core:math"
 import "core:math/cmplx"
 import "core:unicode/utf8"
 import "core:slice"
+import "core:thread"
+import "core:os"
 
 @(require_results)
 calculate_trig_dft :: proc (times : []f64, values : []f64, use_hertz := true) -> (a_coeff : []f64, b_coeff : []f64, freqs : []f64) {
@@ -74,34 +76,89 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 		high = math.min(high, cast(i128)len(values));
 		low = math.max(low, 0);
 	}
-
+	
 	phasors = make([]complex128, high - low);
 	freqs = make([]f64, high - low);	
 	
-	if use_hertz {
-		for f_i in low..<high {
-			hz := cast(f64)(f_i) / cast(f64)(len(values) - 1) * frequency_max;
-			freqs[f_i - low] = hz;
-			
-			for v, t_i in values {
-				t := times[t_i];
-				phasors[f_i - low] += complex(v,0) * cmplx.exp(complex(0,-2 * math.PI * hz * t));
-			}
-		}
+	thread_count := os.processor_core_count();
+	
+	pool : thread.Pool;
+	thread.pool_init(&pool, context.allocator, thread_count);
+	defer thread.pool_destroy(&pool);
+	
+	Task_info :: struct {
+		times, values, freqs : []f64,
+		phasors : []complex128,
+		low, high: i128,
+		index_offset : i128,
+		use_hertz : bool,
+		frequency_max : f64,
 	}
-	else {
+	
+	tasks := make([dynamic]Task_info);
+	defer delete(tasks);
+	
+	dist := high - low;
+	step_freq : i128 = dist/cast(i128)thread_count;
+	cur_freq : i128 = low;
+	
+	for cur_freq < high {
+		next_freq : i128 = cur_freq + step_freq;
+		next_freq = math.min(next_freq, high);
+		index_offset := low;
+		append(&tasks, Task_info{
+			times,
+			values,
+			freqs,
+			phasors,
+			cur_freq,
+			next_freq,
+			index_offset,
+			use_hertz,
+			frequency_max,
+		})
+		cur_freq += step_freq;
+	}
+	
+	calculate_freq_content :: proc (t : Task_info) {
+		using t;
 		
-		for f_i in 0..<len(values) {
-			omega := cast(f64)(f_i) / cast(f64)(len(values) - 1) * frequency_max * 2 * math.PI;
-			freqs[f_i] = omega;
-			
-			for v, t_i in values {
-				t := times[t_i];
-				//phasors[f_i] += v * math.sin(omega * t);
-				phasors[f_i] += complex(v,0) * cmplx.exp(- imag(1) * omega * t);
+		if use_hertz {
+			for f_i in low..<high {
+				hz := cast(f64)(f_i) / cast(f64)(len(values) - 1) * frequency_max;
+				freqs[f_i + index_offset] = hz;
+				
+				for v, t_i in values {
+					t := times[t_i];
+					phasors[f_i + index_offset] += complex(v,0) * cmplx.exp(complex(0,-2 * math.PI * hz * t));
+				}
+			}
+		}
+		else {
+			for f_i in low..<high {
+				omega := cast(f64)(f_i) / cast(f64)(len(values) - 1) * frequency_max * 2 * math.PI;
+				freqs[f_i + index_offset] = omega;
+				
+				for v, t_i in values {
+					t := times[t_i];
+					phasors[f_i + index_offset] += complex(v,0) * cmplx.exp(- imag(1) * omega * t);
+				}
 			}
 		}
 	}
+	
+	calc_task : thread.Task_Proc : proc (task: thread.Task) {
+		t : ^Task_info = auto_cast task.data;
+		calculate_freq_content(t^);
+	}
+	
+	for &t in tasks {
+		thread.pool_add_task(&pool, context.allocator, calc_task, &t);
+	}
+	
+	thread.pool_start(&pool);
+	thread.pool_finish(&pool);
+
 	
 	return;
 }

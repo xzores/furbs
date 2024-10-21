@@ -516,14 +516,22 @@ hold :: proc () {
 				}
 				
 				if x_label != "" {
-					render.text_get_visible_bounds(x_label, )
-					render.text_draw(x_label, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
+					text_size : f32 = cast(f32)w.window.height / 26;
+					text_pos := [2]f32{0.5 * cast(f32)w.window.width, 0.03 * cast(f32)w.window.height};
+					dims := render.text_get_visible_bounds(x_label, text_size)
+					render.text_draw(x_label, text_pos - dims.zw/2, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
 				}
-				if s.abscissa_label != "" {
-					delete(s.abscissa_label);
+				if y_label != "" {
+					text_size : f32 = cast(f32)w.window.height / 18;
+					text_pos := [2]f32{0.08 * cast(f32)w.window.height, 0.5 * cast(f32)w.window.height};
+					dims := render.text_get_visible_bounds(y_label, text_size)
+					render.text_draw(y_label, text_pos - dims.wz/2, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}}, rotation = 90);
 				}
-				if s.ordinate_label != "" {
-					delete(s.ordinate_label);
+				if title != "" {
+					text_size : f32 = cast(f32)w.window.height / 18;
+					text_pos := [2]f32{0.5 * cast(f32)w.window.width, 0.97 * cast(f32)w.window.height};
+					dims := render.text_get_visible_bounds(title, text_size)
+					render.text_draw(title, text_pos - dims.zw/2, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
 				}
 			
 				//Draw the plot texture to the gui panel
