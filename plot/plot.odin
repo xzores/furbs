@@ -40,6 +40,10 @@ Plot_xy :: struct {
 	grid_desc : Grid_desc,
 	axis_desc : [2]Maybe(Axis_desc),
 	
+	x_label : string,
+	y_label : string,
+	title : string,
+	
 	x_view : [2]f64,
 	y_view : [2]f64,
 	
@@ -177,6 +181,12 @@ destroy_signal :: proc (s : Signal, loc := #caller_location) {
 	if s.name != "" {
 		delete(s.name);
 	}
+	if s.abscissa_label != "" {
+		delete(s.abscissa_label);
+	}
+	if s.ordinate_label != "" {
+		delete(s.ordinate_label);
+	}
 	
 	switch abscissa in s.abscissa {
 		case Span(int), Span(f32), Span(f64):
@@ -209,11 +219,16 @@ destroy_signal :: proc (s : Signal, loc := #caller_location) {
 	}
 }
 
-xy_plots :: proc (signals : []Signal, loc := #caller_location) {
+xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, loc := #caller_location) {
+	assert(len(signals) != 0, "No signals given", loc);
 	
 	traces := make([]Trace, len(signals));
 	xlow, xhigh : f64 = max(f64), min(f64);
 	ylow, yhigh : f64 = max(f64), min(f64);
+	
+	_x_label := signals[0].abscissa_label;
+	_y_label := signals[0].ordinate_label;
+	_title := signals[0].name;
 	
 	for signal, i in signals {
 		
@@ -232,12 +247,46 @@ xy_plots :: proc (signals : []Signal, loc := #caller_location) {
 		ylow, yhigh = math.min(ylow, yl), math.max(yhigh, yh);
 		
 		traces[i] = {span_pos, value_pos};
+		
+		if _x_label != signal.abscissa_label {
+			_x_label = "";
+		}
+		if _y_label != signal.ordinate_label {
+			_y_label = "";
+		}
+		if _title != signal.name {
+			_title = "";
+		}
+	}
+	
+	//Overwrite trace name if a name is given
+	if s, ok := x_label.?; ok {
+		_x_label = s;
+	}
+	if s, ok := y_label.?; ok {
+		_y_label = s;
+	}
+	if s, ok := title.?; ok {
+		_title = s;
+	}
+	
+	if _x_label != "" {
+		_x_label = fmt.aprintf(_x_label)
+	}
+	if _y_label != "" {
+		_y_label = fmt.aprintf(_y_label)
+	}
+	if _title != "" {
+		_title = fmt.aprintf(_title)
 	}
 	
 	pt := Plot_xy{
 		traces,															//Y coord
 		Grid_desc{line_width = 0.001, color = {0.5, 0.5, 0.5, 0.5}}, 	//Grid desc
 		[2]Maybe(Axis_desc){nil, nil},
+		_x_label,
+		_y_label,
+		_title,
 		{cast(f64)xlow, cast(f64)xhigh},								//x_view
 		find_good_display_extremes(ylow, yhigh),						//y_view
 		{},																//Top bar panel
@@ -330,6 +379,7 @@ plot_surface :: proc () {
 }
 
 plot_windows : [dynamic]^Plot_window;
+
 //Pauses execution until all windows are closed, and continuesly updates the windows.
 hold :: proc () {
 	
@@ -383,7 +433,7 @@ hold :: proc () {
 			width, height : f32 = aspect_ratio, 1.0;
 			
 			render.target_begin(&w.plot_framebuffer, plot_bg_color);
-					pv_pos, pv_size, x_view, y_view, x_callout, y_callout := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
+					pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
 					defer delete(x_callout);
 					defer delete(y_callout);
 			render.target_end();
@@ -450,6 +500,17 @@ hold :: proc () {
 					}
 				}
 				
+				if x_label != "" {
+					render.text_get_visible_bounds(x_label, )
+					render.text_draw(x_label, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
+				}
+				if s.abscissa_label != "" {
+					delete(s.abscissa_label);
+				}
+				if s.ordinate_label != "" {
+					delete(s.ordinate_label);
+				}
+			
 				//Draw the plot texture to the gui panel
 				gui.begin(&w.gui_state, w.window);
 				
@@ -554,6 +615,10 @@ nice_round :: proc (val : $T, round_amount : f64 = 10) -> f64 where intrinsics.t
 	for val >= 1000.0 && exp < 12 {
 		val /= 1000.0;
 		exp += 3;
+	}
+	for val <= 1.0 && exp > -12 {
+		val *= 1000.0;
+		exp -= 3;
 	}
 	if val != 0 {
 		for val < 1.0 && val > -1.0 && exp > -12 {

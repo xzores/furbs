@@ -18,7 +18,8 @@ Callout_line :: struct {
 	display_value : bool,
 }
 
-plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state_change : bool) -> (pv_pos, pv_size : [2]f32, x_view, y_view : [2]f64, x_callout, y_callout : []Callout_line) {
+plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state_change : bool) -> 
+		(pv_pos, pv_size : [2]f32, x_view, y_view : [2]f64, x_callout, y_callout : []Callout_line, x_label, y_label, title : string) {
 	
 	//Calculate normalized space coordinates.
 	width_f, height_f := cast(f32)width_i, cast(f32)height_i;
@@ -41,9 +42,14 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 		//Draw the polt to the plot_texture
 		switch &p in plot_type {
 			case Plot_xy:
-				
+					
 				//handle export variables
 				{
+					
+					x_label = p.x_label;
+					y_label = p.y_label;
+					title = p.title;
+				
 					//plot view
 					pv_pos = {0.15, 0.10};
 					size : [2]f32 = {0.78, 0.85};
@@ -65,12 +71,14 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 							x_total := p.x_view[1] - p.x_view[0];
 							
 							append(&x_callout_dyn, Callout_line{0.03, 0.003, 0, p.x_view[0], true});
-							r := 0.1;
+							
+							r := 1e-15;
 							base : f64 = nice_round(x_total/grid_cnt.x, r);
 							for base == 0 && x_total != 0 {
 								r *= 10;
 								base = nice_round(x_total/grid_cnt.x, r);
 							}
+							
 							x_cur : f64 = math.round(p.x_view[0] / base) * base - base;
 							
 							for i in -1..<grid_cnt.x+2 {
@@ -78,7 +86,7 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 								
 								//Handle cases where 0 displays as 0.0001p because of floating point erros.
 								if math.abs(x_cur) < 1.0 / (x_total * 1000) || x_cur == -0 {
-									//x_cur = 0;
+									//x_cur = 0; //TOOD, this will break small numberss
 								}
 								
 								if x_cur < (p.x_view[0] + base / 2) {
@@ -94,22 +102,26 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 						}
 						//Y-axis
 						{
+							//TODO combine the x part and y part into a function and call that twice instead of this.
 							y_total := p.y_view[1] - p.y_view[0];
 							
 							append(&y_callout_dyn, Callout_line{0.03, 0.003, 0, p.y_view[0], true});
-							r := 0.1;
+							
+							r := 1e-15;
 							base : f64 = nice_round(y_total/grid_cnt.y, r);
 							for base == 0 && y_total != 0 {
 								r *= 10;
 								base = nice_round(y_total/grid_cnt.y, r);
 							}
+							
 							y_cur : f64 = math.round(p.y_view[0] / base) * base - base;
+							
 							for i in -1..<grid_cnt.y+2 {
 								y_cur += base;
 								
 								//Handle cases where 0 displays as 0.0001p because of floating point erros.
 								if math.abs(y_cur) < 1.0 / (y_total * 1000) || y_cur == -0 {
-									y_cur = 0;
+									//y_cur = 0; //TOOD, this will break small numbers
 								}
 								
 								if y_cur < (p.y_view[0] + base / 2) {

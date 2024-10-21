@@ -1,4 +1,4 @@
-package HADL
+package utils;
 
 import "core:math"
 import "core:fmt"
