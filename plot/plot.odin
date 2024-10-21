@@ -371,7 +371,7 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, l
 		freq_text = "Frequency [rad/s]";
 	}
 	
-	phasors, freq_span := calculate_complex_dft(span_pos, value_pos, use_hertz, range);
+	phasors, freq_span := calculate_complex_dft(span_pos, value_pos, use_hertz, range, loc);
 	defer delete(phasors);
 	defer delete(freq_span);
 	magnetude, phase := complex_to_mag_and_phase(phasors);

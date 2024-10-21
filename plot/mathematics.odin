@@ -55,7 +55,7 @@ calculate_trig_dft :: proc (times : []f64, values : []f64, use_hertz := true) ->
 }
 
 @(require_results)
-calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true, range : Maybe([2]f64) = nil) -> (phasors : []complex128, freqs : []f64) {
+calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true, range : Maybe([2]f64) = nil, loc := #caller_location) -> (phasors : []complex128, freqs : []f64) {
 	
 	xlow, xhigh := get_extremes(times);
 	sampling_rate : f64 = (cast(f64)len(times) - 1) / (xhigh - xlow);
@@ -68,9 +68,12 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 	if r, ok := range.?; ok {
 		mult : f64 = sampling_rate;
 		
+		assert(r[0] <= r[1], "The lower range must be lower then the high range.", loc);
+		assert(r[1] <= frequency_max, "The provided frequency is above the maximum achiviable frequency", loc);
+		
 		// Convert the frequency range to index range
-		low = auto_cast (r[0] * cast(f64)(len(values) - 1) / frequency_max);  // Convert lower frequency to index
-		high = auto_cast math.ceil(r[1] * cast(f64)(len(values) - 1) / frequency_max);  // Convert upper frequency to index and round up
+		low = auto_cast (cast(f64)(len(values) - 1) * r[0] / frequency_max);  // Convert lower frequency to index
+		high = auto_cast math.ceil(cast(f64)(len(values) - 1) * r[1] / frequency_max);  // Convert upper frequency to index and round up
 		
 		// Clamp high to the length of the values to avoid out-of-bound access
 		high = math.min(high, cast(i128)len(values));
@@ -99,13 +102,13 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 	defer delete(tasks);
 	
 	dist := high - low;
-	step_freq : i128 = dist/cast(i128)thread_count;
+	step_freq : i128 = dist/cast(i128)thread_count + 1;
 	cur_freq : i128 = low;
 	
 	for cur_freq < high {
 		next_freq : i128 = cur_freq + step_freq;
 		next_freq = math.min(next_freq, high);
-		index_offset := low;
+		index_offset : i128 = low;
 		append(&tasks, Task_info{
 			times,
 			values,
@@ -126,22 +129,22 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 		if use_hertz {
 			for f_i in low..<high {
 				hz := cast(f64)(f_i) / cast(f64)(len(values) - 1) * frequency_max;
-				freqs[f_i + index_offset] = hz;
+				freqs[f_i - index_offset] = hz;
 				
 				for v, t_i in values {
 					t := times[t_i];
-					phasors[f_i + index_offset] += complex(v,0) * cmplx.exp(complex(0,-2 * math.PI * hz * t));
+					phasors[f_i - index_offset] += complex(v,0) * cmplx.exp(complex(0,-2 * math.PI * hz * t));
 				}
 			}
 		}
 		else {
 			for f_i in low..<high {
 				omega := cast(f64)(f_i) / cast(f64)(len(values) - 1) * frequency_max * 2 * math.PI;
-				freqs[f_i + index_offset] = omega;
+				freqs[f_i - index_offset] = omega;
 				
 				for v, t_i in values {
 					t := times[t_i];
-					phasors[f_i + index_offset] += complex(v,0) * cmplx.exp(- imag(1) * omega * t);
+					phasors[f_i - index_offset] += complex(v,0) * cmplx.exp(- imag(1) * omega * t);
 				}
 			}
 		}

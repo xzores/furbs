@@ -138,18 +138,20 @@ read_csv_as_signal :: proc (filepath : string, begin_row := 0, end_row := max(in
 	
 	if resample {
 		
-		sampled_ordinate := make([]f64, len(abscissa));
+		sampled_ordinate := make([]f64, len(abscissa) - 1);
 		
 		xlow, xhigh := get_extremes(abscissa[:])
 		sampling_rate : f64 = (cast(f64)len(abscissa) - 1) / (xhigh - xlow);
 		
 		origi_index : int = 0;
 		
-		for i in 0..<len(abscissa) {
+		for i in 0..<len(sampled_ordinate) {
 			time := cast(f64)i * 1 / sampling_rate;
 			for abscissa[origi_index] < time {
 				origi_index += 1;
 			}
+			
+			origi_index = math.min(origi_index, len(sampled_ordinate) - 1);
 			
 			a := abscissa[origi_index];
 			a_v := ordinate[origi_index];
