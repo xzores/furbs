@@ -185,7 +185,7 @@ text_get_bounds :: proc(text : string, font : Font, size : f32) -> (bounds : [4]
 }
 
 @(require_results)
-text_get_visible_bounds :: proc(text : string, font : Font, size : f32) -> (bounds : [4]f32) {
+text_get_visible_bounds :: proc(text : string, size : f32, font : Font = state.default_fonts.normal) -> (bounds : [4]f32) {
 	using state;
 	
 	fs.push_font(&font_context, font);

@@ -106,4 +106,5 @@ triggered : being true when the element recives an 1 time event (like being clic
 A collection of gui elements are shown below:<br />
 ![Skærmbillede 2024-01-01 202400](https://github.com/xzores/furbs/assets/17770917/e76d26b1-7091-40c5-a6b7-51162db3527c)
 
+![image](https://github.com/user-attachments/assets/1d4d60b2-856e-4a58-b3d9-cac42ad2dde4)
 
