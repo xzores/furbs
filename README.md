@@ -108,3 +108,11 @@ A collection of gui elements are shown below:<br />
 
 ![image](https://github.com/user-attachments/assets/1d4d60b2-856e-4a58-b3d9-cac42ad2dde4)
 
+
+## Plotter library
+
+![100_hz_sin_modulated_by_a_10_hz_wave_from_100_to110hz](https://github.com/user-attachments/assets/4f5fa666-8d2c-492a-80ce-4c7bb49d8c4e)
+
+![n_mos_resistor_1u_x_1u_close](https://github.com/user-attachments/assets/9644032c-d22b-4ad1-a640-2c115c95180c)
+
+
