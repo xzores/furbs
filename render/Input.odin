@@ -193,12 +193,12 @@ is_key_down :: proc(key : Key_code) -> bool {
 
 //trigger on pressed key
 is_key_pressed :: proc(key : Key_code) -> bool {
-	return state.keys_released[key] ;
+	return state.keys_pressed[key] ;
 }
 
 //trigger on release key
 is_key_released :: proc(key : Key_code) -> bool {
-	return state.keys_pressed[key];
+	return state.keys_released[key];
 }
 
 //triggers when press and repeat signals
