@@ -1,12 +1,21 @@
 package utils;
 
-import "core:debug/trace"
 import "base:runtime"
+
+import "core:debug/trace"
+
+import "pdb"
 
 global_trace_ctx: trace.Context;
 
+@(require_results)
 init_stack_trace :: proc () -> runtime.Assertion_Failure_Proc {
 	trace.init(&global_trace_ctx);
+		
+	when ODIN_OS == .Windows && ODIN_DEBUG {
+		pdb.SetUnhandledExceptionFilter(pdb.dump_stack_trace_on_exception);
+	}
+	
 	return debug_trace_assertion_failure_proc;
 }
 
