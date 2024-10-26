@@ -68,8 +68,8 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 	if r, ok := range.?; ok {
 		mult : f64 = sampling_rate;
 		
-		assert(r[0] <= r[1], "The lower range must be lower then the high range.", loc);
-		assert(r[1] <= frequency_max, "The provided frequency is above the maximum achiviable frequency", loc);
+		//assert(r[0] <= r[1], "The lower range must be lower then the high range.", loc);
+		//fmt.assertf(r[1] <= frequency_max, "The provided frequency %v is above the maximum achiviable frequency", r[1], loc = loc);
 		
 		// Convert the frequency range to index range
 		low = auto_cast (cast(f64)(len(values) - 1) * r[0] / frequency_max);  // Convert lower frequency to index
@@ -83,7 +83,7 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 	phasors = make([]complex128, high - low);
 	freqs = make([]f64, high - low);	
 	
-	thread_count := os.processor_core_count();
+	thread_count := math.max(1, os.processor_core_count()-1);
 	
 	pool : thread.Pool;
 	thread.pool_init(&pool, context.allocator, thread_count);

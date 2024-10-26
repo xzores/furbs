@@ -8,6 +8,7 @@ import "core:fmt"
 import "core:math"
 import "core:unicode/utf8"
 import "core:slice"
+import "core:strings"
 
 import "base:intrinsics"
 
@@ -355,7 +356,7 @@ trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
 	xy_plots({signal_a_coeff, signal_b_coeff});
 }
 
-bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, loc := #caller_location) {
+bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, loc := #caller_location) {
 	
 	span_pos : []f64 = abscissa_to_array(signal.abscissa);	//The y-value
 	value_pos : []f64 = ordinate_to_array(signal.ordinate);	//The x-value
@@ -363,12 +364,27 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, l
 	defer delete(value_pos);
 	
 	freq_text : string;
+	_y_labal : string;
+	_title : string;
 	
-	if use_hertz {
-		freq_text = "Frequency [Hz]";
+	if l, ok := x_label.?; ok {
+		freq_text = strings.clone(l);
 	}
 	else {
-		freq_text = "Frequency [rad/s]";
+		if use_hertz {
+			freq_text = strings.clone("Frequency [Hz]");
+		}
+		else {
+			freq_text = strings.clone("Frequency [rad/s]");
+		}
+	}
+	
+	if l, ok := y_label.?; ok {
+		_y_labal = strings.clone(l);
+	}
+	
+	if t, ok := title.?; ok {
+		_title = strings.clone(t);
 	}
 	
 	phasors, freq_span := calculate_complex_dft(span_pos, value_pos, use_hertz, range, loc);
@@ -379,12 +395,12 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, l
 	defer delete(phase);
 	
 	signal_mag := Signal {
-	 	"",
+	 	_title,
 		
-		freq_text,
+		_y_labal,
 		magnetude, 		//y-coordinate
 		
-		"",
+		freq_text,
 		freq_span, 		//x-coordinate
 	};
 	
