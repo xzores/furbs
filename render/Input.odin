@@ -252,17 +252,17 @@ Mouse_input_event :: struct {
 }
 
 //constantly down, button means mouse
-button_down :: proc(button : Mouse_code) -> bool {
+is_button_down :: proc(button : Mouse_code) -> bool {
 	return state.button_down[button];
 }
 
 //trigger on pressed key
-button_pressed :: proc(button : Mouse_code) -> bool {
+is_button_pressed :: proc(button : Mouse_code) -> bool {
 	return state.button_pressed[button];
 }
 
 //trigger on release key
-button_released :: proc(button : Mouse_code) -> bool {
+is_button_released :: proc(button : Mouse_code) -> bool {
 	return state.button_released[button];
 }
 

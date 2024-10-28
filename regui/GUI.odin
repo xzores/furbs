@@ -787,9 +787,9 @@ mouse_pos :: proc() -> [2]f32 {
 	return {mp.x, mp.y};	
 }
 
-mouse_button_down :: render.button_down;
-mouse_button_pressed :: render.button_pressed;
-mouse_button_released :: render.button_released;
+mouse_button_down :: render.is_button_down;
+mouse_button_pressed :: render.is_button_pressed;
+mouse_button_released :: render.is_button_released;
 
 collision_point_rect :: utils.collision_point_rect;
 
