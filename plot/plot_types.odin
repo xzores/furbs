@@ -147,7 +147,7 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 				//handle input and change state
 				if allow_state_change {
 					
-					if render.button_down(.middel) {
+					if render.is_button_down(.middel) {
 						md := render.mouse_delta();
 						
 						total_x : f32 = cast(f32)(p.x_view[1] - p.x_view[0]);

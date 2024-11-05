@@ -49,6 +49,36 @@ collision_point_rect :: proc(point : [2]f32, rect : [4]f32) -> bool {
 	return point.x >= rect.x && point.x <= rect.x + rect.z && point.y >= rect.y && point.y <= rect.y + rect.w
 }
 
+collision_line_rect :: proc(p1, p2 : [2]f32, rect : [4]f32) -> bool {
+	// Helper function to check line-line intersection
+	line_intersect :: proc(a1, a2, b1, b2: [2]f32) -> bool {
+		denom := (b2.y - b1.y) * (a2.x - a1.x) - (b2.x - b1.x) * (a2.y - a1.y);
+		if denom == 0 { return false; } // Parallel lines
+
+		ua := ((b2.x - b1.x) * (a1.y - b1.y) - (b2.y - b1.y) * (a1.x - b1.x)) / denom;
+		ub := ((a2.x - a1.x) * (a1.y - b1.y) - (a2.y - a1.y) * (a1.x - b1.x)) / denom;
+		return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+	}
+	
+	// Check if either endpoint of the line is inside the rectangle
+	if collision_point_rect(p1, rect) || collision_point_rect(p2, rect) {
+		return true;
+	}
+
+	// Define rectangle corners
+	rect_p1 := [2]f32{rect.x, rect.y};
+	rect_p2 := [2]f32{rect.x + rect.z, rect.y};
+	rect_p3 := [2]f32{rect.x + rect.z, rect.y + rect.w};
+	rect_p4 := [2]f32{rect.x, rect.y + rect.w};
+
+	// Check if the line intersects any of the rectangle's edges
+	return line_intersect(p1, p2, rect_p1, rect_p2) ||
+		line_intersect(p1, p2, rect_p2, rect_p3) ||
+		line_intersect(p1, p2, rect_p3, rect_p4) ||
+		line_intersect(p1, p2, rect_p4, rect_p1);
+}
+
+
 collision_rect_rect :: proc(rect1 : [4]f32, rect2 : [4]f32) -> bool {
 
 	return rect1.x < rect2.x + rect2.z &&
