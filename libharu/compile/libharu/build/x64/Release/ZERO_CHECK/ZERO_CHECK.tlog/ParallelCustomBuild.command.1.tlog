@@ -1,0 +1,10 @@
+^D:\GITHUB\HADL\HADL\FURBS\LIBHARU\LIBHARU\BUILD\CMAKEFILES\EFF6B4375E84B2DB640B1C99E5288D45\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/github/Hadl/hadl/furbs/libharu/libharu -BD:/github/Hadl/hadl/furbs/libharu/libharu/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/github/Hadl/hadl/furbs/libharu/libharu/build/libharu.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
