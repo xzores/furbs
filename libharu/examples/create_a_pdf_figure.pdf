@@ -1,0 +1,70 @@
+%PDF-1.3
+%·¾­ª
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Kids [ 4 0 R ]
+/Count 1
+>>
+endobj
+3 0 obj
+<<
+/Producer (Haru Free PDF Library 2.4.4)
+>>
+endobj
+4 0 obj
+<<
+/Type /Page
+/MediaBox [ 0 0 500 500 ]
+/Contents 5 0 R
+/Resources <<
+/ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>>
+/Parent 2 0 R
+>>
+endobj
+5 0 obj
+<<
+/Length 6 0 R
+>>
+stream
+100 100 m
+400 400 l
+400 100 l
+S
+2 w
+0 0 0 RG
+250.00006 300 m
+277.61428 299.99996 300 277.61422 300 250 c
+300 222.38578 277.61428 200.00003 250.00006 200 c
+S
+
+endstream
+endobj
+6 0 obj
+157
+endobj
+xref
+0 7
+0000000000 65535 f
+0000000015 00000 n
+0000000064 00000 n
+0000000123 00000 n
+0000000184 00000 n
+0000000338 00000 n
+0000000549 00000 n
+trailer
+<<
+/Root 1 0 R
+/Info 3 0 R
+/Size 7
+>>
+startxref
+568
+%%EOF

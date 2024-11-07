@@ -19,7 +19,7 @@ error_function : haru.Error_Handler : proc "c" (error_no : haru.STATUS, detail_n
 	context.logger = haru_logger;
 	context.allocator = haru_allocator;
 	
-	log.errorf("Recived haru error, error code: %v(%v), detail no: %v", cast(haru.error_code)error_no, error_no, detail_no);
+	log.errorf("Recived haru error, error code: %v(%v), detail no: %v", cast(haru.Status_code)error_no, error_no, detail_no);
 }
 
 alloc_function : haru.Alloc_Func : proc "c" (size : haru.UINT) -> rawptr {
