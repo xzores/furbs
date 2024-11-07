@@ -27,6 +27,7 @@ gen_tileable_2D :: fnGenTileable2D;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+@(default_calling_convention="c")
 foreign lib {
 	fnNewFromEncodedNodeTree :: proc(encodedString : cstring, simdLevel : u32 /*FastSIMD::eLevel 0 = Auto*/) -> Node_tree ---;
 	fnDeleteNodeRef :: proc(node_tree : Node_tree) ---;
