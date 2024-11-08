@@ -2025,12 +2025,12 @@ page_set_shading :: proc(page : Page, shading : Shading, loc := #caller_location
 	return cast(Status_code)haru.Page_SetShading(page, shading);
 }
 
-page_gsave :: proc(page : Page, loc := #caller_location) -> Status_code {
+page_g_save :: proc(page : Page, loc := #caller_location) -> Status_code {
 	haru_location = loc;
 	return cast(Status_code)haru.Page_GSave(page);
 }
 
-page_grestore :: proc(page : Page, loc := #caller_location) -> Status_code {
+page_g_restore :: proc(page : Page, loc := #caller_location) -> Status_code {
 	haru_location = loc;
 	return cast(Status_code)haru.Page_GRestore(page);
 }

@@ -78,6 +78,88 @@ create_a_pdf_figure :: proc(t : ^testing.T) {
 		
 	// Save the PDF document
 	haru.save_to_file(pdf, "create_a_pdf_figure.pdf");
-	
-	time.sleep(1);
 }
+
+@(test)
+create_a_pdf_clipped_canvas :: proc(t : ^testing.T) {
+	
+	haru.init();
+	defer haru.destroy();    
+
+	pdf := haru.new();
+	assert(pdf != nil, "Failed to create PDF handle");
+	defer haru.free(pdf);
+
+	page := haru.add_page(pdf);
+	assert(page != nil, "Failed to create page");
+	
+	haru.page_set_width(page, 500);
+	haru.page_set_height(page, 500);
+	
+	// Define the clipping region (canvas area)
+	x : f32 = 100.0;  // Left edge of the canvas
+	y : f32 = 100.0;  // Bottom edge of the canvas
+	width : f32 = 300.0;  // Width of the canvas
+	height : f32 = 300.0; // Height of the canvas
+	
+	// Save the current graphics state before clipping
+	haru.page_g_save(page);
+
+	// Draw the rectangle for clipping and activate the clip
+	haru.page_rectangle(page, x, y, width, height);
+	haru.page_clip(page);
+	haru.page_end_path(page);
+	
+	// Start drawing within the clipped region (canvas)
+	haru.page_set_rgb_fill(page, 0.0, 0.0, 1.0); // Set fill color to blue
+	haru.page_set_font_and_size(page, haru.get_font(pdf, "Helvetica", "WinAnsiEncoding"), 12);
+
+	// Draw text within the canvas area
+	haru.page_begin_text(page);
+	haru.page_text_out(page, x + 10, y + height - 20, "Text inside the canvas!");
+	haru.page_text_out(page, x - 10, y, "This text is clipped outside!");
+	haru.page_end_text(page);
+
+	// Draw a line inside the canvas region
+	haru.page_move_to(page, x + 50, y + 50);
+	haru.page_line_to(page, x + width - 50, y + height - 50);
+	haru.page_stroke(page);
+
+	// Restore graphics state to remove clipping and draw surrounding elements
+	haru.page_g_restore(page);
+	
+	// Draw a red border around the canvas area for clarity
+	// haru.page_set_rgb_stroke(page, 1.0, 0.0, 0.0); // Set stroke color to red
+	// haru.page_rectangle(page, x, y, width, height);
+	// haru.page_stroke(page);
+
+	// Save the PDF document
+	haru.save_to_file(pdf, "create_a_pdf_clipped_canvas.pdf");
+}
+
+
+@(test)
+create_a_pdf_helpers :: proc(t : ^testing.T) {
+	
+	haru.init();
+	defer haru.destroy();
+
+	pdf := haru.new();
+	assert(pdf != nil, "Failed to create PDF handle");
+	defer haru.free(pdf);
+
+	page := haru.add_page(pdf);
+	assert(page != nil, "Failed to create page");
+	
+	haru.push_clipping_region(page, {100, 100, 300, 300});
+		
+		haru.draw_lines(pdf, page, {[2][2]f32{{150, 100}, {150, 400}}, {{200, 100}, {200, 400}}}, 1, {1,0,0,0.5});
+		haru.draw_connected_points(pdf, page, {{100, 100}, {120, 200}, {140, 120}, {160, 250}, {180, 290}, {200, 400}, {220, 600}, {240, 200}}, 1, {0,0,0,1});
+		
+	haru.pop_clipping_region(page);
+	
+	// Save the PDF document
+	haru.save_to_file(pdf, "create_a_pdf_helpers.pdf");
+}
+
+
