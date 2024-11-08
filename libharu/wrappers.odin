@@ -1481,10 +1481,12 @@ load_raw_image_from_file :: proc(pdf : Doc, filename : string, width : u32, heig
 }
 
 // Load a raw image from memory
+@(require_results)
 load_raw_image_from_mem :: proc(pdf : Doc, buf : []u8, width : u32, height : u32, color_space : ColorSpace, bits_per_component : u32, loc := #caller_location) -> Image {
 	haru_location = loc;
 	
-	//TODO assert
+	//components : u32 = 3; //TODO other colorspaces 
+	//assert(auto_cast len(buf) == width * height * bits_per_component * components, "mismatch");
 	
 	return cast(Image)haru.LoadRawImageFromMem(pdf, raw_data(buf), width, height, color_space, bits_per_component);
 }
@@ -2304,14 +2306,22 @@ page_arc :: proc(page : Page, x : f32, y : f32, ray : f32, ang1 : f32, ang2 : f3
 	return cast(Status_code)haru.Page_Arc(page, x, y, ray, ang1, ang2);
 }
 
-page_text_out :: proc(page : Page, x_pos : f32, y_pos : f32, text : cstring, loc := #caller_location) -> Status_code {
+page_text_out :: proc(page : Page, x_pos : f32, y_pos : f32, text : string, loc := #caller_location) -> Status_code {
 	haru_location = loc;
-	return cast(Status_code)haru.Page_TextOut(page, x_pos, y_pos, text);
+	
+	c_text := strings.clone_to_cstring(text);
+	defer delete(c_text);
+	
+	return cast(Status_code)haru.Page_TextOut(page, x_pos, y_pos, c_text);
 }
 
-page_text_rect :: proc(page : Page, left : f32, top : f32, right : f32, bottom : f32, text : cstring, align : TextAlignment, len : ^u32, loc := #caller_location) -> Status_code {
+page_text_rect :: proc(page : Page, left : f32, top : f32, right : f32, bottom : f32, text : string, align : TextAlignment, len : ^u32, loc := #caller_location) -> Status_code {
 	haru_location = loc;
-	return cast(Status_code)haru.Page_TextRect(page, left, top, right, bottom, text, align, len);
+	
+	c_text := strings.clone_to_cstring(text);
+	defer delete(c_text);
+	
+	return cast(Status_code)haru.Page_TextRect(page, left, top, right, bottom, c_text, align, len);
 }
 
 page_set_slideshow :: proc(page : Page, type : TransitionStyle, disp_time : f32, trans_time : f32, loc := #caller_location) -> Status_code {
@@ -2324,7 +2334,11 @@ icc_load_icc_from_mem :: proc(pdf : Doc, mmgr : MMgr, iccdata : Stream, xref : X
 	return haru.ICC_LoadIccFromMem(pdf, mmgr, iccdata, xref, num_component);
 }
 
-load_icc_profile_from_file :: proc(pdf : Doc, icc_file_name : cstring, num_component : int, loc := #caller_location) -> OutputIntent {
+load_icc_profile_from_file :: proc(pdf : Doc, icc_file_name : string, num_component : int, loc := #caller_location) -> OutputIntent {
 	haru_location = loc;
-	return haru.LoadIccProfileFromFile(pdf, icc_file_name, num_component);
+	
+	c_icc_file_name := strings.clone_to_cstring(icc_file_name);
+	defer delete(c_icc_file_name);
+	
+	return haru.LoadIccProfileFromFile(pdf, c_icc_file_name, num_component);
 }

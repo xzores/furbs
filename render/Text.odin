@@ -18,6 +18,12 @@ Fonts :: struct {
 	italic_bold : Font,
 }
 
+
+font_norm_data 	:= #load("font/LinLibertine_R.ttf", []u8);
+font_RB_data 	:= #load("font/LinLibertine_RB.ttf", []u8);
+font_RI_data 	:= #load("font/LinLibertine_RI.ttf", []u8);
+font_RBI_data 	:= #load("font/LinLibertine_RBI.ttf", []u8);
+
 @(private)
 text_init :: proc (loc := #caller_location) {
 	
@@ -66,11 +72,6 @@ text_init :: proc (loc := #caller_location) {
 	//TextIterNext
 
 	//Destroy(&font_context);
-
-	font_norm_data 	:= #load("font/LinLibertine_R.ttf", []u8);
-	font_RB_data 	:= #load("font/LinLibertine_RB.ttf", []u8);
-	font_RI_data 	:= #load("font/LinLibertine_RI.ttf", []u8);
-	font_RBI_data 	:= #load("font/LinLibertine_RBI.ttf", []u8);
 	
 	font_norm 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_norm_data, false, loc = loc);
 	font_RB 		:= cast(Font) fs.add_font_mem_single(&state.font_context, font_RB_data, false, loc = loc);
@@ -151,13 +152,13 @@ text_get_lowest_point :: proc(text : string, size : f32, font : Font = state.def
 }
 
 @(require_results)
-text_get_max_height :: proc(font : Font, size : f32) -> f32 {
+text_get_max_height :: proc(font : Font, size : f32, use_EM := false) -> f32 {
 	using state;
 	
 	fs.push_font(&font_context, font);
 	defer fs.pop_font(&font_context);
 	
-	_set_font_size(false, size);
+	_set_font_size(use_EM, size);
 	
 	return fs.get_max_height(&state.font_context);
 }
@@ -173,7 +174,7 @@ text_get_size_from_max_height :: proc(font : Font, max_height : f32) -> f32 {
 }
 
 @(require_results)
-text_get_bounds :: proc(text : string, font : Font, size : f32) -> (bounds : [4]f32) {
+text_get_bounds :: proc(text : string, size : f32, font : Font = state.default_fonts.normal) -> (bounds : [4]f32) {
 	using state;
 	
 	fs.push_font(&font_context, font);
@@ -194,6 +195,19 @@ text_get_visible_bounds :: proc(text : string, size : f32, font : Font = state.d
 	_set_font_size(false, size);
 	
 	return fs.get_visible_text_bounds(&state.font_context, text);
+}
+
+text_get_pixel_EM_ratio :: proc (size : f32, font : Font = state.default_fonts.normal) -> f32 {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	pix := text_get_max_height (font, size, false);
+	
+	em := text_get_max_height (font, size, true);
+	
+	return em / pix;
 }
 
 //Hint you can make an outline with a backdrop.

@@ -376,7 +376,17 @@ texture2D_destroy :: proc(tex : Texture2D) {
 	gl.delete_texture2D(tex.id);
 }
 
-texture2D_flip :: proc(data : []byte, width, height, channels : int) {
+@(require_results)
+texture2D_download_texture :: proc(tex : Texture2D, loc := #caller_location) -> (data : [][4]u8) {
+	
+	res := gl.get_texture_image2D(tex.id, 0, loc);
+	
+	assert(auto_cast len(res) == tex.width * tex.height, "Internal error. There is a mismatch is GL and Odin states, they dont agree on texture size.");
+	
+	return res;
+}
+
+texture2D_flip :: proc(data : []byte, #any_int width, height, channels : int) {
 	
 	line_size := width * channels;
 	line_mem, err := mem.alloc_bytes(line_size, allocator = context.temp_allocator);

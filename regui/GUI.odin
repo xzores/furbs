@@ -605,7 +605,7 @@ draw_text_param :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, s
 		text_target_size = math.min(rect.w, text_target_size);
 	}	
 	
-	text_width := render.text_get_bounds(text, font, text_target_size).z;
+	text_width := render.text_get_bounds(text, text_target_size, font).z;
 	
 	limiter : f32 = 1;
 	if limit_by_width { 
@@ -613,7 +613,7 @@ draw_text_param :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, s
 	}
 	
 	text_size := text_target_size * limiter;
-	text_bounds := render.text_get_bounds(text, font, text_size);
+	text_bounds := render.text_get_bounds(text, text_size, font);
 	
 	//This is a little hacky but it works.
 	rect = get_screen_space_position_rect(anchor, anchor, {0,0,text_bounds.z, text_bounds.w} / unit_size, rect, unit_size);

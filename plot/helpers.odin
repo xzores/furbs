@@ -184,4 +184,3 @@ read_csv_as_signal :: proc (filepath : string, begin_row := 0, end_row := max(in
 		abscissa[:],
 	};
 }
-

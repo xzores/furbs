@@ -84,7 +84,7 @@ draw_fps_overlay :: proc (target : Render_target, offset : [2]f32 = {0,0}, scale
 	color : [4]f32 = {1,1,1,1};
 	
 	size := scale * 40;
-	text_bounds := text_get_bounds(t, get_default_fonts().normal, size);
+	text_bounds := text_get_bounds(t, size, get_default_fonts().normal);
 
 	target_begin(target, nil);
 		text_draw_simple(t, {offset.x, state.target_pixel_height - text_bounds.w - offset.y - text_bounds.y}, size, color, {{0,0,0,1}, {2,-2}});

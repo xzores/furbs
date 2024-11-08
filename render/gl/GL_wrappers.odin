@@ -3907,6 +3907,34 @@ setup_texture_2D :: proc (tex : Tex2d_id, mipmaps : bool, width, height : gl.GLs
 	}
 }
 
+get_texture_image2D  :: proc (tex_id : Tex2d_id, level : i32, loc := #caller_location) -> (write_buffer : [][4]u8) {
+	
+	width, height : i32;
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		
+		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_WIDTH, &width);
+		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_HEIGHT, &height);
+		
+		write_buffer = make([][4]u8, width * height, loc = loc);
+		
+		gl.GetTextureImage(auto_cast tex_id, level, .RGBA, .UNSIGNED_BYTE, 4 * auto_cast len(write_buffer), raw_data(write_buffer));
+	}
+	else {
+		bind_texture2D(tex_id);
+		
+		gl.GetTexLevelParameteriv(.TEXTURE_2D, level, .TEXTURE_WIDTH, &width);
+		gl.GetTexLevelParameteriv(.TEXTURE_2D, level, .TEXTURE_HEIGHT, &height);
+		
+		write_buffer = make([][4]u8, width * height, loc = loc);
+		
+		gl.GetTexImage(.TEXTURE_2D, level, .RGBA, .UNSIGNED_BYTE, raw_data(write_buffer));
+		unbind_texture2D();
+	}
+	
+	return;
+}
+
 generate_mip_maps_2D :: proc (tex_id : Tex2d_id) {
 
 	if cpu_state.gl_version >= .opengl_4_5 { 

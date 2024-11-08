@@ -7,10 +7,16 @@ import "core:math"
 import "core:unicode/utf8"
 import "core:slice"
 
+Line :: struct {
+	a : [2]f32,
+	b : [2]f32,
+	thickness : f32,
+	color : [4]f32,
+}
+
 Callout_line :: struct {
 	length : f32,
 	thickness : f32,
-	//color : [4]f32,
 	
 	placement : f64,
 	
@@ -18,13 +24,55 @@ Callout_line :: struct {
 	display_value : bool,
 }
 
+Arc :: struct {
+	
+}
+
+Text :: struct {
+	value : string,
+	position : [2]f32,
+	size : f32,
+	color : [4]f32,
+	
+	rotation : f32,
+	
+	backdrop_color : [4]f32,
+	backdrop : [2]f32,
+}
+
+Image :: struct {
+	rect : [4]f32,
+	tex : render.Texture2D,
+}
+
+Image_data :: struct {
+	width : int,
+	height : int,
+	data : []u8,
+}
+
+Plot_data :: struct {
+	lines : []Line,
+	arcs : []Arc,
+	texts : []Text,
+}
+
+//If this is nil, it will assume direct draw (you call draw from the function)
+Plot_result :: union {
+	//Image_data, //TODO
+	Plot_data,
+}
+
+
 plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state_change : bool) -> 
-		(pv_pos, pv_size : [2]f32, x_view, y_view : [2]f64, x_callout, y_callout : []Callout_line, x_label, y_label, title : string) {
+		(res : Plot_result, pv_pos, pv_size : [2]f32, x_view, y_view : [2]f64, x_callout, y_callout : []Callout_line, x_label, y_label, title : string) {
 	
 	//Calculate normalized space coordinates.
 	width_f, height_f := cast(f32)width_i, cast(f32)height_i;
 	aspect_ratio := width_f / height_f;
 	width, height : f32 = aspect_ratio, 1.0;
+	
+	res = nil;
 	
 	{
 		instanced_pipeline := render.pipeline_make(render.get_default_instance_shader(), depth_test = false);
@@ -269,7 +317,4 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 	
 	unreachable();
 }
-
-
-
 

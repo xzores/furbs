@@ -1,14 +1,20 @@
 package plot;
 
 import "../render"
+import fs "../fontstash"
 import gui "../regui"
+import haru "../libharu"
 
 import "core:time"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:unicode/utf8"
 import "core:slice"
 import "core:strings"
+import "core:os"
+
+import stb_img "vendor:stb/image"
 
 import "base:intrinsics"
 
@@ -71,8 +77,9 @@ Light_mode :: enum {
 
 plot_bg_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0.2, 0.2, 0.2, 1}, 	.bright_mode = [4]f32{1, 1, 1, 1}};
 base_colors : [Light_mode][4]f32 = 		{.dark_mode = [4]f32{0.17, 0.17, 0.17, 1}, 	.bright_mode = [4]f32{1, 1, 1, 1}};
-inverse_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0.8, 0.8, 0.8, 1}, 			.bright_mode = [4]f32{0, 0, 0, 1}};
+inverse_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0.8, 0.8, 0.8, 1}, 	.bright_mode = [4]f32{0, 0, 0, 1}};
 backdrop_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0, 0, 0, 1}, 			.bright_mode = [4]f32{1, 1, 1, 1}};
+
 
 default_trace_colors := [?][4]f32{
 	[4]f32{0.9, 0.2, 0.2, 1},
@@ -88,8 +95,6 @@ default_trace_colors := [?][4]f32{
 	[4]f32{0.9, 0.9, 0.2, 1},
 };
 
-
-light_mode : Light_mode = .dark_mode;
 
 Span :: struct(T : typeid) {
 	begin : T,
@@ -237,7 +242,7 @@ destroy_signal :: proc (s : Signal, loc := #caller_location) {
 	}
 }
 
-xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, loc := #caller_location) {
+xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, loc := #caller_location) -> Plot_xy {
 	assert(len(signals) != 0, "No signals given", loc);
 	
 	traces := make([]Trace, len(signals));
@@ -311,6 +316,8 @@ xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : M
 	}
 	
 	make_plot_window(pt);
+	
+	return pt;
 }
 
 trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
@@ -411,10 +418,119 @@ plot_surface :: proc () {
 	//...
 }
 
+Color_theme :: struct {
+	plot_bg_color : [4]f32,
+	base_color	: [4]f32,
+	inverse_color : [4]f32,
+	backdrop_color : [4]f32,
+}
+
+light_mode : Light_mode = .dark_mode;
+
+default_color_theme := Color_theme{
+	plot_bg_color 	= plot_bg_colors[light_mode],
+	base_color 		= base_colors[light_mode],
+	inverse_color 	= inverse_colors[light_mode],
+	backdrop_color	= backdrop_colors[light_mode],
+}
+
+light_color_theme := Color_theme{
+	plot_bg_color 	= plot_bg_colors[.bright_mode],
+	base_color 		= base_colors[.bright_mode],
+	inverse_color 	= inverse_colors[.bright_mode],
+	backdrop_color	= backdrop_colors[.bright_mode],
+}
+
+get_callout_info :: proc (plot_res : Plot_result, target_size : [2]i32, pv_pos, pv_size : [2]f32, x_view, y_view : [2]f64, x_callout, y_callout : []Callout_line, x_label, y_label, title : string, color_theme : Color_theme) ->
+								(inner_plot_placement : [4]f32, lines : []Line, texts : []Text) {
+	
+	using color_theme;
+	
+	_lines : [dynamic]Line;
+	_texts : [dynamic]Text;
+	
+	switch res in plot_res {
+		case Plot_data:
+			
+			inner_plot_placement = {}; //Do not draw it.
+			
+		case:
+			//it was using direct draw, so draw whatever is in the texture.
+			//append(&_textures, Image{[4]f32{pv_pos.x, pv_pos.y, pv_size.x, pv_size.y}, render.Texture2D{}})
+			inner_plot_placement = [4]f32{pv_pos.x, pv_pos.y, pv_size.x, pv_size.y};
+	}
+	
+	for call in x_callout {
+		x := pv_pos.x + (cast(f32)call.placement * pv_size.x);
+		append(&_lines, Line{{x, pv_pos.y}, {x, pv_pos.y - call.length}, call.thickness, inverse_color})
+	}
+	for call in y_callout {
+		y := pv_pos.y + (cast(f32)call.placement * pv_size.y);
+		append(&_lines, Line{{pv_pos.x, y}, {pv_pos.x - call.length, y}, call.thickness, inverse_color})
+	}
+	
+	append(&_lines, Line{{pv_pos.x, pv_pos.y}, {pv_pos.x + pv_size.x, pv_pos.y}, 0.003, inverse_color});
+	append(&_lines, Line{{pv_pos.x, pv_pos.y}, {pv_pos.x, pv_pos.y + pv_size.y}, 0.003, inverse_color});
+	
+	//Draw the callout lines around the plot, including the entries (like numbers).
+	{
+		text_size : f32 = cast(f32)target_size.y / 26;
+		for call in x_callout {
+			if call.display_value {
+				x := pv_pos.x + (cast(f32)call.placement * pv_size.x);
+				
+				low_p, high_p := x_view[0], x_view[1];
+				
+				val := low_p + call.placement * (high_p - low_p);						
+				s_val := format_val(val);
+				bounds := render.text_get_visible_bounds(s_val, text_size, render.get_default_fonts().normal);
+				text_pos : [2]f32 = ({x, pv_pos.y - call.length} * cast(f32)target_size.y) - ({bounds.z/2, bounds.w} * 1.1);
+				append(&_texts, Text{strings.clone(s_val), text_pos, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
+			}				
+		}
+		for call in y_callout {
+			if call.display_value {
+				y := pv_pos.y + (cast(f32)call.placement * pv_size.y);
+				
+				low_p, high_p := y_view[0], y_view[1];
+				
+				val := low_p + call.placement * (high_p - low_p);
+				s_val := format_val(val);
+				bounds := render.text_get_visible_bounds(s_val, text_size, render.get_default_fonts().normal);
+				text_pos : [2]f32 = ({pv_pos.x - call.length, y} * cast(f32)target_size.y) - ([2]f32{bounds.z, bounds.w/2} * 1.1);
+				append(&_texts, Text{strings.clone(s_val), text_pos, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
+			}
+		}
+	}
+	
+	if x_label != "" {
+		text_size : f32 = cast(f32)target_size.y / 26;
+		text_pos := [2]f32{0.5 * cast(f32)target_size.x, 0.03 * cast(f32)target_size.y};
+		dims := render.text_get_visible_bounds(x_label, text_size);
+		append(&_texts, Text{strings.clone(x_label), text_pos - dims.zw/2, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
+	}
+	if y_label != "" {
+		text_size : f32 = cast(f32)target_size.y / 18;
+		text_pos := [2]f32{0.08 * cast(f32)target_size.y, 0.5 * cast(f32)target_size.y};
+		dims := render.text_get_visible_bounds(y_label, text_size);
+		append(&_texts, Text{strings.clone(y_label), text_pos - dims.wz/2, text_size, inverse_color, 90, backdrop_color, {1.5,-1.5}});
+	}
+	if title != "" {
+		text_size : f32 = cast(f32)target_size.y / 18;
+		text_pos := [2]f32{0.5 * cast(f32)target_size.x, 0.97 * cast(f32)target_size.y};
+		dims := render.text_get_visible_bounds(title, text_size);
+		append(&_texts, Text{strings.clone(title), text_pos - dims.zw/2, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
+	}
+	
+	return inner_plot_placement, _lines[:], _texts[:];
+}
+
 plot_windows : [dynamic]^Plot_window;
 
 //Pauses execution until all windows are closed, and continuesly updates the windows.
-hold :: proc () {
+hold :: proc (color_theme := default_color_theme) {
+	
+	color_theme := color_theme;
 	
 	for len(plot_windows) != 0 {
 		render.begin_frame();
@@ -428,13 +544,15 @@ hold :: proc () {
 				else {
 					light_mode = .bright_mode;
 				}
+				
+				color_theme = {
+					plot_bg_color 	= plot_bg_colors[light_mode],
+					base_color 		= base_colors[light_mode],
+					inverse_color 	= inverse_colors[light_mode],
+					backdrop_color	= backdrop_colors[light_mode],
+				}
 			}
 		}
-		
-		plot_bg_color : [4]f32 = plot_bg_colors[light_mode];
-		base_color	: [4]f32 = base_colors[light_mode];
-		inverse_color : [4]f32 = inverse_colors[light_mode];
-		backdrop_color := backdrop_colors[light_mode];
 		
 		to_remove : [dynamic]int;
 		defer delete(to_remove);
@@ -463,10 +581,21 @@ hold :: proc () {
 			aspect_ratio := width_f / height_f;
 			width, height : f32 = aspect_ratio, 1.0;
 			
-			render.target_begin(&w.plot_framebuffer, plot_bg_color);
-					pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
+			render.target_begin(&w.plot_framebuffer, color_theme.plot_bg_color);
+					plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
 					defer delete(x_callout);
 					defer delete(y_callout);
+					
+					switch p in plot_res {
+						case Plot_data:
+							for l in p.lines {
+								
+							}
+							for t in p.texts {
+								
+							}
+					}
+					
 			render.target_end();
 			
 			cam_2d : render.Camera2D = {
@@ -478,78 +607,35 @@ hold :: proc () {
 				far 			= 1,
 			};
 			
-			render.target_begin(w.window, base_color);
+			inner_plot_position, lines, texts := get_callout_info(plot_res, target_size, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
+			defer {
+				delete(lines);
+				
+				for t in texts {
+					delete(t.value);
+				}
+				delete(texts);
+			}
+			
+			render.target_begin(w.window, color_theme.base_color);
 				render.pipeline_begin(draw_pipeline, cam_2d);
 					
-					render.frame_buffer_blit_color_attach_to_texture(&w.plot_framebuffer, 0, w.plot_texture);
+					//it was using direct draw, so draw whatever is in the texture.
+					render.frame_buffer_blit_color_attach_to_texture(&w.plot_framebuffer, 0, w.plot_texture);					
 					render.set_texture(.texture_diffuse, w.plot_texture);
-					render.draw_quad_rect({pv_pos.x, pv_pos.y, pv_size.x, pv_size.y}, 0)
+					render.draw_quad_rect(inner_plot_position, 0);
 					
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
-					for call in x_callout {
-						x := pv_pos.x + (cast(f32)call.placement * pv_size.x);
-						render.draw_line_2D({x, pv_pos.y}, {x, pv_pos.y - call.length}, call.thickness, 0, inverse_color);
-					}
-					for call in y_callout {
-						y := pv_pos.y + (cast(f32)call.placement * pv_size.y);						
-						render.draw_line_2D({pv_pos.x, y}, {pv_pos.x - call.length, y}, call.thickness, 0, inverse_color);
+					for l in lines {
+						render.draw_line_2D(l.a, l.b, l.thickness, 0, l.color);
 					}
 					
-					render.draw_line_2D({pv_pos.x, pv_pos.y}, {pv_pos.x + pv_size.x, pv_pos.y}, 0.003, 0, inverse_color);
-					render.draw_line_2D({pv_pos.x, pv_pos.y}, {pv_pos.x, pv_pos.y + pv_size.y}, 0.003, 0, inverse_color);
-				
 				render.pipeline_end();
 				
-				//Draw the callout lines around the plot, including the entries (like numbers).
-				{
-					text_size : f32 = cast(f32)target_size.y / 26;
-					for call in x_callout {
-						if call.display_value {
-							x := pv_pos.x + (cast(f32)call.placement * pv_size.x);
-							
-							low_p, high_p := x_view[0], x_view[1];
-							
-							val := low_p + call.placement * (high_p - low_p);						
-							s_val := format_val(val);
-							bounds := render.text_get_visible_bounds(s_val, text_size, render.get_default_fonts().normal);
-							text_pos : [2]f32 = ({x, pv_pos.y - call.length} * cast(f32)target_size.y) - ({bounds.z/2, bounds.w} * 1.1);
-							render.text_draw(s_val, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
-						}				
-					}
-					for call in y_callout {
-						if call.display_value {
-							y := pv_pos.y + (cast(f32)call.placement * pv_size.y);
-							
-							low_p, high_p := y_view[0], y_view[1];
-							
-							val := low_p + call.placement * (high_p - low_p);
-							s_val := format_val(val);
-							bounds := render.text_get_visible_bounds(s_val, text_size, render.get_default_fonts().normal);
-							text_pos : [2]f32 = ({pv_pos.x - call.length, y} * cast(f32)target_size.y) - ([2]f32{bounds.z, bounds.w/2} * 1.1);
-							render.text_draw(s_val, text_pos, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
-						}
-					}
+				for t in texts {
+					render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
 				}
 				
-				if x_label != "" {
-					text_size : f32 = cast(f32)w.window.height / 26;
-					text_pos := [2]f32{0.5 * cast(f32)w.window.width, 0.03 * cast(f32)w.window.height};
-					dims := render.text_get_visible_bounds(x_label, text_size)
-					render.text_draw(x_label, text_pos - dims.zw/2, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
-				}
-				if y_label != "" {
-					text_size : f32 = cast(f32)w.window.height / 18;
-					text_pos := [2]f32{0.08 * cast(f32)w.window.height, 0.5 * cast(f32)w.window.height};
-					dims := render.text_get_visible_bounds(y_label, text_size)
-					render.text_draw(y_label, text_pos - dims.wz/2, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}}, rotation = 90);
-				}
-				if title != "" {
-					text_size : f32 = cast(f32)w.window.height / 18;
-					text_pos := [2]f32{0.5 * cast(f32)w.window.width, 0.97 * cast(f32)w.window.height};
-					dims := render.text_get_visible_bounds(title, text_size)
-					render.text_draw(title, text_pos - dims.zw/2, text_size, false, false, inverse_color, {backdrop_color, {1.5,-1.5}});
-				}
-			
 				//Draw the plot texture to the gui panel
 				gui.begin(&w.gui_state, w.window);
 				
@@ -575,9 +661,135 @@ end :: proc () {
 	delete(plot_windows);
 }
 
-
-
-
+export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 1000, height_i : i32 = 1000, color_theme := light_color_theme, loc := #caller_location) {
+	ensure_render_init(loc = loc);
+	
+	plot := plot;
+	width : f32 = auto_cast width_i;
+	height : f32 = auto_cast height_i;
+	
+	{ //Scope for deleteing
+		haru.init();
+		defer haru.destroy();
+		
+		pdf := haru.new();
+		assert(pdf != nil, "Failed to create PDF handle");
+		defer haru.free(pdf);
+		
+		page := haru.add_page(pdf);
+		assert(page != nil, "Failed to create page");
+		
+		haru.page_set_width(page, width);
+		haru.page_set_height(page, height);
+		
+		font : haru.Font;
+		
+		// Set font and font size
+		{
+			//THIS IS HACKY, libharu DOES NO ALLOW LOADING A FONT FROM MEMORY SO WE SAVE TO A FILE AND LOAD FROM THERE.
+			suc := os.write_entire_file("temp_LinLibertine_R.ttf", render.font_norm_data);
+			assert(suc, "failed to save default font to file (to then be loaded...)");
+			
+			font_name := haru.load_tt_font_from_file(pdf, "temp_LinLibertine_R.ttf", true, context.temp_allocator);
+			assert(font_name != "", "failed to load font");
+			font = haru.get_font(pdf, font_name, "StandardEncoding");
+		}
+		
+		//Draw the background color
+		haru.page_g_save(page);
+			// Choose your background color
+			haru.page_set_rgb_fill(page, color_theme.base_color.r, color_theme.base_color.g, color_theme.base_color.b);  // Light grey background (R, G, B)
+			
+			// Draw a filled rectangle over the entire page to simulate a background color
+			haru.page_rectangle(page, 0, 0, width, height);
+			haru.page_fill(page);  // This applies the fill with the specified color
+		haru.page_g_restore(page);
+		
+		plot_framebuffer : render.Frame_buffer = render.frame_buffer_make_render_buffers({.RGBA8}, width_i, height_i, 32, .depth_component32, loc = loc);
+		assert(plot_framebuffer.id != 0, "frambuffer is nil");
+		defer render.frame_buffer_destroy(plot_framebuffer);
+		
+		draw_texture := render.texture2D_make(false, .clamp_to_border, .nearest, .RGBA8, width_i, height_i, .no_upload, nil);
+		defer render.texture2D_destroy(draw_texture);
+		
+		draw_pipeline := render.pipeline_make(render.get_default_shader(), depth_test = false);
+		defer render.pipeline_destroy(draw_pipeline);
+		
+		render.begin_frame();
+			render.target_begin(&plot_framebuffer, color_theme.plot_bg_color);
+				plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&plot, width_i, height_i, false);
+				defer delete(x_callout);
+				defer delete(y_callout);
+			render.target_end();
+			
+			render.frame_buffer_blit_color_attach_to_texture(&plot_framebuffer, 0, draw_texture);
+			image_data := render.texture2D_download_texture(draw_texture);
+			defer delete(image_data);
+			
+			//fmt.printf("image_data : %v\n", image_data);
+		render.end_frame();
+		
+		data := make([]u8, len(image_data) * 3);
+		defer delete(data);
+		for d, i in image_data {
+			data[i * 3 + 0] = d.r;
+			data[i * 3 + 1] = d.g;
+			data[i * 3 + 2] = d.b;
+		}
+		render.texture2D_flip(data, draw_texture.width, draw_texture.height, 3);
+		
+		image := haru.load_raw_image_from_mem(pdf, data, auto_cast draw_texture.width, auto_cast draw_texture.height, .CS_DEVICE_RGB, 8);
+		assert(image != nil, "image is nil");
+		r : [4]f32 = {pv_pos.x, pv_pos.y, pv_size.x, pv_size.y} * height;
+		haru.page_draw_image(page, image, r.x, r.y, r.z, r.w);
+		
+		haru.push_clipping_region(page, r);
+		switch p in plot_res {
+			case Plot_data:
+				for l in p.lines { //TODO move to new sub-space coordinates 
+					haru.page_set_line_cap(page, .BUTT_END);
+					haru.draw_lines(pdf, page, {l.a, l.b}, l.thickness, l.color);			
+					//draw_connected_points();
+				}
+				for t in p.texts { //TODO move to new sub-space coordinates 
+					text_size_normalized := t.size / render.text_get_pixel_EM_ratio(t.size);
+					haru.draw_text(pdf, page, font, t.value, t.position, text_size_normalized, t.color, t.rotation);
+				}
+		}
+		haru.pop_clipping_region(page);
+		
+		inner_plot_position, lines, texts := get_callout_info(plot_res, {width_i, height_i}, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
+		defer {
+			delete(lines);
+			
+			for t in texts {
+				delete(t.value);
+			}
+			delete(texts);
+		}
+		
+		for l in lines {
+			a := l.a * height;
+			b := l.b * height;
+			t := l.thickness * height;
+			haru.page_set_line_cap(page, .ROUND_END);
+			haru.draw_lines(pdf, page, {{a, b}}, t, l.color);
+		}
+		
+		// Place the text at a specific position
+		for t in texts {
+			text_size_normalized := t.size / render.text_get_pixel_EM_ratio(t.size);
+			haru.draw_text(pdf, page, font, t.value, t.position, text_size_normalized, t.color, t.rotation);
+		}
+		
+		// Save the PDF document
+		haru.save_to_file(pdf, save_location);
+		
+		free_all(context.temp_allocator);
+	}
+	
+	os.remove("temp_LinLibertine_R.ttf");
+}
 
 //////////////////////////////////////// PRIVATE ////////////////////////////////////////
 
@@ -805,7 +1017,6 @@ make_plot_window :: proc (pt : Plot_type, loc := #caller_location) -> ^Plot_wind
 	return pw;
 }
 
-
 @(private, require_results)
 convert_span :: proc (span : Span($T), $TT : typeid) -> Span(TT) {
 	
@@ -854,6 +1065,9 @@ destroy_plot_window :: proc (w : ^Plot_window) {
 				delete(t.ordinate);
 			}
 			delete(p.traces)
+			delete(p.x_label);
+			delete(p.y_label);
+			delete(p.title);
 	}
 	
 	render.texture2D_destroy(w.plot_texture);
