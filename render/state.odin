@@ -25,6 +25,10 @@ enable_preformence_warnings :: proc (warnings : bool) {
 	state.pref_warn = warnings;
 }
 
+is_init :: proc () -> bool {
+	return state.is_init;
+}
+
 State :: struct {
 	
 	//Time stuff

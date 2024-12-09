@@ -161,7 +161,6 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 	
 	thread.pool_start(&pool);
 	thread.pool_finish(&pool);
-
 	
 	return;
 }

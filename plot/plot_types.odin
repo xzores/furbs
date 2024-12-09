@@ -63,6 +63,109 @@ Plot_result :: union {
 	Plot_data,
 }
 
+get_callout_lines_linear :: proc (min_view, max_view : f64, grid_cnt : int, sub_divisions : int = 5, min_max_callouts : bool = true) -> ([dynamic]Callout_line) {
+	
+	callout_dyn := make([dynamic]Callout_line);
+	total := max_view - min_view;
+	
+	if min_max_callouts {
+		append(&callout_dyn, Callout_line{0.03, 0.003, 0, min_view, true});
+	}
+	
+	r := 1e-15;
+	base : f64 = nice_round(total / f64(grid_cnt), r);
+	for base == 0 && total != 0 {
+		r *= 10;
+		base = nice_round(total / f64(grid_cnt), r);
+	}
+	
+	cur : f64 = math.round(min_view / base) * base - base;
+	
+	for i in 0..=((2 * grid_cnt + 10) * sub_divisions) {
+		cur += base / f64(sub_divisions);
+		
+		if cur < (min_view) {
+			continue;
+		}
+		
+		if cur > (max_view) {
+			continue;
+		}
+		
+		placement := (cur - min_view) / total;
+		if i %% sub_divisions == 0 {
+			
+			if !(cur < (min_view + base / 2)) && !(cur > (max_view - base / 2)) || !min_max_callouts { //Dont draw text if it gets to close.
+				append(&callout_dyn, Callout_line{0.03, 0.003, placement, cur, true});
+			}
+			else {
+				append(&callout_dyn, Callout_line{0.03, 0.003, placement, cur, false});
+			}
+		}
+		else {
+			append(&callout_dyn, Callout_line{0.01, 0.001, placement, cur, false});
+		}
+	}
+	
+	if min_max_callouts {
+		append(&callout_dyn, Callout_line{0.03, 0.003, 1, max_view, true});
+	}
+	
+	return callout_dyn;
+}
+
+get_callout_lines_log :: proc (min_view, max_view : f64, grid_cnt : int, base : f64, sub_divisions : int = 10) -> ([dynamic]Callout_line) {
+	
+	callout_dyn := make([dynamic]Callout_line);
+	total := max_view - min_view;
+	
+	assert(min_view > 0, "Cannot plot a log plot and start at zero or below.");
+	
+	exp : f64 = 1;
+	for exp > min_view {
+		exp /= base;
+	}
+	
+	for exp < min_view {
+		exp *= base;
+	}
+	
+	last_text := math.inf_f64(-1);
+	
+	cur : f64 = exp;
+	i := -(sub_divisions-1);
+	for cur < max_view {
+		cur = math.pow(base, f64(i)/f64(sub_divisions)) * exp;
+		defer i += 1;
+		
+		if cur < (min_view) {
+			continue;
+		}
+		
+		if cur > (max_view) {
+			continue;
+		}
+		
+		placement := (cur - min_view) / total;
+		
+		if i %% sub_divisions == 0 {
+			
+			if !(cur - last_text > total / f64(grid_cnt) / 2) {
+				append(&callout_dyn, Callout_line{0.03, 0.003, placement, cur, false});
+			}
+			else {
+				append(&callout_dyn, Callout_line{0.03, 0.003, placement, cur, true});
+				last_text = cur;
+			}
+		}
+		else {
+			append(&callout_dyn, Callout_line{0.01, 0.001, placement, cur, false});
+		}
+		
+	}
+	
+	return callout_dyn;
+}
 
 plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state_change : bool) -> 
 		(res : Plot_result, pv_pos, pv_size : [2]f32, x_view, y_view : [2]f64, x_callout, y_callout : []Callout_line, x_label, y_label, title : string) {
@@ -90,14 +193,14 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 		//Draw the polt to the plot_texture
 		switch &p in plot_type {
 			case Plot_xy:
-					
+				
 				//handle export variables
 				{
 					
 					x_label = p.x_label;
 					y_label = p.y_label;
 					title = p.title;
-				
+					
 					//plot view
 					pv_pos = {0.20, 0.10};
 					size : [2]f32 = {0.75, 0.82};
@@ -106,95 +209,13 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 					//inner view
 					x_view = p.x_view;
 					y_view = p.y_view;
-					
-					//Callouts
-					{
-						x_callout_dyn := make([dynamic]Callout_line);
-						y_callout_dyn := make([dynamic]Callout_line);
-						
-						grid_cnt := [2]f64{4.0 * cast(f64)width, 12 * cast(f64)height};
-						
-						//X-axis
-						{
-							x_total := p.x_view[1] - p.x_view[0];
-							
-							append(&x_callout_dyn, Callout_line{0.03, 0.003, 0, p.x_view[0], true});
-							
-							r := 1e-15;
-							base : f64 = nice_round(x_total/grid_cnt.x, r);
-							for base == 0 && x_total != 0 {
-								r *= 10;
-								base = nice_round(x_total/grid_cnt.x, r);
-							}
-							
-							x_cur : f64 = math.round(p.x_view[0] / base) * base - base;
-							
-							for i in -1..<grid_cnt.x+2 {
-								x_cur += base;
-								
-								//Handle cases where 0 displays as 0.0001p because of floating point erros.
-								if math.abs(x_cur) < 1.0 / (x_total * 1000) || x_cur == -0 {
-									//x_cur = 0; //TOOD, this will break small numberss
-								}
-								
-								if x_cur < (p.x_view[0] + base / 2) {
-									continue;
-								}
-								if x_cur > (p.x_view[1] - base / 2) {
-									continue;
-								}
-								placement := (x_cur - p.x_view[0]) / x_total;
-								append(&x_callout_dyn, Callout_line{0.03, 0.003, placement, x_cur, true});
-							}
-							append(&x_callout_dyn, Callout_line{0.03, 0.003, 1, p.x_view[1], true});
-						}
-						//Y-axis
-						{
-							//TODO combine the x part and y part into a function and call that twice instead of this.
-							y_total := p.y_view[1] - p.y_view[0];
-							
-							append(&y_callout_dyn, Callout_line{0.03, 0.003, 0, p.y_view[0], true});
-							
-							r := 1e-15;
-							base : f64 = nice_round(y_total/grid_cnt.y, r);
-							for base == 0 && y_total != 0 {
-								r *= 10;
-								base = nice_round(y_total/grid_cnt.y, r);
-							}
-							
-							y_cur : f64 = math.round(p.y_view[0] / base) * base - base;
-							
-							for i in -1..<grid_cnt.y+2 {
-								y_cur += base;
-								
-								//Handle cases where 0 displays as 0.0001p because of floating point erros.
-								if math.abs(y_cur) < 1.0 / (y_total * 1000) || y_cur == -0 {
-									//y_cur = 0; //TOOD, this will break small numbers
-								}
-								
-								if y_cur < (p.y_view[0] + base / 2) {
-									continue;
-								}
-								if y_cur > (p.y_view[1] - base / 2) {
-									continue;
-								}
-								placement := (y_cur - p.y_view[0]) / y_total;
-								append(&y_callout_dyn, Callout_line{0.03, 0.003, placement, y_cur, true});
-							}
-							append(&y_callout_dyn, Callout_line{0.03, 0.003, 1, p.y_view[1], true});
-						}
-						
-						x_callout = x_callout_dyn[:];
-						y_callout = y_callout_dyn[:];
-					}
-					
-					//TODO find a better spacing, max 6(+1) (so text can fit)
-					//There is a max of 7 chars
+
 				}
 				
 				//handle input and change state
 				if allow_state_change {
 					
+					//TODO handle this differently we are in log mode.
 					if render.is_button_down(.middel) {
 						md := render.mouse_delta();
 						
@@ -204,6 +225,7 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 						p.y_view += cast(f64)((total_y / pv_size.y) * (md.y / height_f));
 					}
 					
+					//TODO handle this differently we are in log mode.
 					{
 						scroll_delta := render.scroll_delta();
 						
@@ -235,6 +257,43 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 						
 						p.x_view = {xlow, xhigh};
 						p.y_view = {ylow - 0.1 * total_y, yhigh + 0.1 * total_y};
+					}
+				}
+				
+				if p.log_x != .no_log {
+					p.x_view[0] = math.max(p.x_view[0], 1e-15);
+				}				
+				p.x_view[1] = math.max(p.x_view[0] + 1e-15, p.x_view[1]);
+				
+				if p.log_y != .no_log {
+					p.y_view[0] = math.max(p.y_view[0], 1e-15);
+				}
+				p.y_view[1] = math.max(p.y_view[0] + 1e-15, p.y_view[1]);
+				
+				//Callouts
+				{
+					grid_cnt := [2]f64{5.0 * cast(f64)width, 12 * cast(f64)height};
+					
+					switch p.log_x {
+						case .no_log:
+							x_callout = get_callout_lines_linear(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x)[:];
+						case .base10:
+							x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, 10)[:];
+						case .base_2:
+							x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, 2)[:];
+						case .base_ln:
+							x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, math.e)[:];
+					}
+					
+					switch p.log_y {
+						case .no_log:
+							y_callout = get_callout_lines_linear(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y)[:];
+						case .base10:
+							y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, 10)[:];
+						case .base_2:
+							y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, 2)[:];
+						case .base_ln:
+							y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, math.e)[:];
 					}
 				}
 				
@@ -285,11 +344,54 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 							//TODO draw_quad_instanced();
 							assert(len(abscissa) != 0, "The signal is empty");
 							assert(len(abscissa) == len(ordinate), "The x and y does not have same length");
+							
+							_, max_x_val := get_extremes(abscissa);
+							_, max_y_val := get_extremes(ordinate);
+							
 							for e, i in ordinate[:len(ordinate)-1] {
-								x1 : f32 = cast(f32)((abscissa[i] - x_view[0]) 			/ (x_view[1] - x_view[0]));
-								x2 : f32 = cast(f32)((abscissa[i+1] - x_view[0]) 			/ (x_view[1] - x_view[0]));
-								y1 : f32 = cast(f32)((cast(f64)e - y_view[0]) 				/ (y_view[1] - y_view[0]));
-								y2 : f32 = cast(f32)((cast(f64)ordinate[i+1] - y_view[0]) / (y_view[1] - y_view[0]));
+								x_coor1 := abscissa[i];
+								x_coor2 := abscissa[i+1];
+								
+								y_coor1 := cast(f64)e;
+								y_coor2 := cast(f64)ordinate[i+1];
+								
+								switch p.log_x {
+									case .no_log:
+										//do nothing
+									case .base10:
+										x_coor1 = math.log10(x_coor1);
+										x_coor2 = math.log10(x_coor2);
+									case .base_2:
+										x_coor1 = math.log2(x_coor1);
+										x_coor2 = math.log2(x_coor2);
+									case .base_ln:
+										x_coor1 = math.ln(x_coor1);
+										x_coor2 = math.ln(x_coor2);
+								}
+								
+								/*
+								switch p.log_y {
+									case .no_log:
+										//do nothing
+									case .base10:
+										mult := max_y_val / math.log10(max_y_val);
+										y_coor1 = math.log10(y_coor1) * mult;
+										y_coor2 = math.log10(y_coor2) * mult;
+									case .base_2:
+										mult := max_y_val / math.log2(max_y_val);
+										y_coor1 = math.log2(y_coor1);
+										y_coor2 = math.log2(y_coor2);
+									case .base_ln:
+										mult := max_y_val / math.ln(max_y_val);
+										y_coor1 = math.ln(y_coor1);
+										y_coor2 = math.ln(y_coor2);
+								}
+								*/						
+								
+								x1 : f32 = cast(f32)((x_coor1 - x_view[0]) / (x_view[1] - x_view[0]));
+								x2 : f32 = cast(f32)((x_coor2 - x_view[0]) / (x_view[1] - x_view[0]));
+								y1 : f32 = cast(f32)((y_coor1 - y_view[0]) / (y_view[1] - y_view[0]));
+								y2 : f32 = cast(f32)((y_coor2 - y_view[0]) / (y_view[1] - y_view[0]));
 								
 								trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({x1 * width, y1 * height}, {x2 * width, y2 * height}, line_width, 0);
 								
@@ -299,11 +401,6 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 									instance_rotation 	= rot, //Euler rotation
 									instance_tex_pos_scale 	= {},
 								};
-								
-								//fmt.printf("rot : %#v\n", rot * 180 / math.PI)
-								//x1, x2, y1, y2 = math.clamp(x1, 0, 1), math.clamp(x2, 0, 1), math.clamp(y1, 0, 1), math.clamp(y2, 0, 1);
-								//render.draw_line_2D({x1 * width, y1 * height}, {x2 * width, y2 * height}, line_width, 0, color);
-								//fmt.printf("a : %v, b : %v\n", [2]f32{x1, y1}, [2]f32{x2, y2});
 							}
 							
 							render.draw_quad_instanced(trace_draw_data[:], color, offset = {0.5, 0, 0});

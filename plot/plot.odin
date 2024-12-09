@@ -40,6 +40,25 @@ Marker_style :: enum {
 	square,
 }
 
+Log_style :: enum {
+	no_log = 0,
+	base_2,
+	base10,
+	base_ln,
+	
+	//These are implicit in base10 i think.
+	//db_10,	//For power signals
+	//db_20, 	//For voltage and amp signals
+}
+
+//https://www.youtube.com/watch?v=pfjiwxhqd1M
+Magnetude_representation :: enum {
+	accumulative,				//This just sums the values and returns unmodified
+	amplitude,					//This allows you to observe the amplitude of each sinusoide in the signal
+	power_spectrum,				//This used for distint sine-wave contributions, so not broad-band.
+	power_speactral_density, 	//This is used for broad band signals //This is kinda a bullshit idea/approximation which idk why people use it. 
+}
+
 Plot_xy :: struct {
 	traces : []Trace,
 	
@@ -53,6 +72,9 @@ Plot_xy :: struct {
 	
 	x_view : [2]f64,
 	y_view : [2]f64,
+	
+	log_x : Log_style,
+	log_y : Log_style,
 	
 	top_bar : gui.Panel,
 }
@@ -153,6 +175,19 @@ set_signal_name :: proc () {
 	
 }
 
+make_signal :: proc (x_axis, y_axis : []f64, x_label := "", y_label := "", name := "") -> Signal {
+	
+	sig : Signal = {
+		strings.clone(name),
+		strings.clone(y_label),
+		y_axis, //y-coordinate
+		strings.clone(x_label),
+		x_axis, //x-coordinate
+	}
+	
+	return sig;
+}
+
 fill_signal :: proc (s : ^Signal, span : Span($T), func : Math_func_1D, time_mul : f64 = 1, amp_mul : f64 = 1, loc := #caller_location) {
 	
 	s.abscissa = span;
@@ -160,7 +195,7 @@ fill_signal :: proc (s : ^Signal, span : Span($T), func : Math_func_1D, time_mul
 	arr := array_from_span(span);
 	defer delete(arr);
 	
-	ordinate := make([]T, len(arr));
+	ordinate := make([]T, len(arr), loc = loc);
 	for e, i in arr {
 		ordinate[i] = amp_mul * cast(T)func(cast(f64)e * time_mul);
 	}
@@ -242,7 +277,7 @@ destroy_signal :: proc (s : Signal, loc := #caller_location) {
 	}
 }
 
-xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, loc := #caller_location) -> Plot_xy {
+xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
 	assert(len(signals) != 0, "No signals given", loc);
 	
 	traces := make([]Trace, len(signals));
@@ -312,12 +347,18 @@ xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : M
 		_title,
 		{cast(f64)xlow, cast(f64)xhigh},								//x_view
 		find_good_display_extremes(ylow, yhigh),						//y_view
+		x_log,
+		y_log,
 		{},																//Top bar panel
 	}
 	
-	make_plot_window(pt);
+	window := make_plot_window(pt);
 	
-	return pt;
+	return window;
+}
+
+xy_plot :: proc (signal : Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
+	return xy_plots({signal}, x_label, y_label, title, x_log, y_log, loc);
 }
 
 trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
@@ -363,7 +404,7 @@ trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
 	xy_plots({signal_a_coeff, signal_b_coeff});
 }
 
-bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, loc := #caller_location) {
+bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_log := true, y_log := true, representation : Magnetude_representation = .amplitude, y_unit : Maybe(string) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, loc := #caller_location) -> ^Plot_window {
 	
 	span_pos : []f64 = abscissa_to_array(signal.abscissa);	//The y-value
 	value_pos : []f64 = ordinate_to_array(signal.ordinate);	//The x-value
@@ -373,6 +414,7 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x
 	freq_text : string;
 	_y_labal : string;
 	_title : string;
+	db_text : string;
 	
 	if l, ok := x_label.?; ok {
 		freq_text = strings.clone(l);
@@ -385,21 +427,75 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x
 			freq_text = strings.clone("Frequency [rad/s]");
 		}
 	}
+	defer delete(freq_text);
 	
 	if l, ok := y_label.?; ok {
 		_y_labal = strings.clone(l);
 	}
+	else {
+		if unit, ok := y_unit.?; ok {
+			switch representation {
+				case .accumulative:
+					//No name
+				case .amplitude:
+					_y_labal = fmt.aprint("Amplitude [%s]", y_unit);
+				case .power_spectrum:
+					_y_labal = fmt.aprint("Power [%s^2]", y_unit);
+				case .power_speactral_density:
+					_y_labal = fmt.aprint("Power Spectral Density [%s^2]/Hz", y_unit);
+			}
+		}
+		else {
+			switch representation {
+				case .accumulative:
+					//No name
+				case .amplitude:
+					_y_labal = fmt.aprint("Amplitude");
+				case .power_spectrum:
+					_y_labal = fmt.aprint("Power");
+				case .power_speactral_density:
+					_y_labal = fmt.aprint("Power Spectral Density");
+			}
+		}
+	}
+	defer delete(_y_labal);
 	
 	if t, ok := title.?; ok {
 		_title = strings.clone(t);
 	}
+	defer delete(_title);
 	
 	phasors, freq_span := calculate_complex_dft(span_pos, value_pos, use_hertz, range, loc);
 	defer delete(phasors);
 	defer delete(freq_span);
+	
 	magnetude, phase := complex_to_mag_and_phase(phasors);
 	defer delete(magnetude);
 	defer delete(phase);
+	
+	N := f64(len(magnetude));
+	switch representation {
+		
+		case .accumulative:
+			//Do nothing
+		
+		case .amplitude:
+			for &m in magnetude[1:len(magnetude)-2] {
+				m = 2 * math.abs(m) / N;
+			}
+		
+		case .power_spectrum:
+			for &m in magnetude[1:len(magnetude)-2] {
+				m = 2 * (m * m) / (N * N);
+			}
+		
+		case .power_speactral_density:
+			fs : f64 = (cast(f64)len(span_pos) - 1) / (span_pos[len(span_pos)-1] - span_pos[0]);
+			for &m in magnetude[1:len(magnetude)-2] {
+				m = (m * m) / (fs * N);
+			}
+	}
+	
 	
 	signal_mag := Signal {
 	 	_title,
@@ -411,7 +507,7 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x
 		freq_span, 		//x-coordinate
 	};
 	
-	xy_plots({signal_mag});
+	return xy_plots({signal_mag});
 }
 
 plot_surface :: proc () {
@@ -561,7 +657,6 @@ hold :: proc (color_theme := default_color_theme) {
 			
 			if render.window_should_close(w.window) {
 				append(&to_remove, i);
-				destroy_plot_window(w);
 				continue;
 			}
 			
@@ -582,20 +677,19 @@ hold :: proc (color_theme := default_color_theme) {
 			width, height : f32 = aspect_ratio, 1.0;
 			
 			render.target_begin(&w.plot_framebuffer, color_theme.plot_bg_color);
-					plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
-					defer delete(x_callout);
-					defer delete(y_callout);
-					
-					switch p in plot_res {
-						case Plot_data:
-							for l in p.lines {
-								
-							}
-							for t in p.texts {
-								
-							}
-					}
-					
+				plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
+				defer delete(x_callout);
+				defer delete(y_callout);
+				
+				switch p in plot_res {
+					case Plot_data:
+						for l in p.lines {
+							
+						}
+						for t in p.texts {
+							
+						}
+				}
 			render.target_end();
 			
 			cam_2d : render.Camera2D = {
@@ -644,27 +738,27 @@ hold :: proc (color_theme := default_color_theme) {
 				gui.end(&w.gui_state);
 			render.target_end();
 		}
-			
+		
 		render.end_frame();
 		
 		#reverse for i in to_remove {
-			free(plot_windows[i]);
-			unordered_remove(&plot_windows, i);
+			destroy_plot_window(plot_windows[i]);
 		}
 		
 		free_all(context.temp_allocator);
 	}
 }
 
-end :: proc () {
-	render.destroy();
-	delete(plot_windows);
+end :: proc (loc := #caller_location) {
+	render.destroy(loc);
+	delete(plot_windows, loc);
 }
 
 export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 1000, height_i : i32 = 1000, color_theme := light_color_theme, loc := #caller_location) {
 	ensure_render_init(loc = loc);
 	
-	plot := plot;
+	plot : Plot_type = plot;
+	
 	width : f32 = auto_cast width_i;
 	height : f32 = auto_cast height_i;
 	
@@ -791,9 +885,40 @@ export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 10
 	os.remove("temp_LinLibertine_R.ttf");
 }
 
-//////////////////////////////////////// PRIVATE ////////////////////////////////////////
+export_pdf_from_window :: proc(plot : ^Plot_window, save_location : string, color_theme := light_color_theme, loc := #caller_location) {
+	
+	export_pdf(plot.plot_type, save_location, plot.window.width, plot.window.height, color_theme, loc);
+}
 
-@(private, require_results)
+
+destroy_plot_window :: proc (w : ^Plot_window) {
+	render.window_destroy(w.window);
+	render.frame_buffer_destroy(w.plot_framebuffer);
+	gui.destroy(&w.gui_state);
+	
+	switch p in w.plot_type {
+		case Plot_xy:
+			for t in p.traces {
+				delete(t.abscissa);
+				delete(t.ordinate);
+			}
+			delete(p.traces)
+			delete(p.x_label);
+			delete(p.y_label);
+			delete(p.title);
+	}
+	
+	render.texture2D_destroy(w.plot_texture);
+	free(w);
+	
+	for win, i in plot_windows {
+		if win == w {
+			unordered_remove(&plot_windows, i);
+		}
+	}
+}
+
+@(require_results)
 abscissa_to_array :: proc (a : Abscissa, alloc := context.allocator, loc := #caller_location) -> []f64 {
 	context.allocator = alloc;
 	
@@ -825,7 +950,7 @@ abscissa_to_array :: proc (a : Abscissa, alloc := context.allocator, loc := #cal
 	return span_pos;
 }
 
-@(private, require_results)
+@(require_results)
 ordinate_to_array :: proc (o : Ordinate, alloc := context.allocator, loc := #caller_location) -> []f64 {
 	context.allocator = alloc;
 	
@@ -855,6 +980,7 @@ ordinate_to_array :: proc (o : Ordinate, alloc := context.allocator, loc := #cal
 	return value_pos;
 }
 
+//////////////////////////////////////// PRIVATE ////////////////////////////////////////
 
 @(private, require_results)
 nice_round :: proc (val : $T, round_amount : f64 = 10) -> f64 where intrinsics.type_is_numeric(T) {
@@ -1000,7 +1126,7 @@ get_trace_info :: proc(index : int) -> ([4]f32, Marker_style) {
 make_plot_window :: proc (pt : Plot_type, loc := #caller_location) -> ^Plot_window {
 	ensure_render_init(loc = loc);
 	
-	w := render.window_make(512, 512, "Plot", .allow_resize, .msaa32, loc = loc);
+	w := render.window_make(1080, 1080, "Plot", .allow_resize, .msaa32, loc = loc);
 	
 	pw : ^Plot_window = new(Plot_window, loc = loc);
 	
@@ -1045,32 +1171,11 @@ array_from_span :: proc (span : Span($T), loc := #caller_location) -> []T {
 
 @(private)
 ensure_render_init :: proc (loc := #caller_location) {
-	if !render.state.is_init {
+	if !render.is_init() {
 		render.init({}, loc = loc);
 	}
 	
 	render.window_set_vsync(true);
-}
-
-@(private)
-destroy_plot_window :: proc (w : ^Plot_window) {
-	render.window_destroy(w.window);
-	render.frame_buffer_destroy(w.plot_framebuffer);
-	gui.destroy(&w.gui_state);
-	
-	switch p in w.plot_type {
-		case Plot_xy:
-			for t in p.traces {
-				delete(t.abscissa);
-				delete(t.ordinate);
-			}
-			delete(p.traces)
-			delete(p.x_label);
-			delete(p.y_label);
-			delete(p.title);
-	}
-	
-	render.texture2D_destroy(w.plot_texture);
 }
 
 
