@@ -207,6 +207,7 @@ frame_buffer_color_attach_as_texture :: proc (fbo : ^Frame_buffer, #any_int atta
 			tex.filtermode,
 			false,					// Is mipmaps enabled?
 			auto_cast tex.format,	// Data format (PixelFormat type)
+			{0,0,0,0},
 		}
 	};
 }
@@ -225,6 +226,7 @@ frame_buffer_depth_attach_as_texture :: proc (fbo : ^Frame_buffer) -> Texture2D 
 			tex.filtermode,
 			false,						// Is mipmaps enabled?
 			auto_cast fbo.depth_format,	// Data format (PixelFormat type)
+			{0,0,0,0},
 		}
 	};
 }

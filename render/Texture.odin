@@ -30,6 +30,7 @@ Texture_desc :: struct {
 	filtermode : Filtermode,
 	mipmaps : bool,						// Is mipmaps enabled?
 	format	: Pixel_format_internal,	// Data format (PixelFormat type)
+	border_color : [4]f32,
 }
 
 /////////////////////////////////// Texture 1D ///////////////////////////////////
@@ -42,13 +43,14 @@ Texture1D :: struct {
 
 @(require_results)
 texture1D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							 width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture1D {
+							 width : i32, upload_format : gl.Pixel_format_upload, data : []u8, border_color := [4]f32{0,0,0,0}, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture1D {
 
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
 		wrapmode 		= wrapmode,
 		filtermode 		= filtermode,
 		format 			= internal_format,
+		border_color 	= border_color,
 	};
 	
 	return texture1D_make_desc(desc, width, upload_format, data, loc = loc);
@@ -71,6 +73,7 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 	channels = gl.upload_format_channel_cnt(upload_format);
 
 	gl.setup_texure_1D(id, mipmaps, width, format);
+	gl.set_texture_border_color_1D(id, desc.border_color);
 
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
@@ -126,7 +129,7 @@ Texture2D :: struct {
 }
 
 @(require_results)
-texture2D_load_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8}, loc := #caller_location) -> Texture2D {
+texture2D_load_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8, {0,0,0,0}}, loc := #caller_location) -> Texture2D {
 	
 	data, ok := os.read_entire_file_from_filename(filename);
 	defer delete(data);
@@ -139,7 +142,7 @@ texture2D_load_from_file :: proc(filename : string, desc : Texture_desc = {.clam
 //Load many textures threaded, good for many of the same types of textures.
 //nil is returned if we failed to load. Allocator must be multithread safe if keep_allocator is true.
 @(require_results)
-texture2D_load_multi_from_file :: proc(paths : []string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8}, flipped := true, keep_allocator := false, loc := #caller_location) -> (textures : []Maybe(Texture2D)) {
+texture2D_load_multi_from_file :: proc(paths : []string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8, {0,0,0,0}}, flipped := true, keep_allocator := false, loc := #caller_location) -> (textures : []Maybe(Texture2D)) {
 	
 	Load_png_info :: struct {
 		//in
@@ -298,7 +301,7 @@ texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 		filtermode 		= filtermode,
 		format 			= internal_format,
 	};
-
+	
 	return texture2D_make_desc(desc, width, height, upload_format, data, clear_color, loc);
 }
 
@@ -322,6 +325,7 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	gl.wrapmode_texture2D(id, desc.wrapmode);
 	gl.filtermode_texture2D(id, desc.filtermode, mipmaps);	
 	gl.setup_texture_2D(id, mipmaps, width, height, format);
+	gl.set_texture_border_color_2D(id, desc.border_color);
 	
 	channels := gl.upload_format_channel_cnt(upload_format);
 	
@@ -411,6 +415,7 @@ texture2D_get_white :: proc() -> Texture2D {
 			.nearest,
 			false,
 			.RGBA8,
+			{0,0,0,0},
 		};
 
 		state.white_texture = texture2D_make_desc(desc, 1, 1, .RGBA8, {255, 255, 255, 255});
@@ -428,6 +433,7 @@ texture2D_get_black :: proc () -> Texture2D {
 			.nearest,
 			false,
 			.RGBA8,
+			{0,0,0,0},
 		};
 
 		state.black_texture = texture2D_make_desc(desc, 1, 1, .RGBA8, {0, 0, 0, 255});
@@ -456,18 +462,17 @@ texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 		filtermode 		= filtermode,
 		format 			= internal_format,
 	};
-
+	
 	return texture3D_make_desc(desc, width, height, depth, upload_format, data, clear_color, loc);
 }
 
-//TODO set border color
 //clear_color is in range 0 to 1
 @(require_results)
 texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture3D {
 	assert(state.is_init, "You must init first", loc);
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO this is done at startup is that enough?
-
+	
 	id : gl.Tex3d_id = gl.gen_texture3D(loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 	
@@ -477,9 +482,10 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 	size_per_component, channels : int;
 	size_per_component = gl.upload_format_component_size(upload_format);
 	channels = gl.upload_format_channel_cnt(upload_format);
-
+	
 	gl.setup_texure_3D(id, mipmaps, width, height, depth, format);
-
+	gl.set_texture_border_color_3D(id, desc.border_color);
+		
 	if len(data) == 0 {
 		assert(raw_data(data) == nil, "Texture data is 0 len, but is not nil", loc);
 		if cc, ok := clear_color.([4]f64); ok {		
@@ -488,7 +494,7 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 	}
 	else {
 		assert(upload_format != .no_upload, "upload_format is no_upload, but there is data", loc);
-		length := int(cast(int)width * channels);
+		length := cast(int)depth * cast(int)height * cast(int)width * channels;
 		fmt.assertf(len(data) == length, "Data is not in the correct format, len is %i, while it should have been %i", len(data), length, loc = loc);
 		gl.write_texure_data_3D(id, 0, 0, 0, 0, width, height, depth, upload_format, data, loc = loc);
 	}
@@ -547,7 +553,7 @@ Texture2D_atlas :: struct {
 }
 
 @(require_results)
-texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Texture_desc = {.clamp_to_edge, .linear, false, .RGBA8},
+texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Texture_desc = {.clamp_to_edge, .linear, false, .RGBA8, {0,0,0,0}},
 								#any_int margin : i32 = 0, #any_int init_size : i32 = 128, loc := #caller_location) -> (atlas : Texture2D_atlas) {
 	
 	assert(upload_format != nil, "upload_format may not be nil", loc);

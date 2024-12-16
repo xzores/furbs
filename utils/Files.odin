@@ -131,11 +131,11 @@ ensure_folder_exists :: proc(folder_path : string) -> (err: os.Errno) {
 }
 
 // Recursive function to delete directory contents
-delete_directory_contents :: proc(dir_path: string) -> (success : bool) {
+delete_directory_contents :: proc(dir_path: string, loc := #caller_location) -> (success : bool) {
 	
 	dir_handle, dir_err := os.open(dir_path);
 	if dir_err != 0 {
-		log.logf(.Error, "Error opening directory : %v", dir_err);
+		log.logf(.Error, "Error opening directory : %v", dir_err, location = loc);
 		return false;
 	}
 	
@@ -144,7 +144,7 @@ delete_directory_contents :: proc(dir_path: string) -> (success : bool) {
 	os.close(dir_handle);
 	
 	if err != 0 {
-		log.logf(.Error, "Error reading directory : %v", err);
+		log.logf(.Error, "Error reading directory : %v", err, location = loc);
 		return false;
 	}
 	
@@ -159,13 +159,13 @@ delete_directory_contents :: proc(dir_path: string) -> (success : bool) {
 					return false
 				}
 				if os.remove_directory(full_path) != 0 {
-					log.logf(.Error, "Error removing directory: %v", full_path)
+					log.logf(.Error, "Error removing directory: %v", full_path, location = loc)
 					return false
 				}
 			}
 		} else {
 			if os.remove(full_path) != 0 {
-				log.logf(.Error, "Error removing file : %v", full_path)
+				log.logf(.Error, "Error removing file : %v", full_path, location = loc)
 				return false
 			}
 		}
@@ -175,13 +175,13 @@ delete_directory_contents :: proc(dir_path: string) -> (success : bool) {
 }
 
 // Function to delete a directory and its contents
-remove_directory_recursive :: proc(dir_path: string) -> (success : bool) {
+remove_directory_recursive :: proc(dir_path: string, loc := #caller_location) -> (success : bool) {
 	
-	if !delete_directory_contents(dir_path) {
+	if !delete_directory_contents(dir_path, loc) {
 		return false;
 	}
 	if os.remove_directory(dir_path) != 0 {
-		log.logf(.Error, "Error removing directory:", dir_path);
+		log.logf(.Error, "Error removing directory:", dir_path, location = loc);
 		return false;
 	}
 	

@@ -3626,6 +3626,20 @@ unbind_texture1D  :: proc() {
 	}
 }
 
+set_texture_border_color_1D :: proc (tex_id : Tex1d_id, border_color : [4]f32) {
+	border_color := border_color;
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.TextureParameterfv(auto_cast tex_id, .TEXTURE_BORDER_COLOR, &border_color[0]);
+	}
+	else {
+		bind_texture1D(tex_id);
+		gl.TexParameterfv(.TEXTURE_2D, .TEXTURE_BORDER_COLOR, &border_color[0]);
+		unbind_texture1D();
+	}
+	
+}
+
 write_texure_data_1D :: proc (tex : Tex1d_id, level, offset : i32, width : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
 	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
 
@@ -3844,6 +3858,19 @@ unbind_texture2D  :: proc() {
 	}
 	else {
 		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	}
+}
+
+set_texture_border_color_2D :: proc (tex_id : Tex2d_id, border_color : [4]f32) {
+	border_color := border_color;
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.TextureParameterfv(auto_cast tex_id, .TEXTURE_BORDER_COLOR, &border_color[0]);
+	}
+	else {
+		bind_texture2D(tex_id);
+		gl.TexParameterfv(.TEXTURE_2D, .TEXTURE_BORDER_COLOR, &border_color[0]);
+		unbind_texture2D();
 	}
 }
 
@@ -4250,7 +4277,7 @@ clear_texture_3D :: proc (tex : Tex3d_id, clear_color : [4]f64, loc := #caller_l
 		}
 		
 		assert(pixels != nil, "fallback pixels are nil, internal error");
-		write_texure_data_3D(tex, 0, 0, 0, 0, width, height, depth, upload_format, pixels);
+		write_texure_data_3D(tex, 0, 0, 0, 0, width, height, depth, upload_format, pixels, loc);
 	}
 }
 
@@ -4357,7 +4384,7 @@ bind_texture3D :: proc(tex : Tex3d_id, loc := #caller_location) {
 	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 	
 	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
-		//return;
+		return;
 	}
 	
 	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
@@ -4375,6 +4402,19 @@ unbind_texture3D  :: proc() {
 	}
 	else {
 		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	}
+}
+
+set_texture_border_color_3D :: proc (tex_id : Tex3d_id, border_color : [4]f32) {
+	border_color := border_color;
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.TextureParameterfv(auto_cast tex_id, .TEXTURE_BORDER_COLOR, &border_color[0]);
+	}
+	else {
+		bind_texture3D(tex_id);
+		gl.TexParameterfv(.TEXTURE_2D, .TEXTURE_BORDER_COLOR, &border_color[0]);
+		unbind_texture3D();
 	}
 }
 
