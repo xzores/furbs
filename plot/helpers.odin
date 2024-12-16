@@ -10,23 +10,29 @@ import "core:strconv"
 import "core:strings"
 
 @require_results
-read_csv_as_signal :: proc (filepath : string, begin_row := 0, end_row := max(int), x_columb := 0, y_columb := 1, resample := false, loc := #caller_location) -> (signal : Signal) {
-	
-	ordinate := make([dynamic]f64, loc = loc); //y-coordinate
-	abscissa := make([dynamic]f64, loc = loc); //x-coordinate
-	
-	csv_dat : string;
-	defer delete(csv_dat);
+read_csv_file_as_signal :: proc (filepath : string, begin_row := 0, end_row := max(int), x_columb := 0, y_columb := 1, resample := false, loc := #caller_location) -> (signal : Signal) {
+
+	csv_data : string;
+	defer delete(csv_data);
 	{
 		t, ok := os.read_entire_file_from_filename(filepath);
-		csv_dat = string(t);
-		csv_dat, was_alloc := strings.replace_all(csv_dat, "\r", "");
+		csv_data = string(t);
+		csv_data, was_alloc := strings.replace_all(csv_data, "\r", "");
 		if was_alloc {
 			delete(t);
 		}
 		fmt.assertf(ok, "Failed to load file : %v", filepath);
 	}
 	
+	return read_csv_data_as_signal(csv_data, begin_row, end_row, x_columb, y_columb, resample, loc); 
+}
+
+@require_results
+read_csv_data_as_signal :: proc (csv_data : string, begin_row := 0, end_row := max(int), x_columb := 0, y_columb := 1, resample := false, loc := #caller_location) -> (signal : Signal) {
+	
+	ordinate := make([dynamic]f64, loc = loc); //y-coordinate
+	abscissa := make([dynamic]f64, loc = loc); //x-coordinate
+		
 	cur_ordinate : f64;
 	cur_abscissa : f64;
 	cur_entry : [dynamic]rune;
@@ -44,7 +50,7 @@ read_csv_as_signal :: proc (filepath : string, begin_row := 0, end_row := max(in
 	}
 	state : State = .reading;
 	
-	for r in csv_dat {
+	for r in csv_data {
 		
 		if cur_row < begin_row {
 			if r == '\n' {
@@ -184,3 +190,47 @@ read_csv_as_signal :: proc (filepath : string, begin_row := 0, end_row := max(in
 		abscissa[:],
 	};
 }
+
+/*
+@require_results
+read_csv_file_as_signals :: proc (filepath : string, columbs : [][2]int, begin_row := 0, end_row := max(int), resample := false, loc := #caller_location) -> ([]Signal) {
+	
+	csv_data : string;
+	defer delete(csv_data);
+	{
+		t, ok := os.read_entire_file_from_filename(filepath);
+		csv_data = string(t);
+		csv_data, was_alloc := strings.replace_all(csv_data, "\r", "");
+		if was_alloc {
+			delete(t);
+		}
+		fmt.assertf(ok, "Failed to load file : %v", filepath);
+	}
+	
+	return read_csv_data_as_signals(csv_data, columbs, begin_row, end_row, resample, loc); 
+}
+
+@require_results
+read_csv_data_as_signals :: proc (csv_data : string, columbs : [][2]int, begin_row := 0, end_row := max(int), resample := false, loc := #caller_location) -> ([]Signal) {
+	
+	signals := make([]Signal, len(columbs));
+	
+	for c, i in columbs {
+		signals[i] = read_csv_data_as_signal(csv_data, c[0], c[1], begin_row, end_row, resample, loc);
+	}
+	
+	return signals[:];
+}
+
+@require_results
+read_csv_row_as_strings :: proc (data : string, begin_row := 0, end_row := max(int), loc := #caller_location) -> ([]string) {
+	
+	values := make([dynamic]string);
+	
+	for {
+		
+	}
+	
+	return values[:];
+}
+*/

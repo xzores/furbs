@@ -480,18 +480,18 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x
 			//Do nothing
 		
 		case .amplitude:
-			for &m in magnetude[1:len(magnetude)-2] {
+			for &m in magnetude {
 				m = 2 * math.abs(m) / N;
 			}
 		
 		case .power_spectrum:
-			for &m in magnetude[1:len(magnetude)-2] {
+			for &m in magnetude {
 				m = 2 * (m * m) / (N * N);
 			}
 		
 		case .power_speactral_density:
 			fs : f64 = (cast(f64)len(span_pos) - 1) / (span_pos[len(span_pos)-1] - span_pos[0]);
-			for &m in magnetude[1:len(magnetude)-2] {
+			for &m in magnetude {
 				m = (m * m) / (fs * N);
 			}
 	}
