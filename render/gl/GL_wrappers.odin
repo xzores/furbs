@@ -3673,7 +3673,7 @@ setup_texure_1D :: proc (tex : Tex1d_id, mipmaps : bool, width : gl.GLsizei, for
 	levels : i32 = 1;
 
 	if mipmaps {
-		levels = 1 + cast(i32)math.floor(math.log2(cast(f32)math.max(width)));
+		levels = 1 + cast(i32)math.floor(math.log2(cast(f32)width));
 	}
 
 	if cpu_state.gl_version >= .opengl_4_5 { 
