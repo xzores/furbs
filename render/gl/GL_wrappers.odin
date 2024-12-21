@@ -3671,9 +3671,9 @@ setup_texure_1D :: proc (tex : Tex1d_id, mipmaps : bool, width : gl.GLsizei, for
 	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
 
 	levels : i32 = 1;
-
+	
 	if mipmaps {
-		levels = 1 + cast(i32)math.floor_f32(math.log2_f32(cast(f32)width));
+		levels = 1 + cast(i32)math.floor(math.log2(cast(f32)width));
 	}
 
 	if cpu_state.gl_version >= .opengl_4_5 { 
