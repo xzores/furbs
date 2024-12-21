@@ -343,7 +343,7 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 							
 							//TODO draw_quad_instanced();
 							assert(len(abscissa) != 0, "The signal is empty");
-							assert(len(abscissa) == len(ordinate), "The x and y does not have same length");
+							fmt.assertf(len(abscissa) == len(ordinate), "The x and y does not have same length. x length is %v, y length is %v", len(abscissa), len(ordinate));
 							
 							_, max_x_val := get_extremes(abscissa);
 							_, max_y_val := get_extremes(ordinate);

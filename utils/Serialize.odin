@@ -71,8 +71,8 @@ is_trivial_copied :: proc(t : typeid) -> bool {
 			return false;
 		//case Type_Info_Relative_Slice:
 		//	return false;
-		case Type_Info_Relative_Multi_Pointer:
-			return false;
+		//case Type_Info_Relative_Multi_Pointer:
+		//	return false;
 		case Type_Info_Multi_Pointer:
 			return false;
 		case Type_Info_Procedure:
@@ -83,8 +83,8 @@ is_trivial_copied :: proc(t : typeid) -> bool {
 			return false;
 		case Type_Info_Map:
 			return false;
-		case Type_Info_Relative_Pointer:
-			return false;
+		//case Type_Info_Relative_Pointer:
+		//	return false;
 		case Type_Info_Soa_Pointer:
 			return false;
 		case Type_Info_Struct:

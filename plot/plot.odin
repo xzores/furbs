@@ -175,13 +175,13 @@ set_signal_name :: proc () {
 	
 }
 
-make_signal :: proc (x_axis, y_axis : []f64, x_label := "", y_label := "", name := "") -> Signal {
+make_signal :: proc (x_axis, y_axis : []f64, x_label := "", y_label := "", name := "", loc := #caller_location) -> Signal {
 	
 	sig : Signal = {
-		strings.clone(name),
-		strings.clone(y_label),
+		strings.clone(name, loc = loc),
+		strings.clone(y_label, loc = loc),
 		y_axis, //y-coordinate
-		strings.clone(x_label),
+		strings.clone(x_label, loc = loc),
 		x_axis, //x-coordinate
 	}
 	
@@ -277,7 +277,7 @@ destroy_signal :: proc (s : Signal, loc := #caller_location) {
 	}
 }
 
-xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
+xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
 	assert(len(signals) != 0, "No signals given", loc);
 	
 	traces := make([]Trace, len(signals));
@@ -317,6 +317,16 @@ xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : M
 		}
 	}
 	
+	display_range_x := [2]f64{cast(f64)xlow, cast(f64)xhigh};
+	display_range_y := find_good_display_extremes(ylow, yhigh);
+	
+	if v, ok := x_range.?; ok {
+		display_range_x = v;
+	}
+	if v, ok := y_range.?; ok {
+		display_range_y = v;
+	}
+	
 	//Overwrite trace name if a name is given
 	if s, ok := x_label.?; ok {
 		_x_label = s;
@@ -345,8 +355,8 @@ xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : M
 		_x_label,
 		_y_label,
 		_title,
-		{cast(f64)xlow, cast(f64)xhigh},								//x_view
-		find_good_display_extremes(ylow, yhigh),						//y_view
+		display_range_x,								//x_view
+		display_range_y,						//y_view
 		x_log,
 		y_log,
 		{},																//Top bar panel
@@ -357,8 +367,8 @@ xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : M
 	return window;
 }
 
-xy_plot :: proc (signal : Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
-	return xy_plots({signal}, x_label, y_label, title, x_log, y_log, loc);
+xy_plot :: proc (signal : Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
+	return xy_plots({signal}, x_label, y_label, title, x_range, y_range, x_log, y_log, loc);
 }
 
 trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
@@ -404,7 +414,7 @@ trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
 	xy_plots({signal_a_coeff, signal_b_coeff});
 }
 
-bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_log := true, y_log := true, representation : Magnetude_representation = .amplitude, y_unit : Maybe(string) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, loc := #caller_location) -> ^Plot_window {
+bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_log := true, y_log := true, representation : Magnetude_representation = .amplitude, y_unit : Maybe(string) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_view_range : Maybe([2]f64) = nil, y_view_range : Maybe([2]f64) = nil, loc := #caller_location) -> ^Plot_window {
 	
 	span_pos : []f64 = abscissa_to_array(signal.abscissa);	//The y-value
 	value_pos : []f64 = ordinate_to_array(signal.ordinate);	//The x-value
@@ -438,11 +448,11 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x
 				case .accumulative:
 					//No name
 				case .amplitude:
-					_y_labal = fmt.aprint("Amplitude [%s]", y_unit);
+					_y_labal = fmt.aprintf("Amplitude [%v]", unit);
 				case .power_spectrum:
-					_y_labal = fmt.aprint("Power [%s^2]", y_unit);
+					_y_labal = fmt.aprintf("Power [%v^2]", unit);
 				case .power_speactral_density:
-					_y_labal = fmt.aprint("Power Spectral Density [%s^2]/Hz", y_unit);
+					_y_labal = fmt.aprintf("Power Spectral Density [%v^2]/Hz", unit);
 			}
 		}
 		else {
@@ -507,7 +517,7 @@ bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x
 		freq_span, 		//x-coordinate
 	};
 	
-	return xy_plots({signal_mag});
+	return xy_plots({signal_mag}, x_range = x_view_range, y_range = y_view_range);
 }
 
 plot_surface :: proc () {
@@ -885,9 +895,19 @@ export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 10
 	os.remove("temp_LinLibertine_R.ttf");
 }
 
-export_pdf_from_window :: proc(plot : ^Plot_window, save_location : string, color_theme := light_color_theme, loc := #caller_location) {
+export_pdf_from_window :: proc(plot : ^Plot_window, save_location : string, color_theme := light_color_theme, width : Maybe(i32) = nil, height : Maybe(i32) = nil, loc := #caller_location) {
 	
-	export_pdf(plot.plot_type, save_location, plot.window.width, plot.window.height, color_theme, loc);
+	w, h := plot.window.width, plot.window.height;
+	
+	if v, ok := width.?; ok {
+		w = v;
+	}
+	
+	if v, ok := height.?; ok {
+		h = v;
+	}
+	
+	export_pdf(plot.plot_type, save_location, w, h, color_theme, loc);
 }
 
 

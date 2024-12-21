@@ -15,7 +15,7 @@ read_csv_file_as_signal :: proc (filepath : string, begin_row := 0, end_row := m
 	csv_data : string;
 	defer delete(csv_data);
 	{
-		t, ok := os.read_entire_file_from_filename(filepath);
+		t, ok := os.read_entire_file_from_filename(filepath, loc = loc);
 		csv_data = string(t);
 		csv_data, was_alloc := strings.replace_all(csv_data, "\r", "");
 		if was_alloc {
@@ -28,7 +28,7 @@ read_csv_file_as_signal :: proc (filepath : string, begin_row := 0, end_row := m
 }
 
 @require_results
-read_csv_data_as_signal :: proc (csv_data : string, begin_row := 0, end_row := max(int), x_columb := 0, y_columb := 1, resample := false, loc := #caller_location) -> (signal : Signal) {
+read_csv_data_as_signal :: proc (csv_data : string, begin_row : int = 0, end_row := max(int), x_columb := 0, y_columb := 1, resample := false, loc := #caller_location) -> (signal : Signal) {
 	
 	ordinate := make([dynamic]f64, loc = loc); //y-coordinate
 	abscissa := make([dynamic]f64, loc = loc); //x-coordinate
@@ -137,14 +137,22 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row := 0, end_row := m
 				state = .found_surfix;
 			}
 			else {
-				fmt.panicf("unknown symbol : %v at line %i", r, cur_row);
+				if r == ' ' {
+					break; //Once there is an empty entry we break.
+				}
+				else {
+					fmt.panicf("unknown symbol : %v at line %i", r, cur_row);
+				}
 			}
 		}
 	}
 	
+	assert(len(ordinate) == len(abscissa), "ordinate and abscissa must have same length, internal passing error.");
+	
 	if resample {
 		
-		sampled_ordinate := make([]f64, len(abscissa) - 1);
+		sampled_ordinate := make([]f64, len(abscissa) - 1, loc = loc);
+		sampled_abscissa := make([]f64, len(abscissa) - 1, loc = loc);
 		
 		xlow, xhigh := get_extremes(abscissa[:])
 		sampling_rate : f64 = (cast(f64)len(abscissa) - 1) / (xhigh - xlow);
@@ -164,6 +172,7 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row := 0, end_row := m
 			b := abscissa[origi_index + 1];
 			b_v := ordinate[origi_index + 1];
 			sampled_ordinate[i] = a_v + ((time - a) / (b - a)) * (b_v - a_v);
+			sampled_abscissa[i] = time;
 		}
 		
 		delete(ordinate);
@@ -176,7 +185,7 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row := 0, end_row := m
 			sampled_ordinate[:],
 		
 			"",
-			Span(f64){xlow, xhigh, 1 / sampling_rate},
+			sampled_abscissa //TODO it might make sense to make it into a span: Span(f64){xlow, xhigh, 1 / sampling_rate},
 		};
 	}
 	
@@ -191,14 +200,13 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row := 0, end_row := m
 	};
 }
 
-/*
 @require_results
 read_csv_file_as_signals :: proc (filepath : string, columbs : [][2]int, begin_row := 0, end_row := max(int), resample := false, loc := #caller_location) -> ([]Signal) {
 	
 	csv_data : string;
 	defer delete(csv_data);
 	{
-		t, ok := os.read_entire_file_from_filename(filepath);
+		t, ok := os.read_entire_file_from_filename(filepath, loc = loc);
 		csv_data = string(t);
 		csv_data, was_alloc := strings.replace_all(csv_data, "\r", "");
 		if was_alloc {
@@ -211,17 +219,20 @@ read_csv_file_as_signals :: proc (filepath : string, columbs : [][2]int, begin_r
 }
 
 @require_results
-read_csv_data_as_signals :: proc (csv_data : string, columbs : [][2]int, begin_row := 0, end_row := max(int), resample := false, loc := #caller_location) -> ([]Signal) {
+read_csv_data_as_signals :: proc (csv_data : string, columbs : [][2]int, begin_row : int = 0, end_row := max(int), resample := false, loc := #caller_location) -> ([]Signal) {
 	
-	signals := make([]Signal, len(columbs));
+	signals := make([]Signal, len(columbs), loc = loc);
+	
+	begin_row := begin_row;
 	
 	for c, i in columbs {
-		signals[i] = read_csv_data_as_signal(csv_data, c[0], c[1], begin_row, end_row, resample, loc);
+		signals[i] = read_csv_data_as_signal(csv_data, begin_row, end_row,  c[0], c[1], resample, loc = loc);
 	}
 	
 	return signals[:];
 }
 
+/*
 @require_results
 read_csv_row_as_strings :: proc (data : string, begin_row := 0, end_row := max(int), loc := #caller_location) -> ([]string) {
 	
