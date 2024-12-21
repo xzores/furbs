@@ -483,7 +483,7 @@ Element_container :: struct {
 	
 	//What will be displayed when hovering the elements (optional) may be nil
 	tooltip : Tooltip,
-
+	
 	//TODO hover, and click sounds
 	
 	//User data, so the user can use the callback system if wanted (not recommended)

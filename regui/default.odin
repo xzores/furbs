@@ -42,7 +42,7 @@ default_hover_appearance : Colored_appearance = {
 	text_backdrop_offset = {0.002, -0.002},
 	text_backdrop_color = {0,0,0,1},
 	
-	bg_color = {0.3, 0.3, 0.3, 0.7},
+	bg_color = {0.3, 0.3, 0.3, 0.9},
 	mid_color = {0.8, 0.8, 0.8, 1},
 	mid_margin = 0.02,
 	front_color = {1,1,1,1},
@@ -70,7 +70,7 @@ default_selected_appearance : Colored_appearance = {
 	text_backdrop_offset = {0.002, -0.002},
 	text_backdrop_color = {0,0,0,1},
 	
-	bg_color = {0.5, 0.5, 0.5, 0.7},
+	bg_color = {0.2, 0.2, 0.2, 0.9},
 	mid_color = {0.9, 0.9, 0.9, 1},
 	mid_margin = 0.02,
 	front_color = {1,1,1,1},
