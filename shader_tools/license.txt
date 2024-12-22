@@ -1,0 +1,1 @@
+The odin code provived by is under the same license as the rest of furbs libs, for information about the specific vender code, see the Licenses folder and the folder including the interfaces.
