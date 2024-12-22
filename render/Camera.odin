@@ -92,6 +92,11 @@ camera_right :: proc(cam : Camera3D) -> [3]f32 {
 	return linalg.normalize(linalg.cross(cam.up, forward));
 }
 
+camera_move :: proc(cam : ^Camera3D, movement : [3]f32) {
+	cam.position += movement;
+	cam.target += movement;
+}
+
 camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {
 	using linalg;
 
@@ -182,3 +187,4 @@ camera_bind :: proc (camera : Camera, loc := #caller_location) {
 		panic("??");
 	}
 }
+

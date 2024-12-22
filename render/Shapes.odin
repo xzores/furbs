@@ -58,10 +58,18 @@ draw_circle_position :: proc(position : [3]f32, scale : f32, color : [4]f32 = {1
 
 draw_circle :: proc {draw_circle_mat, draw_circle_position};
 
-draw_cube :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+draw_cube_mat :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
 	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_cube);
 }
+
+//rotation is in degrees.
+draw_cube_rts :: proc(position : [3]f32, rotation : [3]f32, scale : [3]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	rotation := rotation / 180.0 * math.PI;
+	draw_cube_mat(linalg.matrix4_from_trs_f32(position, linalg.quaternion_from_euler_angles(rotation.x, rotation.y, rotation.z, .XYZ), scale), color, loc);
+}
+
+draw_cube :: proc {draw_cube_mat, draw_cube_rts};
 
 draw_cylinder :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
