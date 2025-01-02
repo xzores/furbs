@@ -3,9 +3,9 @@ package fast_noise;
 when ODIN_OS == .Windows {
     foreign import lib "fastnoise/lib/FastNosie.lib"
 } else when ODIN_OS == .Linux {
-    foreign import lib "fastnoise/lib/FastNosie.so"
+    foreign import lib "fastnoise/lib/FastNosie.a"
 } else when ODIN_OS == .Darwin {
-    foreign import lib "fastnoise/lib/FastNosie.dylib"
+    foreign import lib "fastnoise/lib/FastNosie.a"
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,0 @@
-package glslang_bindings;
-
-
-
