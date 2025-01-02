@@ -32,3 +32,4 @@
 
 # Program info
 *.pdb
+/glslang/.vs
