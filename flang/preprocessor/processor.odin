@@ -14,6 +14,7 @@ import "../token"
 File_load :: struct{collection : string, file : string, from : string};
 
 //inserts, replaces and removes tokens
+@require_results
 preproces :: proc (tokens : ^[dynamic]token.Token, filepath : string) -> (new_files_to_load : []File_load) {
 	
 	next_token :: proc (tokens : ^[dynamic]token.Token, cur_tok : ^int) -> (tok : token.Token, done : bool) {
@@ -32,6 +33,9 @@ preproces :: proc (tokens : ^[dynamic]token.Token, filepath : string) -> (new_fi
 	done := false;
 	cur_tok : int;
 	t_next : token.Token;
+	
+	tokens_to_remove : [dynamic]int;
+	defer delete(tokens_to_remove);
 	
 	for !done {
 		t : token.Token;
@@ -71,7 +75,7 @@ preproces :: proc (tokens : ^[dynamic]token.Token, filepath : string) -> (new_fi
 							strings.write_rune(&current, c);
 						}
 					}
-					filename = strings.clone(strings.to_string(current));
+					filename = fmt.tprintf("%v.flang", strings.to_string(current));
 					
 					{ //Check that the nexxt token is a semicolon
 						t_next, done = next_token(tokens, &cur_tok);
@@ -80,11 +84,16 @@ preproces :: proc (tokens : ^[dynamic]token.Token, filepath : string) -> (new_fi
 					}
 					
 					append(&to_load, File_load{collection, filename, filepath});
+					append(&tokens_to_remove, cur_tok-3, cur_tok-2, cur_tok-1);
 					
 				case:
 					panic("TODO");
 			}
 		}
+	}
+	
+	#reverse for i in tokens_to_remove {
+		ordered_remove(tokens, i);
 	}
 	
 	return to_load[:];

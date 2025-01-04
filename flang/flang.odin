@@ -11,6 +11,7 @@ import "core:path/filepath"
 
 import "token"
 import "preprocessor"
+import "parser"
 
 File_load :: preprocessor.File_load;
 
@@ -35,11 +36,11 @@ Shader_context :: struct {
 	defines : map[string]token.Token_type,
 }
 
-create_context :: proc () -> ^Shader_context {
+create_context :: proc (loc := #caller_location) -> ^Shader_context {
 	
 	source_files := make(map[string]Shader_file);
 	
-	s := new(Shader_context);
+	s := new(Shader_context, loc = loc);
 	
 	s^ = Shader_context {
 		source_files,
@@ -49,27 +50,37 @@ create_context :: proc () -> ^Shader_context {
 	return s;
 }
 
-destroy_contrext :: proc (s : ^Shader_context) {
-	panic("TODO");
+destroy_contrext :: proc (con : ^Shader_context) {
+	
+	for d, _ in con.defines {
+		delete(d);
+	}
+	delete(con.defines);
+	
+	for _, s in con.sources {
+		
+		delete(s.full_path);
+		delete(s.source_code);
+		delete(s.tokens);
+	}
+	
+	delete(con.sources);
+	
+	free(con);
 }
 
-create_context_from_file :: proc (filename : string) -> ^Shader_context {
-	
-	file, errno := os.open(filename);
-	assert(errno == 0, "failed to load file");
-	stats, stat_errno := os.fstat(file);
-	assert(stat_errno == 0, "failed to fstat file");
-	
+create_context_from_file :: proc (filename : string, loc := #caller_location) -> ^Shader_context {
+		
 	source_code, vert_ok := os.read_entire_file_from_filename(filename);
 	defer delete(source_code);
 	
-	return create_context_from_string(string(source_code), filename);
+	return create_context_from_string(string(source_code), filename, loc);
 }
 
 //makes a copy of the source code and filename
-create_context_from_string :: proc (source_code : string, file_path : string) -> ^Shader_context {
+create_context_from_string :: proc (source_code : string, file_path : string, loc := #caller_location) -> ^Shader_context {
 	
-	con := create_context();
+	con := create_context(loc);
 	
 	add_shader_from_string(con, source_code, file_path);
 	
@@ -210,7 +221,7 @@ lex :: proc (s : ^Shader_context) {
 	//inserts, replaces and removes tokens
 	preproces :: proc (s : ^Shader_context) {
 		
-		to_load : [dynamic]File_load;
+		to_load := make([dynamic]File_load);
 		defer delete(to_load);
 		
 		for source_file, &source in s.sources {
@@ -248,7 +259,7 @@ lex :: proc (s : ^Shader_context) {
 					panic("TODO collection not handled.");
 				}
 			}
-		}		
+		}
 	}
 	
 	//find out what i variable names and what is not.
@@ -269,12 +280,14 @@ lex :: proc (s : ^Shader_context) {
 	
 }
 
-parse :: proc () {
+parse :: proc (s : ^Shader_context) {
 	//Contruct the AST.
 	//There is an AST, it does not error even if invalid, the user may change the AST.
 	
-	
-	
+	for _, source in s.sources {
+		res, errs := parser.parse(source.tokens);
+		parser.destroy_parse_res(res,errs);
+	}
 	
 	
 } 

@@ -47,6 +47,8 @@ Comma :: struct {};
 Dot :: struct {};
 
 Annotation_type :: enum {
+	none = 0,
+	
 	//For rasterization
 	vertex,
 	fragment,
@@ -224,6 +226,7 @@ Token :: struct {
 	type : Token_type,
 }
 
+@require_results
 tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 	
 	Tokenizer :: struct {
@@ -303,7 +306,6 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 		origin_location : Location = {filename, t.token_start_line, transmute(string)string_ref};
 		token := Token{origin_location, type};
 		append(&tokens, token);
-		fmt.printf("emitting token : %v\n", token);
 		
 		token_begin = current_index;
 	}
