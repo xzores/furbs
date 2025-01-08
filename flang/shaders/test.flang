@@ -53,7 +53,6 @@ tesselation_valuation_main :: proc () {
 */
 
 
-
 //This is A SSBO, it can be accessed though a compute shader, tesselation shaders and raytracing shaders. (maybe also vertex and fragment shaders)
 $storage my_compute_input : []f32;
 $storage my_compute_output : []f32;
@@ -67,25 +66,25 @@ compute_main :: proc () {
 	my_compute_output[index] = my_compute_input[index] * 2.0;
 }
 
-
 @compute(32 1 1) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
 compute_main2 :: proc () {
 	index := gl_GlobalInvocationID.x;
 	my_compute_output[index] = my_compute_input[index] * 2.0;
 }
 
-
 My_struct :: struct {
 	something1 : u32,
-	something2 : f32,
+	something2 : My_struct2,
 }
 
 My_struct2 :: struct {
 	something1 : u32,
-	something2 : f32,
+	//struct_on_struct : My_struct,
 }
 
-
+with_a_param :: proc (a : f32, b : i32, c : vec3, d : My_struct) {
+	
+}
 
 /*
 //

@@ -19,21 +19,13 @@ Location :: struct {
 Unknown_token_type :: struct {};
 
 Comment :: struct {};
-
 Multi_line_comment :: struct {};
 
-//Want to handle : and :: and := 
-//Handle @
-
-Arithmetic_operators :: struct {
-	type: enum {
-		division,
-		negation,
-		addition,
-		multiply,
-		power_of,
-	},
-};
+Division_operator :: struct {};
+Negation_operator :: struct {};
+Addition_operator :: struct {};
+Multiply_operator :: struct {};
+Power_of_operator :: struct {};
 
 Logical_operator :: struct {};
 Comparison_operator :: struct {};
@@ -48,6 +40,8 @@ Dot :: struct {};
 
 Annotation_type :: enum {
 	none = 0,
+	
+	custom, //TODO 
 	
 	//For rasterization
 	vertex,
@@ -75,26 +69,16 @@ Annotation :: struct {
 	type: Annotation_type,
 };
 
-Brackets_type :: enum {
-	round_brackets,		// ( and )
-	sqaure_brackets,	// [ and ]
-	curly_braces, 		// { and }
-}
+Paren_begin :: struct {};
+Paren_end :: struct {};
 
-Brackets_kind :: enum {
-	begin,
-	end,
-};
+Sqaure_begin :: struct {};
+Sqaure_end :: struct {};
 
-Brackets_origin :: struct{char_index : int, token_index : int};
+Curly_begin :: struct {};
+Curly_end :: struct {};
 
-Parenthesis :: struct {
-	kind : Brackets_kind,
-	type : Brackets_type,
-	//complement_token : Brackets_origin,
-};
-
-Identifier :: struct {}
+Identifier :: struct {};
 
 Integer_literal :: struct {
 	value : i128,
@@ -194,8 +178,18 @@ Token_type :: union {
 	Annotation,
 	Qualifier,
 	
-	Parenthesis,
-	Arithmetic_operators,
+	Division_operator,
+	Negation_operator,
+	Addition_operator,
+	Multiply_operator,
+	Power_of_operator,
+
+	Paren_begin,
+	Paren_end,
+	Sqaure_begin,
+	Sqaure_end,
+	Curly_begin,
+	Curly_end,
 	Logical_operator,
 	Comparison_operator,
 	Bitwise_operator,
@@ -226,8 +220,9 @@ Token :: struct {
 	type : Token_type,
 }
 
+//The caller owns the returned values
 @require_results
-tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
+tokenize :: proc (_source_code : string, _filename : string) -> (toks : [dynamic]Token, err : string) {
 	
 	Tokenizer :: struct {
 		
@@ -264,34 +259,6 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 		current_index : int,
 	}
 	
-	is_brackets :: proc (c : rune) -> bool {
-		return c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}';
-	}
-	
-	get_brackets_type :: proc (c : rune) -> Brackets_type {
-		switch c {
-			case '(', ')':
-				return .round_brackets;
-			case '[', ']':
-				return .sqaure_brackets;
-			case '{', '}':
-				return .curly_braces;
-		}
-		
-		return nil;
-	}
-	
-	get_brackets_kind :: proc (c : rune) -> Brackets_kind {
-		switch c {
-			case '{', '[', '(':
-				return .begin;
-			case ')', ']', '}':
-				return .end;
-		}
-		
-		return nil;
-	}
-	
 	emit_token :: proc (using t : ^Tokenizer, include_char : bool, type : Token_type) {
 		
 		length := t.current_index - t.token_begin;
@@ -310,7 +277,8 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 		token_begin = current_index;
 	}
 	
-	default_behavior :: proc (using t : ^Tokenizer, c : rune, i : int) {
+	@require_results
+	default_behavior :: proc (using t : ^Tokenizer, c : rune, i : int) -> string{
 		switch c {
 			case '/':
 				state = .in_slash;
@@ -347,15 +315,15 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 			case '+':
 				token_begin = i;
 				token_start_line = current_line;
-				emit_token(t, true, Arithmetic_operators{.addition});
+				emit_token(t, true, Addition_operator{});
 			case '^':
 				token_begin = i;
 				token_start_line = current_line;
-				emit_token(t, true, Arithmetic_operators{.power_of});
+				emit_token(t, true, Power_of_operator{});
 			case '*':
 				token_begin = i;
 				token_start_line = current_line;
-				emit_token(t, true, Arithmetic_operators{.multiply});
+				emit_token(t, true, Multiply_operator{});
 			case '=':
 				token_begin = i;
 				token_start_line = current_line;
@@ -372,10 +340,31 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 				token_begin = i;
 				token_start_line = current_line;
 				state = .in_preprocessor_directive;
-			case '(', ')', '[', ']', '{', '}':
+			case '(':
 				token_begin = i;
 				token_start_line = current_line;
-				emit_token(t, true, Parenthesis{get_brackets_kind(c), get_brackets_type(c)});
+				emit_token(t, true, Paren_begin{});
+			case ')':
+				token_begin = i;
+				token_start_line = current_line;
+				emit_token(t, true, Paren_end{});
+			case '[':
+				token_begin = i;
+				token_start_line = current_line;
+				emit_token(t, true, Sqaure_begin{});
+			case ']':
+				token_begin = i;
+				token_start_line = current_line;
+				emit_token(t, true, Sqaure_end{});
+			case '{':
+				token_begin = i;
+				token_start_line = current_line;
+				emit_token(t, true, Curly_begin{});
+			case '}':
+				token_begin = i;
+				token_start_line = current_line;
+				emit_token(t, true, Curly_end{});
+			
 			case:
 				if unicode.is_letter(c) || c == '_' {
 					token_begin = i;
@@ -388,9 +377,12 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 					state = .in_number_literal;
 				}
 				else {
-					fmt.panicf("invalid lexeme %v\n", c);
+					delete(t.tokens);
+					return fmt.aprintf("invalid lexeme '%v' at line %v\n", c, current_line);
 				}
 		}
+		
+		return "";
 	}
 	
 	using t : Tokenizer = {
@@ -408,7 +400,9 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 		
 		switch state {
 			case .default:
-				default_behavior(&t, c, i);
+				if e := default_behavior(&t, c, i); e != "" {
+					return t.tokens, e;
+				}
 			
 			case .in_slash:
 				switch c {
@@ -417,7 +411,7 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 					case '*':
 						state = .in_multi_comment;
 					case:
-						emit_token(&t, false, Arithmetic_operators{.division});
+						emit_token(&t, false, Division_operator{});
 						state = .default;
 						if unicode.is_letter(c) || c == '_' {
 							token_begin = i;
@@ -466,7 +460,9 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 					emit_token(&t, false, Annotation{annotation_type});
 					token_begin = i;
 					state = .default;
-					default_behavior(&t, c, i);
+					if e := default_behavior(&t, c, i); e != "" {
+						return t.tokens, e;
+					}
 				}
 			
 			case .in_qualifier:
@@ -489,7 +485,9 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 					emit_token(&t, false, Qualifier{qualifier_type});
 					token_begin = i;
 					state = .default;
-					default_behavior(&t, c, i);
+					if e := default_behavior(&t, c, i); e != "" {
+						return t.tokens, e;
+					}
 				}
 				
 			case .in_identifier:
@@ -500,7 +498,9 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 					emit_token(&t, false, Identifier{});
 					token_begin = i;
 					state = .default;
-					default_behavior(&t, c, i);
+					if e := default_behavior(&t, c, i); e != "" {
+						return t.tokens, e;
+					}
 				}
 				
 			case .in_string_literal:
@@ -536,7 +536,9 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 					emit_token(&t, false, Integer_literal{number});
 					token_begin = i;
 					state = .default;
-					default_behavior(&t, c, i);
+					if e := default_behavior(&t, c, i); e != "" {
+						return t.tokens, e;
+					}
 				}
 			
 			case .in_float_literal:
@@ -563,7 +565,9 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 					emit_token(&t, false, Float_literal{number});
 					token_begin = i;
 					state = .default;
-					default_behavior(&t, c, i);
+					if e := default_behavior(&t, c, i); e != "" {
+						return t.tokens, e;
+					}
 				}
 			
 			case .in_dash:
@@ -572,11 +576,14 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 						emit_token(&t, true, Proc_return_operator{});
 						token_begin = i;
 						state = .default;
-					case:
-						emit_token(&t, true, Arithmetic_operators{.negation});
+					case: {
+						emit_token(&t, true, Negation_operator{});
 						token_begin = i;
 						state = .default;
-						default_behavior(&t, c, i);
+						if e := default_behavior(&t, c, i); e != "" {
+							return t.tokens, e;
+						}
+					}
 				}
 			
 			case .in_preprocessor_directive:
@@ -600,14 +607,12 @@ tokenize :: proc (_source_code : string, _filename : string) -> [dynamic]Token {
 					emit_token(&t, false, Preprocessor_token{prepros});
 					token_begin = i;
 					state = .default;
-					default_behavior(&t, c, i);
+					if e := default_behavior(&t, c, i); e != "" {
+						return t.tokens, e;
+					}
 				}
-		}
-		
-		if c != '\n' {
-			//fmt.printf("rune : %v, tokenizer : %v\n", c, t);
 		}
 	}
 	
-	return t.tokens;
+	return t.tokens, "";
 }

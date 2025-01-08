@@ -4,13 +4,8 @@ $uniform uModel : mat4; //This name may collide with other names in other functi
 
 $sampler my_texture : sampler2D;
 
-My_struct :: struct {
-	something1 : u32,
-	something2 : f32,
-}
-
 my_other_file_function :: proc () -> mat4 {
-	return uModel; 
+	return uModel;
 }
 
 //hello

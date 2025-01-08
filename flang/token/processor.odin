@@ -1,4 +1,4 @@
-package flang_preproccesor;
+package flang_tokenizer;
 
 import "core:fmt"
 import "core:strings"

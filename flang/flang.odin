@@ -10,10 +10,9 @@ import "core:os"
 import "core:path/filepath"
 
 import "token"
-import "preprocessor"
 import "parser"
 
-File_load :: preprocessor.File_load;
+File_load :: token.File_load;
 
 Shader_file :: struct {
 	full_path : string,
@@ -212,8 +211,13 @@ lex :: proc (s : ^Shader_context) {
 				
 				assert(len(source.tokens) == 0, "");
 				
-				source.tokens = token.tokenize(source.source_code, file);
+				err : string
+				source.tokens, err = token.tokenize(source.source_code, file);
 				source.stage = .tokenized;
+				
+				if err != "" {
+					panic(err);
+				}
 			}
 		}
 	}
@@ -221,13 +225,13 @@ lex :: proc (s : ^Shader_context) {
 	//inserts, replaces and removes tokens
 	preproces :: proc (s : ^Shader_context) {
 		
-		to_load := make([dynamic]File_load);
+		to_load := make([dynamic]token.File_load);
 		defer delete(to_load);
 		
 		for source_file, &source in s.sources {
 			
 			if source.stage < .preprocessed {
-				new_loads := preprocessor.preproces(&source.tokens, source_file); //Uses temp alloc
+				new_loads := token.preproces(&source.tokens, source_file); //Uses temp alloc
 				defer delete(new_loads);
 				source.stage = .preprocessed;
 				
@@ -284,11 +288,14 @@ parse :: proc (s : ^Shader_context) {
 	//Contruct the AST.
 	//There is an AST, it does not error even if invalid, the user may change the AST.
 	
+	tokens_sources : [dynamic][dynamic]token.Token;
+	defer delete(tokens_sources);
+	
 	for _, source in s.sources {
-		res, errs := parser.parse(source.tokens);
-		parser.destroy_parse_res(res,errs);
+		append(&tokens_sources, source.tokens);
 	}
 	
+	errs := parser.parse(tokens_sources[:]);
 	
 } 
 
