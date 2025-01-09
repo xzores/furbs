@@ -1,0 +1,106 @@
+#include "common"; //local import, .flang is implicit
+//#include "my_collection:common"; //in refernce to a collection, set by user
+
+//This is input to vertex shader
+$attribute aPosition : vec3;
+$attribute aColor : vec3;
+
+//This is input to fragment and output for vertex
+$varying vColor : vec3;
+
+// Output color of the fragment
+$frag_out FragColor : vec3;
+
+//These are uniforms for both shaders
+$uniform uModel 		: mat4;
+$uniform uView 			: mat4;
+$uniform uProjection 	: mat4;
+
+$uniform my_const_size_array : [10]mat4;
+
+//A texture sampler, can be used by any shader?
+$sampler my_texture : sampler2D;
+
+@vertex
+vertex_main :: proc () {
+	gl_Position = uProjection * uView * uModel * vec4(aPosition, 1.0);
+	vColor = aColor * my_global_function() + my_other_file_function();
+}
+
+@fragment
+fragment_main :: proc () {
+	// Set the fragment color
+	FragColor = vec4(vColor, 1.0) * my_global_function();
+}
+
+my_global_function :: proc(my_first_variable : u32, my_secound_variable : f32) -> u32 {
+	return my_first_variable * 5 + cast(u32)my_secound_variable; 
+}
+
+/*
+
+$storage my_tesselation_input : []f32;
+
+@tesselation_control
+tesselation_control_main :: proc () {
+	....
+}
+
+@tesselation_control
+tesselation_valuation_main :: proc () {
+	....
+}
+*/
+
+
+//This is A SSBO, it can be accessed though a compute shader, tesselation shaders and raytracing shaders. (maybe also vertex and fragment shaders)
+$storage my_compute_input : []f32;
+$storage my_compute_output : []f32;
+
+$local my_work_group_local_memeory : []f32;
+
+//may also be written as @compute(32 1 1)
+@compute(32,1,1) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
+compute_main :: proc () {
+	index := gl_GlobalInvocationID.x;
+	my_compute_output[index] = my_compute_input[index] * 2.0;
+}
+
+@compute(32 1 1) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
+compute_main2 :: proc () {
+	index := gl_GlobalInvocationID.x;
+	my_compute_output[index] = my_compute_input[index] * 2.0;
+}
+
+My_struct :: struct {
+	something1 : u32,
+	something2 : My_struct2,
+}
+
+My_struct2 :: struct {
+	something1 : u32,
+	//struct_on_struct : My_struct,
+}
+
+with_a_param :: proc (a : f32, b : i32, c : vec3, d : My_struct) {
+	
+}
+
+/*
+//
+$rayorigin
+$raydirection
+$intersection
+$hitpoint
+$miss
+
+trace_raygen,
+trace_intersect,
+trace_anyhit,
+trace_closesthit,
+trace_miss,
+trace_callable,
+trace_task,
+trace_mesh,...
+*/
+
