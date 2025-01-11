@@ -109,34 +109,34 @@ Primitive_kind :: enum {
 }
 
 Sampler_kind :: enum {
-    _sampler1D,               // GLSL 1.10
-    _sampler2D,               // GLSL 1.10
-    _sampler3D,               // GLSL 1.10
-    _sampler1D_depth,         // GLSL 1.10
-    _sampler2D_depth,         // GLSL 1.10
-    _sampler_cube,            // GLSL 1.10
-    _sampler2D_array,         // GLSL 1.50
-    _sampler2_multi,          // GLSL 3.20
-    _sampler_buffer,          // GLSL 3.10
-    // _samplerCubeArray,     // GLSL 4.00 (commented out for being too new and weird)
+	_sampler1D,               // GLSL 1.10
+	_sampler2D,               // GLSL 1.10
+	_sampler3D,               // GLSL 1.10
+	_sampler1D_depth,         // GLSL 1.10
+	_sampler2D_depth,         // GLSL 1.10
+	_sampler_cube,            // GLSL 1.10
+	_sampler2D_array,         // GLSL 1.50
+	_sampler2_multi,          // GLSL 3.20
+	_sampler_buffer,          // GLSL 3.10
+	// _samplerCubeArray,     // GLSL 4.00 (commented out for being too new and weird)
 
-    _sampler1D_int,           // GLSL 1.30
-    _sampler2D_int,           // GLSL 1.30
-    _sampler3D_int,           // GLSL 1.30
-    _sampler_cube_int,        // GLSL 1.30
-    _sampler2D_array_int,     // GLSL 3.00
-    _sampler2_multi_int,      // GLSL 3.20
-    _sampler_buffer_int,      // GLSL 3.10
-    // _sampler_cube_array_int,// GLSL 4.00 (commented out for being too new and weird)
+	_sampler1D_int,           // GLSL 1.30
+	_sampler2D_int,           // GLSL 1.30
+	_sampler3D_int,           // GLSL 1.30
+	_sampler_cube_int,        // GLSL 1.30
+	_sampler2D_array_int,     // GLSL 3.00
+	_sampler2_multi_int,      // GLSL 3.20
+	_sampler_buffer_int,      // GLSL 3.10
+	// _sampler_cube_array_int,// GLSL 4.00 (commented out for being too new and weird)
 
-    _sampler1D_uint,          // GLSL 1.30
-    _sampler2D_uint,          // GLSL 1.30
-    _sampler3D_uint,          // GLSL 1.30
-    _sampler_cube_uint,       // GLSL 1.30
-    _sampler2D_array_uint,    // GLSL 3.00
-    _sampler2_multi_uint,     // GLSL 3.20
-    _sampler_buffer_uint,     // GLSL 3.10
-    // _sampler_cube_array_uint// GLSL 4.00 (commented out for being too new and weird)
+	_sampler1D_uint,          // GLSL 1.30
+	_sampler2D_uint,          // GLSL 1.30
+	_sampler3D_uint,          // GLSL 1.30
+	_sampler_cube_uint,       // GLSL 1.30
+	_sampler2D_array_uint,    // GLSL 3.00
+	_sampler2_multi_uint,     // GLSL 3.20
+	_sampler_buffer_uint,     // GLSL 3.10
+	// _sampler_cube_array_uint// GLSL 4.00 (commented out for being too new and weird)
 };
 
 Type_type :: union {
@@ -172,6 +172,7 @@ Parameter_data :: struct {
 
 Function_body_data :: struct {
 	//??
+	block : Block,
 }
 
 Function_parameter :: struct {
@@ -1103,53 +1104,51 @@ Variable_declaration :: struct {
 }
 
 Call :: struct {
-    called : string,          // Function name (or reference to a Function)
-    args   : []Expression,    // List of arguments (expressions)
+	called : string,          // Function name (or reference to a Function)
+	args   : []^Expression,    // List of arguments (expressions)
 }
 
 Assignment :: struct {
-    lhs : ^Expression,   // The left-hand side (e.g., variable)
-    rhs : ^Expression,   // The right-hand side (e.g., value or expression)
+	lhs : ^Expression,   // The left-hand side (e.g., variable)
+	rhs : ^Expression,   // The right-hand side (e.g., value or expression)
 }
 
 Unary_operator_kind :: enum {
-    negation,     // e.g., -a
-    inversion,    // e.g., !a
-    bitwise_not,  // e.g., ~a
-    increment,    // e.g., ++a or a++
-    decrement,    // e.g., --a or a--
+	negation,     // e.g., -a
+	inversion,    // e.g., !a
+	bitwise_not,  // e.g., ~a
 }
 
 Unary_operator :: struct {
 	op      : Unary_operator_kind,    // Operator like "-", "++", "!"
-    operand : ^Expression,      // The expression being operated on
+	operand : ^Expression,      // The expression being operated on
 }
 
 Binary_operator_kind :: enum {
-    add,          // e.g., a + b
-    subtract,     // e.g., a - b
-    multiply,     // e.g., a * b
-    divide,       // e.g., a / b
-    modulo,       // e.g., a % b
-    logical_and,  // e.g., a && b
-    logical_or,   // e.g., a || b
-    bitwise_and,  // e.g., a & b
-    bitwise_or,   // e.g., a | b
-    bitwise_xor,  // e.g., a ^ b
-    shift_left,   // e.g., a << b
-    shift_right,  // e.g., a >> b
-    equals,       // e.g., a == b
-    not_equals,   // e.g., a != b
-    greater_than, // e.g., a > b
-    less_than,    // e.g., a < b
-    greater_eq,   // e.g., a >= b
-    less_eq,      // e.g., a <= b
+	add,          // e.g., a + b
+	subtract,     // e.g., a - b
+	multiply,     // e.g., a * b
+	divide,       // e.g., a / b
+	modulo,       // e.g., a % b
+	logical_and,  // e.g., a && b
+	logical_or,   // e.g., a || b
+	bitwise_and,  // e.g., a & b
+	bitwise_or,   // e.g., a | b
+	bitwise_xor,  // e.g., a ^ b
+	shift_left,   // e.g., a << b
+	shift_right,  // e.g., a >> b
+	equals,       // e.g., a == b
+	not_equals,   // e.g., a != b
+	greater_than, // e.g., a > b
+	less_than,    // e.g., a < b
+	greater_eq,   // e.g., a >= b
+	less_eq,      // e.g., a <= b
 }
 
 Binary_operator :: struct {
 	op      : Binary_operator_kind, 
-    operand1 : ^Expression,      // The expression being operated on
-	operand2 : ^Expression,      // The expression being operated on
+	left : ^Expression,      // The expression being operated on
+	right : ^Expression,      // The expression being operated on
 }
 
 Return :: struct {
@@ -1157,33 +1156,33 @@ Return :: struct {
 }
 
 If :: struct {
-    condition : Expression,      // Condition to evaluate
-    then_body : []^Statement,     // Block of statements for the true branch
-    else_body : Maybe([]^Statement),  // Optional else block
+	condition : Expression,      // Condition to evaluate
+	then_body : []^Statement,     // Block of statements for the true branch
+	else_body : Maybe([]^Statement),  // Optional else block
 }
 
 For :: struct { //Also used as a while
-    init      : Maybe(^Statement), // Initialization (e.g., Declaration or Assignment)
-    condition : Maybe(Expression), // Loop condition
-    increment : Maybe(Expression), // Increment step
-    body      : []Statement,       // Loop body
+	init      : Maybe(^Statement), // Initialization (e.g., Declaration or Assignment)
+	condition : Maybe(Expression), // Loop condition
+	increment : Maybe(Expression), // Increment step
+	body      : []Statement,       // Loop body
 }
 
 Float_literal :: struct {
-    value : f64,  // Could be int, float, string, bool, etc.
+	value : f64,  // Could be int, float, string, bool, etc.
 }
 
 Int_literal :: struct {
-    value : i128,  // Could be int, float, string, bool, etc.
+	value : i128,  // Could be int, float, string, bool, etc.
 }
 
 Boolean_literal :: struct {
-    value : bool,  // Could be int, float, string, bool, etc.
+	value : bool,  // Could be int, float, string, bool, etc.
 }
 
 Variable :: struct {
 	name : string,
-	scope : Maybe(Scope),  // Optional reference to the variable's scope
+	//scope : Maybe(Scope),  // Optional reference to the variable's scope
 }
 
 Expression :: union {
@@ -1209,15 +1208,16 @@ Statement :: union {
 Symbol :: struct {}
 
 Scope :: struct {
-    parent     : ^Scope,              // Link to the parent scope (or `nil` if it's the global scope)
-    symbols    : map[string]Symbol,   // Map from variable/function names to their metadata (Symbol)
+	parent     : ^Scope,              // Link to the parent scope (or `nil` if it's the global scope)
+	symbols    : map[string]Symbol,   // Map from variable/function names to their metadata (Symbol)
 }
 
 Block :: struct {
-    statements : []Statement,  // Ordered list of statements
-    scope      : Scope,        // Scope associated with the block
+	statements : []Statement,  // Ordered list of statements
+	scope      : Scope,        // Scope associated with the block
 }
 
+//Can handle 0 tokens, so passing 0 tokens is valid (TODO : not tested)
 @(private="file")
 parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> Function_body_data {
 	
@@ -1242,18 +1242,22 @@ parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> F
 				else if t_next.origin.source == "for" {
 					panic("TODO");
 				}
+				else if t_next.origin.source == "break" {
+					panic("TODO");
+				}
+				else if t_next.origin.source == "continue" {
+					panic("TODO");
+				}
 				else if t_next.origin.source == "return" {
 					
-					t_next, done = next_token(&state);
-					
-					expression_start_token := state.cur_tok-1;
+					expression_start_token := state.cur_tok;
 					expression_end_token : int = -1;
 					
-					_, ok := t_next.type.(token.Semicolon)
+					ok : bool = false;
 					for !ok && !done {
 						_, ok := t_next.type.(token.Semicolon);
-						expression_end_token = state.cur_tok;
 						t_next, done = next_token(&state);
+						expression_end_token = state.cur_tok;
 					}
 					
 					if expression_end_token == -1 {
@@ -1261,21 +1265,24 @@ parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> F
 						continue;
 					}
 					
-					expression_tokens := state.tokens[expression_start_token:expression_end_token];
-					fmt.printf("found expression tokens: %#v\n", expression_tokens);
-					expression := parse_expression(expression_tokens, errs);
-					
-					if expression == nil {
-						emit_error2(errs, t_next.origin, "Invalid expression for ");
+					if expression_start_token != expression_end_token-1 {
+						
+						expression_tokens := state.tokens[expression_start_token:expression_end_token-1];
+						expression, err := parse_expression(expression_tokens);
+						
+						if err != {} {
+							emit_error2(errs, err.token, err.message);
+							continue;
+						}
 					}
+					
 				}
 				else {
-					
 				}
 				
 			case:
-				emit_error2(errs, t_next.origin, "Illegal token");
-				continue;
+				//emit_error2(errs, t_next.origin, "Illegal token");
+				//continue;
 		}
 	}
 	
@@ -1283,7 +1290,404 @@ parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> F
 }
 
 @(private="file")
-parse_expression :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> ^Expression {
-	
-	
+Syntax_node :: struct {
+	value : union{
+		^Expression,
+		Unary_operator_kind,
+		Binary_operator_kind,
+	},
+	origin : Location,
 }
+
+//Must have at least one token
+@(private="file")
+parse_expression :: proc (_tokens : []token.Token) -> (^Expression, Parse_error) {
+	assert(len(_tokens) >= 1, "Must have at least one token");
+	
+	using state : State_token;
+	state.tokens = _tokens;
+	
+	log.infof("Parse expression tokens : %#v", _tokens);
+	
+	syntax_nodes : [dynamic]Syntax_node;
+	
+	//TODO we do unary later
+	//TODO make this loop also handle unary operators, so that parse_syntex_nodes_to_ast only deals with expressions and binary operators.
+	//THAt will make it simpler, and we can deal with it at the point.
+	//MAYBE that is not a good idea, what if you have "!somefunc() * 2" it would not know when to stop, so maybe everything should be parsed as operators?
+	//I dont think parsing , as an operator helps, but function calles could, but they are kinda solved, maybe we could limit the number of parsed tokens. 
+	//If we do that then when parsing "!" we could ask for just 1 expression ahead, so "(a+b)" or "somefunc(38 * a)" is one expression but "a+b" is three.
+	
+	//GO though tokens find "syntax_nodes"	
+	for !done {
+		t_next, done = next_token(&state);
+		
+		original_token := t_next;
+		
+		#partial switch t in t_next.type {
+			
+			case token.Identifier: {
+				
+				t_next, done = next_token(&state);
+				if done {
+					exp := new(Expression);
+					exp^ = Variable{original_token.origin.source};
+					
+					append(&syntax_nodes, Syntax_node{exp, original_token.origin});
+					continue;
+				}
+				#partial switch v in t_next.type {
+					case token.Paren_begin: {
+						//This will be a function call
+						
+						parameters_start_token := state.cur_tok;
+						parameters_end_token : int = -1;
+						
+						paren_cnt := 1;
+						for (paren_cnt != 0) && !done {
+							_, found_begin := t_next.type.(token.Paren_begin);
+							if found_begin {
+								paren_cnt += 1;
+							}
+							_, found_end := t_next.type.(token.Paren_end);
+							if found_end {
+								paren_cnt -= 1;
+							}
+							t_next, done = next_token(&state);
+							parameters_end_token = state.cur_tok;
+						}
+						
+						parameter_tokens := state.tokens[parameters_start_token:parameters_end_token-1];
+						params, err := parse_parameters(parameter_tokens);
+						
+						if err != {} {
+							return nil, err;
+						}
+						
+						exp := new(Expression);
+						exp^ = Call{
+							original_token.origin.source,
+							params, 
+						};
+						
+						append(&syntax_nodes, Syntax_node{exp, t_next.origin});
+					}
+					case token.Addition_operator: {
+						append(&syntax_nodes, Syntax_node{Binary_operator_kind.add, t_next.origin});
+					}
+					case token.Multiply_operator: {
+						append(&syntax_nodes, Syntax_node{Binary_operator_kind.multiply, t_next.origin});
+					}
+					case: {
+						fmt.panicf("TODO %v", t_next);
+					}
+				}
+			}
+			case token.Paren_begin: {
+				
+				subexpression_start_token := state.cur_tok;
+				subexpression_end_token : int = -1;
+				
+				paren_cnt := 1;
+				for (paren_cnt != 0) && !done {
+					_, found_begin := t_next.type.(token.Paren_begin);
+					if found_begin {
+						paren_cnt += 1;
+					}
+					_, found_end := t_next.type.(token.Paren_end);
+					if found_end {
+						paren_cnt -= 1;
+					}
+					t_next, done = next_token(&state);
+					subexpression_end_token = state.cur_tok;
+				}
+				
+				subexpression_tokens := state.tokens[subexpression_start_token:subexpression_end_token-1];
+				exp, err := parse_expression(subexpression_tokens);
+				
+				if err != {} {
+					return nil, err;
+				}
+				
+				append(&syntax_nodes, Syntax_node{exp, t_next.origin});
+			}
+			case token.Integer_literal: {
+				
+				exp := new(Expression);
+				exp^ = Int_literal{
+					t.value, 
+				};
+				
+				append(&syntax_nodes, Syntax_node{exp, t_next.origin});
+			}
+			case token.Addition_operator: {
+				append(&syntax_nodes, Syntax_node{Binary_operator_kind.add, t_next.origin});
+			}
+			case token.Multiply_operator: {
+				append(&syntax_nodes, Syntax_node{Binary_operator_kind.multiply, t_next.origin});
+			}
+			case: {
+				return nil, Parse_error{
+					"Failed to parse expression",
+					t_next.origin, 
+				};
+			}
+		}
+	}
+	
+	cur_node : int;
+	get_next_node :: proc (syntax_nodes : [dynamic]Syntax_node, cur_node : ^int, last_node : ^Syntax_node) -> (res : Syntax_node, done : bool) {
+		
+		done = false;
+		
+		if cur_node^ >= len(syntax_nodes) {
+			return;
+		}
+		if cur_node^ < len(syntax_nodes)-1 {
+			last_node^ = syntax_nodes[cur_node^ - 1];
+		}
+		
+		res = syntax_nodes[cur_node^];
+		cur_node^ += 1;
+		
+		return;
+	}
+	
+	if len(syntax_nodes) == 0 {
+		fmt.panicf("did not find any syntax nodes, token was: %#v", tokens);
+	}
+	
+	res, err := parse_syntex_nodes_to_ast(syntax_nodes[:], nil);
+	
+	if err != {} {
+		return nil, err;
+	}
+	
+	return res, {};
+}
+
+//This implementation is not the best, might rework.
+@(private="file")
+parse_syntex_nodes_to_ast :: proc (syntax_nodes : []Syntax_node, left_side : ^Expression) -> (^Expression, Parse_error) {
+	assert(len(syntax_nodes) != 0, "syntax_nodes is 0");
+	
+	get_next_node :: proc (syntax_nodes : []Syntax_node, cur_node : ^int, last_node : ^Syntax_node) -> (res : Syntax_node, done : bool) {
+		
+		done = false;
+		
+		if cur_node^ >= len(syntax_nodes) {
+			done = true;
+			return;
+		}
+		if cur_node^ < len(syntax_nodes)-1 {
+			last_node^ = syntax_nodes[cur_node^ - 1];
+		}
+		
+		res = syntax_nodes[cur_node^];
+		cur_node^ += 1;
+		
+		return;
+	}
+	
+	cur_node : int;
+	res : ^Expression = left_side;
+	last_node : Syntax_node;
+	
+	node, node_done := get_next_node(syntax_nodes, &cur_node, &last_node);
+	//node_done : bool;
+	for !node_done {
+		
+		defer node, node_done = get_next_node(syntax_nodes, &cur_node, &last_node);
+		//precedence := precedence(node);
+		
+		switch v in node.value {
+			case ^Expression: {
+				
+				//We dont know what this means yet?
+				switch l in last_node.value {
+					case ^Expression, Binary_operator_kind: 
+						return nil, Parse_error{
+							"Got 2 expression in a row, this is not valid, it has no meaning.",
+							node.origin, 
+						};
+						
+					case Unary_operator_kind: {
+						exp := new(Expression);
+						exp^ = Unary_operator{
+							l,
+							v,
+						};
+						
+						res = exp; //This is like a return
+					}
+					case: {
+						if node_done {
+							assert(len(syntax_nodes) == 1, "something is wrong length is not 1, but we only found 1 expression");
+						} else {
+							panic("something is wrong");
+						}
+					}
+				}
+			}
+			case Binary_operator_kind: {
+				
+				switch l in last_node.value {
+					case ^Expression: {
+						
+						//Peek next node
+						next_node : Syntax_node;
+						if cur_node < len(syntax_nodes) {
+							next_node = syntax_nodes[cur_node];
+						}
+
+						if next_exp, ok := next_node.value.(^Expression); ok {
+							
+							exp := new(Expression);
+							exp^ = Binary_operator{
+								v,
+								res,
+								next_exp, //This assumes our presedence is higher
+							};
+							
+							assert(len(syntax_nodes[cur_node:]) != 0, "syntax_nodes[cur_node:] is 0");
+							new_res, err := parse_syntex_nodes_to_ast(syntax_nodes[cur_node:], res);
+							
+							if err != {} {
+								return nil, err;
+							}
+							
+							//We want to return the lowest presedence (highest in the tree).
+							if new_res == res {
+								//Our precedence was lower
+								//keep it as it and return outself
+								exp^ = Binary_operator{
+									v,
+									res,
+									new_res, //This means we place the other node below us (presedence is lower when high in the tree)
+								};
+								
+								return exp, {};
+							}
+							else {
+								//Our presedence was higher
+								return new_res, {};
+							}
+							
+							unreachable();
+						}
+						else {
+							return nil, Parse_error{
+								fmt.tprintf("Expected expression after %v", node.origin),
+								next_node.origin,
+							};
+						}
+					}
+					case Unary_operator_kind : {
+						return nil, Parse_error{
+							"Found a binary operator followed by a binary operator, this has no meaning",
+							node.origin,
+						};
+					}
+					case Binary_operator_kind: {
+						return nil, Parse_error{
+							"Found a unary operator followed by a binary operator, this has no meaning",
+							node.origin,
+						};
+					}
+					case: {
+						return nil, Parse_error{
+							"Illigal",
+							node.origin,
+						};
+					}
+				}
+			}
+			case Unary_operator_kind: {
+				switch l in last_node.value {
+					case ^Expression, Unary_operator_kind: {
+						//this is not ok 
+						return nil, Parse_error{
+							"Left side of unary operator is illigal",
+							node.origin,
+						};
+					}
+					case Binary_operator_kind: {
+						//This is ok
+					}
+				}				
+			}
+		}
+		
+		last_node = node;
+	}
+	
+	assert(res != nil, "internal error parse_expression returned nil without erroring");
+	
+	return res, {};
+}
+
+//Parse stuff like '(3, print(a), y + 4)' without the '(' and ')'
+//Can handle 0 tokens, so passing 0 tokens is valid
+@(private="file")
+parse_parameters :: proc (_tokens : []token.Token) -> (params : []^Expression, err : Parse_error) {
+	
+	using state : State_token;
+	state.tokens = _tokens;
+	
+	_params : [dynamic]^Expression
+	
+	log.infof("Parse parameters tokens : %#v", _tokens);
+	
+	if len(state.tokens) == 0 {
+		return {}, {};
+	}
+	
+	for !done {
+		t_next, done = next_token(&state);
+		
+		original_token := t_next;
+		if _, ok := t_next.type.(token.Comma); ok {
+			return {}, Parse_error{"Expecting expression berfore ','", t_next.origin}; //Panic below refers to this
+		}
+		
+		expression_start_token := state.cur_tok-1;
+		expression_end_token : int = -1;
+		
+		ok : bool = false;
+		for !ok && !done {
+			_, ok = t_next.type.(token.Comma);
+			expression_end_token = state.cur_tok-1;
+			if !ok {
+				t_next, done = next_token(&state);
+			}
+		}
+		
+		if expression_end_token == -1 {
+			//There is no ',' så let us just parse the entire thing as a expression
+			expression_end_token = len(state.tokens)-1;
+		}
+		
+		expression_tokens := state.tokens[expression_start_token:expression_end_token];
+		if len(expression_tokens) != 0 {
+			expression, err := parse_expression(expression_tokens);
+			
+			if err != {} {
+				return {}, err;
+			}
+			
+			append(&_params, expression);
+		}
+	}
+	
+	return _params[:], {};
+}
+
+
+
+
+
+
+
+
+
+

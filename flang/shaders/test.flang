@@ -34,7 +34,9 @@ fragment_main :: proc () {
 }
 
 my_global_function :: proc(my_first_variable : u32, my_secound_variable : f32) -> u32 {
-	return my_first_variable * 5 + cast(u32)my_secound_variable; 
+	//return my_first_variable * 5 + cast(u32)my_secound_variable;
+	a := my_first_variable * 5 + cast(u32)my_secound_variable
+	return a;
 }
 
 /*
@@ -66,10 +68,11 @@ compute_main :: proc () {
 	my_compute_output[index] = my_compute_input[index] * 2.0;
 }
 
-@compute(32 1 1) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
+@compute(8 8 2) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
 compute_main2 :: proc () {
 	index := gl_GlobalInvocationID.x;
 	my_compute_output[index] = my_compute_input[index] * 2.0;
+	return something_to_return(a * (((2 + b))), b + a * 4, c * my_global_function(a, b), d);
 }
 
 My_struct :: struct {
@@ -86,8 +89,11 @@ with_a_param :: proc (a : f32, b : i32, c : vec3, d : My_struct) {
 	
 }
 
+
+
 /*
 //
+//https://www.youtube.com/watch?v=PUhhRNleDe0&t=1102s
 $rayorigin
 $raydirection
 $intersection

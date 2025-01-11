@@ -18,7 +18,6 @@ test :: proc () {
 	
 }
 
-
 main :: proc () {
 	
 	context.assertion_failure_proc = utils.init_stack_trace();
