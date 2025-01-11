@@ -22,9 +22,9 @@ load_all_in_dir_as_txt :: proc(directory_path : string, extension : string, incl
 	defer os.file_info_slice_delete(files_info);
 
 	full_ex := fmt.tprintf(".%s", extension);
-
+	
 	res = make(map[string]string);
-
+	
 	for fi in files_info {
 		
 		if !strings.has_suffix(fi.name, full_ex) {

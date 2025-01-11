@@ -277,6 +277,14 @@ destroy_signal :: proc (s : Signal, loc := #caller_location) {
 	}
 }
 
+destroy_signals :: proc (signals : []Signal, loc := #caller_location) {
+	
+	for s in signals  {
+		destroy_signal(s);
+	}
+	delete(signals);
+}
+
 xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
 	assert(len(signals) != 0, "No signals given", loc);
 	
@@ -414,110 +422,117 @@ trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
 	xy_plots({signal_a_coeff, signal_b_coeff});
 }
 
-bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_log := true, y_log := true, representation : Magnetude_representation = .amplitude, y_unit : Maybe(string) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_view_range : Maybe([2]f64) = nil, y_view_range : Maybe([2]f64) = nil, loc := #caller_location) -> ^Plot_window {
+bodes :: proc (signals : []Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_log := true, y_log := true, representation : Magnetude_representation = .amplitude,
+				 y_unit : Maybe(string) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_view_range : Maybe([2]f64) = nil,
+				 	 y_view_range : Maybe([2]f64) = nil, freq_resolution : Maybe(f64) = nil, loc := #caller_location) -> ^Plot_window {
 	
-	span_pos : []f64 = abscissa_to_array(signal.abscissa);	//The y-value
-	value_pos : []f64 = ordinate_to_array(signal.ordinate);	//The x-value
-	defer delete(span_pos);
-	defer delete(value_pos);
+	to_plot : [dynamic]Signal;
+	//defer delete(to_plot);
 	
-	freq_text : string;
-	_y_labal : string;
-	_title : string;
-	db_text : string;
-	
-	if l, ok := x_label.?; ok {
-		freq_text = strings.clone(l);
-	}
-	else {
-		if use_hertz {
-			freq_text = strings.clone("Frequency [Hz]");
+	for signal in signals {
+		span_pos : []f64 = abscissa_to_array(signal.abscissa);	//The y-value
+		value_pos : []f64 = ordinate_to_array(signal.ordinate);	//The x-value
+		//defer delete(span_pos);
+		//defer delete(value_pos);
+		
+		freq_text : string;
+		_y_labal : string;
+		_title : string;
+		db_text : string;
+		
+		if l, ok := x_label.?; ok {
+			freq_text = strings.clone(l);
 		}
 		else {
-			freq_text = strings.clone("Frequency [rad/s]");
-		}
-	}
-	defer delete(freq_text);
-	
-	if l, ok := y_label.?; ok {
-		_y_labal = strings.clone(l);
-	}
-	else {
-		if unit, ok := y_unit.?; ok {
-			switch representation {
-				case .accumulative:
-					//No name
-				case .amplitude:
-					_y_labal = fmt.aprintf("Amplitude [%v]", unit);
-				case .power_spectrum:
-					_y_labal = fmt.aprintf("Power [%v^2]", unit);
-				case .power_speactral_density:
-					_y_labal = fmt.aprintf("Power Spectral Density [%v^2]/Hz", unit);
+			if use_hertz {
+				freq_text = strings.clone("Frequency [Hz]");
 			}
+			else {
+				freq_text = strings.clone("Frequency [rad/s]");
+			}
+		}
+		//defer delete(freq_text);
+		
+		if l, ok := y_label.?; ok {
+			_y_labal = strings.clone(l);
 		}
 		else {
-			switch representation {
-				case .accumulative:
-					//No name
-				case .amplitude:
-					_y_labal = fmt.aprint("Amplitude");
-				case .power_spectrum:
-					_y_labal = fmt.aprint("Power");
-				case .power_speactral_density:
-					_y_labal = fmt.aprint("Power Spectral Density");
+			if unit, ok := y_unit.?; ok {
+				switch representation {
+					case .accumulative:
+						//No name
+					case .amplitude:
+						_y_labal = fmt.aprintf("Amplitude [%v]", unit);
+					case .power_spectrum:
+						_y_labal = fmt.aprintf("Power [%v^2]", unit);
+					case .power_speactral_density:
+						_y_labal = fmt.aprintf("Power Spectral Density [%v^2]/Hz", unit);
+				}
+			}
+			else {
+				switch representation {
+					case .accumulative:
+						//No name
+					case .amplitude:
+						_y_labal = fmt.aprint("Amplitude");
+					case .power_spectrum:
+						_y_labal = fmt.aprint("Power");
+					case .power_speactral_density:
+						_y_labal = fmt.aprint("Power Spectral Density");
+				}
 			}
 		}
+		//defer delete(_y_labal);
+		
+		if t, ok := title.?; ok {
+			_title = strings.clone(t);
+		}
+		//defer delete(_title);
+		
+		phasors, freq_span := calculate_complex_dft(span_pos, value_pos, use_hertz, range, freq_resolution, loc);
+		//defer delete(phasors);
+		//defer delete(freq_span);
+		
+		magnetude, phase := complex_to_mag_and_phase(phasors);
+		//defer delete(magnetude);
+		//defer delete(phase);
+		
+		N := f64(len(span_pos));
+		switch representation {
+			
+			case .accumulative:
+				//Do nothing
+			
+			case .amplitude:
+				for &m in magnetude {
+					m = 2 * math.abs(m) / N;
+				}
+			
+			case .power_spectrum:
+				for &m in magnetude {
+					m = 2 * (m * m) / (N * N);
+				}
+			
+			case .power_speactral_density:
+				fs : f64 = (cast(f64)len(span_pos) - 1) / (span_pos[len(span_pos)-1] - span_pos[0]);
+				for &m in magnetude {
+					m = (m * m) / (fs * N);
+				}
+		}
+		
+		signal_mag := make_signal(freq_span, magnetude, freq_text, _y_labal, _title, loc);
+		
+		append(&to_plot, signal_mag);
 	}
-	defer delete(_y_labal);
 	
-	if t, ok := title.?; ok {
-		_title = strings.clone(t);
-	}
-	defer delete(_title);
+	return xy_plots(to_plot[:], x_range = x_view_range, y_range = y_view_range);
+}
+
+bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_log := true, y_log := true, representation : Magnetude_representation = .amplitude,
+				y_unit : Maybe(string) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_view_range : Maybe([2]f64) = nil,
+				y_view_range : Maybe([2]f64) = nil, freq_resolution : Maybe(f64) = nil, loc := #caller_location) -> ^Plot_window {
 	
-	phasors, freq_span := calculate_complex_dft(span_pos, value_pos, use_hertz, range, loc);
-	defer delete(phasors);
-	defer delete(freq_span);
-	
-	magnetude, phase := complex_to_mag_and_phase(phasors);
-	defer delete(magnetude);
-	defer delete(phase);
-	
-	N := f64(len(magnetude));
-	switch representation {
-		
-		case .accumulative:
-			//Do nothing
-		
-		case .amplitude:
-			for &m in magnetude {
-				m = 2 * math.abs(m) / N;
-			}
-		
-		case .power_spectrum:
-			for &m in magnetude {
-				m = 2 * (m * m) / (N * N);
-			}
-		
-		case .power_speactral_density:
-			fs : f64 = (cast(f64)len(span_pos) - 1) / (span_pos[len(span_pos)-1] - span_pos[0]);
-			for &m in magnetude {
-				m = (m * m) / (fs * N);
-			}
-	}
-	
-	
-	signal_mag := Signal {
-	 	_title,
-		
-		_y_labal,
-		magnetude, 		//y-coordinate
-		
-		freq_text,
-		freq_span, 		//x-coordinate
-	};
-	
-	return xy_plots({signal_mag}, x_range = x_view_range, y_range = y_view_range);
+	return bodes({signal}, use_hertz, range, x_log, y_log, representation, y_unit, x_label, y_label, title, x_view_range, y_view_range, freq_resolution, loc);
 }
 
 plot_surface :: proc () {

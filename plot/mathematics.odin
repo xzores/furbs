@@ -8,6 +8,9 @@ import "core:unicode/utf8"
 import "core:slice"
 import "core:thread"
 import "core:os"
+import "core:log"
+
+PRINT_DFT_PROCENT :: true;
 
 @(require_results)
 calculate_trig_dft :: proc (times : []f64, values : []f64, use_hertz := true) -> (a_coeff : []f64, b_coeff : []f64, freqs : []f64) {
@@ -55,31 +58,39 @@ calculate_trig_dft :: proc (times : []f64, values : []f64, use_hertz := true) ->
 }
 
 @(require_results)
-calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true, range : Maybe([2]f64) = nil, loc := #caller_location) -> (phasors : []complex128, freqs : []f64) {
+calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true, range : Maybe([2]f64) = nil, freq_resolution : Maybe(f64) = nil, loc := #caller_location) -> (phasors : []complex128, freqs : []f64) {
 	
 	xlow, xhigh := get_extremes(times);
 	sampling_rate : f64 = (cast(f64)len(times) - 1) / (xhigh - xlow);
+	nyquist_freq : f64 = sampling_rate * 0.5; //in samples per Hz
 	
-	frequency_max : f64 = sampling_rate * 0.5; //in samples per Hz
-
-	low : i128 = 0;
-	high : i128 = cast(i128)len(values);
+	frequency_max := nyquist_freq;
+	
+	//If we want a lower resolution
+	if fres, ok := freq_resolution.?; ok {
+		frequency_max = (cast(f64)len(times) - 1) * fres * 0.5;
+	}
+	
+	low : i128 = 0;	//This is the lowest index which should be evaluated.
+	high : i128 = cast(i128)len(values);	//This is the highest index which should be evaluated. 
 	
 	if r, ok := range.?; ok {
-		mult : f64 = sampling_rate;
 		
 		//assert(r[0] <= r[1], "The lower range must be lower then the high range.", loc);
-		//fmt.assertf(r[1] <= frequency_max, "The provided frequency %v is above the maximum achiviable frequency", r[1], loc = loc);
+		//fmt.assertf(r[1] <= nyquist_freq, "The provided frequency %v is above the maximum achiviable frequency", r[1], loc = loc);
 		
 		// Convert the frequency range to index range
 		low = auto_cast (cast(f64)(len(values) - 1) * r[0] / frequency_max);  // Convert lower frequency to index
 		high = auto_cast math.ceil(cast(f64)(len(values) - 1) * r[1] / frequency_max);  // Convert upper frequency to index and round up
+		//low = auto_cast (r[0] * nyquist_freq);  // Convert lower frequency to index
+		//high = auto_cast math.ceil(r[1] * nyquist_freq);  // Convert upper frequency to index and round up
 		
 		// Clamp high to the length of the values to avoid out-of-bound access
 		high = math.min(high, cast(i128)len(values));
 		low = math.max(low, 0);
 	}
 	
+	assert(low < high, "low is not lower then high..", loc);
 	phasors = make([]complex128, high - low);
 	freqs = make([]f64, high - low);	
 	
@@ -101,22 +112,24 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 	tasks := make([dynamic]Task_info);
 	defer delete(tasks);
 	
-	dist := high - low;
+	dist := high - low; //Total distance in frequency samples
 	step_freq : i128 = dist/cast(i128)thread_count + 1;
 	cur_freq : i128 = low;
 	
 	for cur_freq < high {
+		
 		next_freq : i128 = cur_freq + step_freq;
 		next_freq = math.min(next_freq, high);
 		index_offset : i128 = low;
+		
 		append(&tasks, Task_info{
 			times,
 			values,
 			freqs,
 			phasors,
-			cur_freq,
-			next_freq,
-			index_offset,
+			cur_freq, 		//low index 
+			next_freq, 		//high index
+			index_offset,	//index_offset
 			use_hertz,
 			frequency_max,
 		})
@@ -135,6 +148,13 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 					t := times[t_i];
 					phasors[f_i - index_offset] += complex(v,0) * cmplx.exp(complex(0,-2 * math.PI * hz * t));
 				}
+				
+				when PRINT_DFT_PROCENT {
+					if (f_i  - low) %% math.max(1, high/100) == 0 {
+						p : f32 = 100.0 * f32(f_i  - low) / cast(f32)high;
+						log.infof("DFT at %v%%", p);
+					}
+				}
 			}
 		}
 		else {
@@ -145,6 +165,13 @@ calculate_complex_dft :: proc (times : []f64, values : []f64, use_hertz := true,
 				for v, t_i in values {
 					t := times[t_i];
 					phasors[f_i - index_offset] += complex(v,0) * cmplx.exp(- imag(1) * omega * t);
+				}
+				
+				when PRINT_DFT_PROCENT {
+					if (f_i  - low) %% math.max(1, high/100) == 0 {
+						p : f32 = 100.0 * f32(f_i  - low) / cast(f32)high;
+						log.infof("DFT at %v%%", p);
+					}
 				}
 			}
 		}
