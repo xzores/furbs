@@ -62,17 +62,19 @@ $storage my_compute_output : []f32;
 $local my_work_group_local_memeory : []f32;
 
 //may also be written as @compute(32 1 1)
-@compute(32,1,1) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
+@compute(32,1, 2) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
 compute_main :: proc () {
 	index := gl_GlobalInvocationID.x;
 	my_compute_output[index] = my_compute_input[index] * 2.0;
 }
 
-@compute(8 8 2) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
+@compute(4 4 		2) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
 compute_main2 :: proc () {
 	index := gl_GlobalInvocationID.x;
 	my_compute_output[index] = my_compute_input[index] * 2.0;
-	return something_to_return(a * (((2 + b))), b + a * 4, c * my_global_function(a, b), d);
+	//return something_to_return((a + b) + my_global_function(a, b));
+	return kalkun(1 + k * h);
+	//return something_to_return(a * (((2 + b))), b + a * 4, c * my_global_function(a, b), d) * something_to_return() * (something_to_return() + (a) + (((b))));
 }
 
 My_struct :: struct {
