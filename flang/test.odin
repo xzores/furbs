@@ -13,8 +13,7 @@ test :: proc () {
 	
 	parse(s);
 	
-	//finalize(s);
-	
+	emit_glsl_330(s);
 	
 }
 

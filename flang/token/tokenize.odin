@@ -135,6 +135,7 @@ Preprocessor_token :: struct {
 }
 
 Storage_qualifiers :: enum {
+	invalid = 0,
 	attribute,	//Input of the fragment shader
 	varying,	//The output of the vertex shader and input of the fragment shader.
 	frag_out,	//The output of the fragment shader.
@@ -478,8 +479,8 @@ tokenize :: proc (_source_code : string, _filename : string) -> (toks : [dynamic
 					}
 					
 					qualifier_type, ok := reflect.enum_from_name(Storage_qualifiers, qualifier_name);
-					if !ok {
-						fmt.panicf("Could not evaluate to the \"%v\" to any of the following %#v", qualifier_name, reflect.enum_field_names(Storage_qualifiers));
+					if !ok || qualifier_type == nil {
+						fmt.panicf("Could not evaluate to the \"%v\" to any of the following %#v", qualifier_name, reflect.enum_field_names(Storage_qualifiers)[1:]);
 					}
 					
 					emit_token(&t, false, Qualifier{qualifier_type});

@@ -8,6 +8,7 @@ import "core:reflect"
 import "core:unicode"
 import "core:os"
 import "core:log"
+import "core:slice"
 import "core:path/slashpath"
 
 import "../token"
@@ -19,42 +20,58 @@ Semicolon :: token.Semicolon;
 Identifier :: token.Identifier;
 Location :: token.Location;
 
-Variable_info :: struct {
+Parameter_info :: struct {
 	name : string,
 	type : string,
+	type_type : Type_type,
+	default_value : string, //if "" there is no default value.
+	default_value_type : Type_type,
 }
 
 Struct_member_info :: struct {
 	name : string,
 	type : string,
+	type_type : Type_type,
+	location : Location,
 }
 
 Struct_info :: struct {
 	name : string,
-	
 	members : []Struct_member_info,
 	location : token.Location,
 }
 
 Global_info :: struct {
 	name : string,
+	
 	type : string,
+	type_type : Type_type,
+	
 	qualifier : Storage_qualifiers,
 	
 	is_unsized_array : bool,
 	sized_array_length : int,
+	
 	location : token.Location,
+}
+
+Function_body_info :: struct {
+	//??
+	block : Block,
 }
 
 Function_info :: struct {
 	name : string,
 	annotation : Annotation_type,
 	
-	inputs : []Variable_info,
+	inputs : []Parameter_info,
 	output : string,
+	output_type : Type_type,
 	
 	body_start_token : int,
 	body_end_token : int,
+	
+	body : Function_body_info,
 	
 	compute_dim : [3]int,
 	location : token.Location,
@@ -142,60 +159,36 @@ Sampler_kind :: enum {
 Type_type :: union {
 	Primitive_kind,
 	Sampler_kind,
-	Struct,
+	^Struct_info,
 }
 
-Struct_member :: struct {
-	name : string,
-	type : Type_type,
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Parse_error :: struct {
+	message : string,
+	token : token.Location,
 }
 
-//////////// Parsed version of info ////////////
-Struct_data :: struct { //without the name, name is stored in map
-	members : [dynamic]Struct_member,
-	location : token.Location,
+State_infos :: struct {
+	globals : [dynamic]^Global_info,
+	functions : [dynamic]^Function_info,
+	structs : [dynamic]^Struct_info,
 }
 
-Global_data :: struct {
-	type : Type_type,
-	qualifier : Storage_qualifiers,
-	is_unsized_array : bool,
-	sized_array_length : int,
-	location : token.Location,
+@(private="file")
+State_token :: struct {
+	errors : [dynamic]Parse_error,
+	tokens : []Token,
+	done : bool,
+	cur_tok : int,
+	t_next : Token,
 }
 
-Parameter_data :: struct {
-	name : string,
-	type : Type_type,
-	//TODO default value
+@(private="file")
+State :: struct {
+	using _ : State_infos,
+	using _ : State_token,
 }
-
-Function_body_data :: struct {
-	//??
-	block : Block,
-}
-
-Function_parameter :: struct {
-	name : string,
-	type : Type_type,
-	default_value : Maybe(any),
-}
-
-Function_data :: struct {
-	annotation : Annotation_type,
-	
-	inputs : []Parameter_data,
-	output : Type_type,
-	
-	function_body : Function_body_data,
-	
-	compute_dim : [3]int,
-	location : token.Location,
-}
-
-Struct :: ^Struct_data;
-Function :: ^Function_data;
-Global :: ^Global_data;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -205,28 +198,20 @@ tprint_parse_error :: proc (err : Parse_error) -> string {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Perser_result :: struct {
-	
-}
-
-Parse_error :: struct {
-	message : string,
-	token : token.Location,
-}
-
 @require_results
-parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
+parse :: proc (_tokens : [][dynamic]Token) -> (State_infos, []Parse_error) {
 	
 	//////////////////// PARSE GLOBALS, FUNCTIONS DECLARATION AND STRUCTS ////////////////////
 	
-	states : [dynamic]State;
+	file_states : [dynamic]State;
 	defer {
-		for s in states {
+		for s in file_states {
 			destroy_state(s);
 		}
-		delete(states);
+		delete(file_states);
 	}
 	
+	//First parse, this will turn tokens into variables and expressions and such for globals, functions and structs.
 	for __tokens in _tokens {
 		using state : State;
 		state.tokens = __tokens[:];
@@ -308,14 +293,16 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 						continue;
 					}
 					
-					append(&globals, Global_info{
-						global_name,
-						type_name,
-						v.type,
-						is_unsized_array,
-						sized_array_length,
-						location,
-					})
+					assert(v.type != nil);
+					append(&globals, new_clone(Global_info{
+						global_name,		//name
+						type_name,			//type
+						nil,				//type_type
+						v.type,				//qualifier
+						is_unsized_array,	//is_unsized_array
+						sized_array_length,	//sized_array_length
+						location,			//location
+					}));
 				}
 				case token.Identifier: {
 					
@@ -325,10 +312,10 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 					switch &r in res {
 						
 						case Function_info: {
-							append(&functions, r);
+							append(&functions, new_clone(r));
 						}
 						case Struct_info: {
-							append(&structs, r);
+							append(&structs, new_clone(r));
 						}
 					}
 				}
@@ -405,6 +392,7 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 					res, failed := parse_struct_or_proc(&state);
 					
 					if failed {
+						emit_error1(&state, "Failed to parse struct or procedure", t);
 						continue;
 					}
 					
@@ -416,7 +404,7 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 							r.annotation = v.type;
 							
 							assert(r.location != {}, "location is nil");
-							append(&functions, r);
+							append(&functions, new_clone(r));
 							
 						}
 						case Struct_info: {
@@ -441,14 +429,15 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 		//log.logf(.Info, "Found functions : %#v\n", functions);
 		//log.logf(.Info, "Found structs : %#v\n", structs);
 		
-		append(&states, state);
+		append(&file_states, state);
 	}
 	
-	errs := make([dynamic]Parse_error);
+	//////////////////////////////////////// RESOLVE TYPES ////////////////////////////////////////
 	
-	existing_names : map[string]token.Location; //for all structs, globlas and functions.	
-	
-	state2 : State2;
+	//This is the secound pass, where we resolve all types for globals, functions and structs.
+	errs : [dynamic]Parse_error;	
+	existing_names : map[string]token.Location; //for all structs, globlas and functions.
+	state2 : State_infos;
 	{
 		using state2;
 		//////////////////// MERGE THE SOURCES, resolve struct types ////////////////////		
@@ -456,22 +445,20 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 		////// FIND ALL STRUCT NAMES //////	
 		existing_structs : map[string]token.Location;
 		
-		buildin_names := get_buildin_names();
-		
 		{//Check for name collision
 			
-			for state in states {
+			for state in file_states {
 				for s in state.structs {
 					
 					if s.name in existing_structs || s.name in existing_names {
 						other := existing_structs[s.name];
 						emit_error2(&errs, s.location, "Names collide at %v(%v) and ", other.file, other.line);
-						//return errs[:];
+						continue;
 					}
-					else if s.name in buildin_names  {
+					else if is_name_buildin(s.name) {
 						other := existing_structs[s.name];
 						emit_error2(&errs, s.location, "Name collides with buildin type");
-						//return errs[:];
+						continue;
 					}
 					else {
 						existing_structs[s.name] = s.location;
@@ -482,9 +469,13 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 		}
 		
 		{/////////// FIND STRUCT DEPENDENCIES AND PARSE STRUCTS ///////////
-			unparsed_structs : map[string]Struct_info;
+			unparsed_structs : map[string]^Struct_info;
+			defer delete(unparsed_structs);
 			
-			for state in states {
+			parsed_structs : map[string]^Struct_info; //This is here for faster lookups
+			defer delete(parsed_structs);
+			
+			for state in file_states {
 				for s in state.structs {
 					unparsed_structs[s.name] = s;
 				}
@@ -499,12 +490,9 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 				
 				for key, unparsed in unparsed_structs {
 					
-					new_struct : Struct = new(Struct_data);
-					new_struct.location = unparsed.location;
-					
 					all_types_resolved : bool = true;
 					
-					for member in unparsed.members {
+					for &member in unparsed.members {
 						
 						resolved_type : Type_type;
 						
@@ -531,7 +519,7 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 							else {
 								//Could not resolve type
 								emit_error2(&errs, unparsed.location, fmt.tprintf("The member %v has an unknown type %v.", member.name, member.type));
-								return errs[:];
+								return {}, errs[:];
 							}
 						}
 						
@@ -540,15 +528,13 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 							break;
 						}
 						
-						append(&new_struct.members, Struct_member {
-							name = member.name,
-							type = resolved_type,
-						});
+						member.type_type = resolved_type; //Place the resolved type on the type.
 					}
 					
 					if all_types_resolved {
 						delete_key(&unparsed_structs, key);
-						parsed_structs[unparsed.name] = new_struct;
+						append(&state2.structs, unparsed);
+						parsed_structs[unparsed.name] = unparsed;
 					}
 				}
 			}
@@ -557,132 +543,122 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 				for name, unparsed in unparsed_structs {
 					emit_error2(&errs, unparsed.location, "Found structs with circular dependencies!");
 				}
-				return errs[:];
+				return {}, errs[:];
 			}
 		}
 		
-		/////////// GLOBALS ///////////
-		//Check if names collides with any struct names and if they collide with any other global name in the same file.
-		for state in states {
-			local_existing_global_names : map[string]token.Location; //in same file
-			defer delete(local_existing_global_names);
-			
-			for g in state.globals {
-				if g.name in existing_names {
-					
-					emit_error2(&errs, g.location, "Global name '%s' collides with struct name", g.name);
-					return errs[:];
-				}
-				if g.name in local_existing_global_names {
-					
-					emit_error2(&errs, g.location, "Global name '%s' collides with other global in same file, this is not allowed. Names may only collide if they are not in the same file.", g.name);
-					return errs[:];
-				}
+		{/////////// GLOBALS ///////////
+			//Check if names collides with any struct names and if they collide with any other global name in the same file.
+			for state in file_states {
+				local_existing_global_names : map[string]token.Location; //in same file
+				defer delete(local_existing_global_names);
 				
-				local_existing_global_names[g.name] = g.location;
-			}
-		}
-		
-		//Then merge the globals, their name may collide, but should be same type if they do.		
-		for state in states {
-			for g in state.globals {
-				
-				if g.name in existing_names {
-					other := parsed_globals[g.name];
-					if g.is_unsized_array != other.is_unsized_array || g.qualifier != other.qualifier || g.sized_array_length != g.sized_array_length {
-						emit_error2(&errs, g.location, "Global name '%s' collides with other global but does not share the same type", g.name);
-						return errs[:];
-					}
-				}
-				
-				existing_names[g.name] = g.location;
-				
-				new_global := new(Global_data);
-				
-				type := resolve_type_from_type_name(state2, g.type);
-				
-				if type == nil {
-					emit_error2(&errs, g.location, "Type '%v' is not valid", g.type);
-				}
-				
-				new_global^ = Global_data {
-					type = type,
-					qualifier = g.qualifier,
-					is_unsized_array = g.is_unsized_array,
-					sized_array_length = g.sized_array_length,
-					location = g.location,
-				}
-				
-				parsed_globals[g.name] = new_global;
-			}
-		}
-		
-		//Then merge functions, they may not collide.
-		for state in states {
-			for f in state.functions {
-				
-				#partial switch f.annotation {
-					case .custom: {
-						emit_error2(&errs, f.location, "Custom annotations not supported. The annotation must be one of the following %#v\n", type_info_of(token.Annotation));
-						continue;
-					}
-					case .none: {
+				for g in state.globals {
+					if g.name in existing_names {
 						
+						emit_error2(&errs, g.location, "Global name '%s' collides with struct name", g.name);
+						return {}, errs[:];
 					}
-					case: {
-						if len(f.inputs) != 0 {
-							emit_error2(&errs, f.location, "The method '%v' with annotation '%v' may not have input parameters", f.name, f.annotation);
+					if g.name in local_existing_global_names {
+						
+						emit_error2(&errs, g.location, "Global name '%s' collides with other global in same file, this is not allowed. Names may only collide if they are not in the same file.", g.name);
+						return {}, errs[:];
+					}
+					
+					local_existing_global_names[g.name] = g.location;
+				}
+			}
+			
+			parsed_globals : map[string]^Global_info;
+			
+			//Then merge the globals, their name may collide, but should be same type if they do.		
+			for state in file_states {
+				for g in state.globals {
+					
+					if g.name in existing_names {
+						assert(g.name in parsed_globals);
+						other := parsed_globals[g.name];
+						if g.is_unsized_array != other.is_unsized_array || g.qualifier != other.qualifier || g.sized_array_length != g.sized_array_length {
+							emit_error2(&errs, g.location, "Global name '%s' collides with other global but does not share the same type", g.name);
 							continue;
 						}
-						else if f.output != "" {
-							emit_error2(&errs, f.location, "The method '%v' with annotation '%v' may not have a return value", f.name, f.annotation);
+					}
+					
+					existing_names[g.name] = g.location;
+					
+					type := resolve_type_from_type_name(state2, g.type);
+					
+					if type == nil {
+						emit_error2(&errs, g.location, "Type '%v' is not valid", g.type);
+					}
+					
+					g.type_type = type;
+					
+					assert(g.qualifier != nil);
+					parsed_globals[g.name] = g;
+					append(&state2.globals, g);
+				}
+			}
+		}
+		
+		{ /////////// FUNCTION HEADERS ///////////
+			
+			//Then merge functions, they may not collide.
+			for state in file_states {
+				for f in state.functions {
+					
+					//Check some stuff about the function.
+					#partial switch f.annotation {
+						case .custom: {
+							emit_error2(&errs, f.location, "Custom annotations not supported. The annotation must be one of the following %#v\n", type_info_of(token.Annotation));
 							continue;
 						}
-						else if f.name in parsed_functions {
-							emit_error2(&errs, f.location, "The method '%v' with annotation '%v' may not have a return value", f.name, f.annotation);
-							continue;
+						case .none: {
+							
+						}
+						case: {
+							if len(f.inputs) != 0 {
+								emit_error2(&errs, f.location, "The method '%v' with annotation '%v' may not have input parameters", f.name, f.annotation);
+								continue;
+							}
+							else if f.output != "" {
+								emit_error2(&errs, f.location, "The method '%v' with annotation '%v' may not have a return value", f.name, f.annotation);
+								continue;
+							}
+							else if f.name in existing_names {
+								emit_error2(&errs, f.location, "The procedure '%v' collides with other procedure.", f.name, f.annotation);
+								continue;
+							}
 						}
 					}
-				}
-				
-				inputs := make([]Parameter_data, len(f.inputs));
-				
-				for input, i in f.inputs {
 					
-					inp : Parameter_data = {
-						input.name,
-						resolve_type_from_type_name(state2, input.type),
+					for &input, i in f.inputs {
+											
+						input.type_type = resolve_type_from_type_name(state2, input.type);
+						input.default_value_type = resolve_type_from_type_name(state2, input.default_value);
+						
+						log.warnf("input.type_type : %v", input.type_type);
+						
+						if input.type_type == nil {
+							emit_error2(&errs, f.location, "The parameter '%v' has an unknown type '%v'", input.name, f.name, input.type);
+						}
 					}
 					
-					if inp.type == nil {
-						emit_error2(&errs, f.location, "The parameter '%v' has an unknown type '%v'", input.name, f.name, input.type);
+					output : Type_type;
+					
+					if f.output != "" {	
+						output = resolve_type_from_type_name(state2, f.output);
+						
+						if output == nil {
+							emit_error2(&errs, f.location, "The return type '%v' is unknown", f.output);
+						}
 					}
 					
-					inputs[i] = inp;
-				}
-				
-				output : Type_type;
-				
-				if f.output != "" {	
-					output = resolve_type_from_type_name(state2, f.output);
+					f.output_type = output;
 					
-					if output == nil {
-						emit_error2(&errs, f.location, "The return type '%v' is unknown", f.output);
-					}
+					existing_names[f.name] = f.location;
+					append(&state2.functions, f);
 				}
-				
-				func := new(Function_data); 
-				func^ = Function_data {
-					f.annotation,
-					inputs,
-					output,
-					{}, //Will be found later.
-					f.compute_dim,
-					f.location,
-				}
-				
-				parsed_functions[f.name] = func;
-				existing_names[f.name] = f.location;
 			}
 		}
 	}
@@ -690,24 +666,22 @@ parse :: proc (_tokens : [][dynamic]Token) -> ([]Parse_error) {
 	{ //Parse function body
 		using state2;
 		
-		for state in states {
-			for f in state.functions {
+		for state in file_states {
+			for &f in state.functions {
 				
 				assert(f.name in existing_names);
-				assert(f.name in parsed_functions);
 				
 				body := parse_block(state.tokens[f.body_start_token:f.body_end_token], &errs);
-				
+				f.body = body;
 			}
 		}
 	}
 	
-	
 	if len(errs) == 0 {
-		fmt.printf("Parsed : %#v\n", state2);
+		//fmt.printf("Parsed : %#v\n", state2);
 	}
 	
-	return errs[:];
+	return state2, errs[:];
 }
 
 destroy_parse_errors :: proc (errs : []Parse_error) {
@@ -718,77 +692,47 @@ destroy_parse_errors :: proc (errs : []Parse_error) {
 	delete(errs);
 }
 
-State_infos :: struct {
-	globals : [dynamic]Global_info,
-	functions : [dynamic]Function_info,
-	structs : [dynamic]Struct_info,
-}
-
-State_token :: struct {
-	errors : [dynamic]Parse_error,
-	tokens : []Token,
-	done : bool,
-	cur_tok : int,
-	t_next : Token,
-}
-
-@(private="file")
-State :: struct {
-	using _ : State_infos,
-	using _ : State_token,
-}
-
-@(private="file")
-State2 :: struct {
-	parsed_structs : map[string]Struct,
-	parsed_globals  :  map[string]Global,
-	parsed_functions :  map[string]Function,
-}
-
 @(private="file")
 destroy_state :: proc (using s : State, loc := #caller_location) {
-	delete(globals, loc = loc);
-	
-	for f in functions {
-		delete(f.inputs, loc = loc);
-	}
-	
+	delete(globals, loc = loc);	
 	delete(functions, loc = loc);
 	delete(structs, loc = loc);
 }
 
 @(private="file")
-get_buildin_names :: proc () -> (types : map[string]struct{}) {
+is_name_buildin :: proc (name : string) -> (bool) {
 	
-	for t in reflect.enum_fields_zipped(Primitive_kind) {
-		types[t.name[1:]] = {};
+	if _, ok := reflect.enum_from_name(Primitive_kind, fmt.tprintf("_%v", name)); ok {
+		return true;
 	}
 	
-	for t in reflect.enum_fields_zipped(Sampler_kind) {
-		types[t.name[1:]] = {};
+	if _, ok := reflect.enum_from_name(Sampler_kind, fmt.tprintf("_%v", name)); ok {
+		return true;
 	}
 	
-	return;
+	return false;
 }
 
 @(private="file")
-resolve_type_from_type_name :: proc (state : State2, identifier : string) -> Type_type {
+resolve_type_from_type_name :: proc (state : State_infos, identifier : string) -> Type_type {
 	
 	for t in reflect.enum_fields_zipped(Primitive_kind) {
 		if t.name[1:] == identifier {
-			return cast(Primitive_kind)t.value;
+			p := cast(Primitive_kind)t.value;
+			return Type_type(p);
 		}
 	}
 	
 	for t in reflect.enum_fields_zipped(Sampler_kind) {
 		if t.name[1:] == identifier {
-			return cast(Sampler_kind)t.value;
+			p := cast(Sampler_kind)t.value;
+			return Type_type(p);
 		}
 	}
 	
-	for name, s in state.parsed_structs {
-		if name == identifier {
-			return s;
+	for s in state.structs {
+		if s.name == identifier {
+			return Type_type(s);
 		}
 	}
 	
@@ -907,7 +851,7 @@ parse_struct_or_proc :: proc (using state : ^State) -> (res : union {Function_in
 	
 	if is_proc {
 		
-		inputs : [dynamic]Variable_info;
+		inputs : [dynamic]Parameter_info;
 		return_type : string;
 		
 		function_body_start_token_index : int;
@@ -966,7 +910,7 @@ parse_struct_or_proc :: proc (using state : ^State) -> (res : union {Function_in
 					return {}, true;
 				}
 				
-				append(&inputs, Variable_info{input_name, input_type});
+				append(&inputs, Parameter_info{input_name, input_type, nil, "", nil});
 			}
 		}
 		
@@ -1010,12 +954,14 @@ parse_struct_or_proc :: proc (using state : ^State) -> (res : union {Function_in
 		
 		return Function_info{
 			name,
-			nil,
+			nil,	//annotation is set by caller
 			inputs[:],
 			return_type,
+			nil,	//return type_type is resolved by caller
 			function_body_start_token_index,
 			function_body_end_token_index,
-			{},
+			{},		//Body is parsed later by caller.
+			{},		//compute_dim is set by caller
 			origin,
 		}, false;
 	}
@@ -1034,6 +980,7 @@ parse_struct_or_proc :: proc (using state : ^State) -> (res : union {Function_in
 		
 		for !is_done {	
 			t_next, done = next_token(state);
+			member_start_token := t_next;
 			if p, ok := t_next.type.(token.Curly_end); ok {
 				is_done = true;
 			}
@@ -1076,7 +1023,12 @@ parse_struct_or_proc :: proc (using state : ^State) -> (res : union {Function_in
 					return {}, true;
 				}
 				
-				append(&struct_members, Struct_member_info{member_name, member_type});
+				append(&struct_members, Struct_member_info{
+					member_name,
+					member_type,
+					nil,						//Type resolved by caller
+					member_start_token.origin,
+				});
 			}
 		}
 		
@@ -1090,6 +1042,23 @@ parse_struct_or_proc :: proc (using state : ^State) -> (res : union {Function_in
 	
 	unreachable();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1220,17 +1189,15 @@ Block :: struct {
 
 //Can handle 0 tokens, so passing 0 tokens is valid (TODO : not tested)
 @(private="file")
-parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> Function_body_data {
+parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> Function_body_info {
 	
 	using state : State_token;
 	state.tokens = _tokens;
 	
 	block : Block;
 	
-	t_next, done = next_token(&state);
 	for !done {
-		defer t_next, done = next_token(&state);
-		
+		t_next, done = next_token(&state);
 		original_token := t_next;
 		
 		#partial switch t in t_next.type {
@@ -1258,10 +1225,8 @@ parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> F
 					for !ok && !done {
 						_, ok = t_next.type.(token.Semicolon);
 						expression_end_token = state.cur_tok;
-						t_next, done = next_token(&state);
-						
-						if ok {
-							break;
+						if !ok {
+							t_next, done = next_token(&state);
 						}
 					}
 					
@@ -1277,9 +1242,9 @@ parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> F
 							continue;
 						}
 					}
-					
 				}
 				else {
+					//fmt.printf("handling token : %v", original_token);
 				}
 				
 			case:
@@ -1309,7 +1274,7 @@ parse_expression :: proc (_tokens : []token.Token) -> ([]^Expression, Parse_erro
 	using state : State_token;
 	state.tokens = _tokens;
 	
-	log.infof("Parse expression tokens : %#v", _tokens);
+	//log.infof("Parse expression tokens : %#v", _tokens);
 	
 	syntax_nodes : [dynamic]Syntax_node;
 	res : [dynamic]^Expression;
@@ -1386,7 +1351,7 @@ parse_expression :: proc (_tokens : []token.Token) -> ([]^Expression, Parse_erro
 							if found_end {
 								paren_cnt -= 1;
 							}
-							fmt.printf("t_next : %v\n", t_next);
+							
 							parameters_end_token = state.cur_tok;
 						}
 						
@@ -1494,7 +1459,7 @@ parse_expression :: proc (_tokens : []token.Token) -> ([]^Expression, Parse_erro
 	for !done {
 		t_next, done = next_token(&state);
 		
-		fmt.printf("path : %v : %v\n", t_next.type, t_next.origin.source)
+		//fmt.printf("path : %v : %v\n", t_next.type, t_next.origin.source)
 		
 		original_token := t_next;
 		err := parse_default(&state, &syntax_nodes, &res, original_token);
@@ -1644,76 +1609,4 @@ parse_syntex_nodes_to_ast :: proc (syntax_nodes : []Syntax_node, precedence : in
 	
 	unreachable();
 }
-
-
-/*
-THIS has to go, there is many problems ny thinking that paraters are different then expression...
-the case : func1(a, func2(a, b)) shows this as we cannot determine what is part of what function call without knowing "presedence" of , relative to the function call.
-WE might solve this by hading () in parameters, but then what do we do? because now we see an identifer followed by an expression? or like we need to handle functions calls in parameters too?
-No there must be a way to combine parse_parameters and parse_expression, otherwise this is a bad idea.
-//Parse stuff like '(3, print(a), y + 4)' without the '(' and ')'
-//Can handle 0 tokens, so passing 0 tokens is valid
-@(private="file")
-parse_parameters :: proc (_tokens : []token.Token) -> (params : []^Expression, err : Parse_error) {
-	
-	using state : State_token;
-	state.tokens = _tokens;
-	
-	_params : [dynamic]^Expression
-	
-	if len(state.tokens) == 0 {
-		return {}, {};
-	}
-	
-	for !done {
-		t_next, done = next_token(&state);
-		
-		original_token := t_next;
-		if _, ok := t_next.type.(token.Comma); ok {
-			return {}, Parse_error{"Expecting expression berfore ','", t_next.origin}; //Panic below refers to this
-		}
-		
-		expression_start_token := state.cur_tok-1;
-		expression_end_token : int = -1;
-		
-		ok : bool = false;
-		for !ok && !done {
-			_, ok = t_next.type.(token.Comma);
-			if ok {
-				expression_end_token = state.cur_tok-1;
-			}
-			else {
-				t_next, done = next_token(&state);
-			}
-		}
-		
-		if expression_end_token == -1 {
-			//There is no ',' så let us just parse the entire thing as a expression
-			expression_end_token = len(state.tokens)-1;
-		}
-		
-		expression_tokens := state.tokens[expression_start_token:expression_end_token];
-		if len(expression_tokens) != 0 {
-			expression, err := parse_expression(expression_tokens);
-			
-			if err != {} {
-				return {}, err;
-			}
-			
-			append(&_params, expression);
-		}
-	}
-	
-	return _params[:], {};
-}
-*/
-
-
-
-
-
-
-
-
-
 
