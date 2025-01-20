@@ -130,11 +130,11 @@ matrix_add_row :: #force_inline proc (m : ^Matrix($T), row : []T) {
 			set_array_xy(m.data[:], v, m.columns,  m.rows, c, r);
 		}
 	}
-
-	matrix_set_row(m, m.rows - 1, row);
+	
+	matrix_set_row_values(m, m.rows - 1, row);
 }
 
-matrix_get :: #force_inline proc (m : ^Matrix($T), c : int, r : int) -> T {
+matrix_get :: #force_inline proc (m : Matrix($T), c : int, r : int) -> T {
 	return #force_inline get_array(m.data, m.columns, m.rows, c, r)
 }
 
@@ -279,6 +279,25 @@ matrix_transposed_vec_mul :: #force_inline proc(col_vec : Matrix($T), row_vec : 
 
 
 mul :: proc {matrix_mul, matrix_vec_mul, vec_matrix_mul};
+
+
+
+//This will first transpose the matrix a then multiply with the vector.
+matrix_transposed_clone :: #force_inline proc(mat : Matrix($T), loc := #caller_location) -> Matrix(T) where intrinsics.type_is_numeric(T) {
+	
+	mat_t := matrix_make(mat.columns, mat.rows);
+		
+	for c in 0..<mat.columns {
+		for r in 0..<mat.rows {
+			
+			v := matrix_get(mat, c, r);
+			matrix_set(mat_t, r, c, v);
+			
+		}
+	}
+	
+	return mat_t;
+}
 
 
 

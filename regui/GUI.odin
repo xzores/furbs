@@ -105,7 +105,7 @@ get_element_data :: proc (state : ^Scene, handle : Handle, $type_info : typeid, 
 			when type_info == Rect_info {
 				v := active_elements[cast(Element)handle.(Rect)].element;
 				r, ok := v.(Rect_info);
-				assert(ok, "the handle type does not match the internal type", loc);
+				fmt.assertf(ok, "the handle type %v does not match the internal type %v", h, v, loc = loc);
 				return r;
 			}
 		case Button:
@@ -113,7 +113,7 @@ get_element_data :: proc (state : ^Scene, handle : Handle, $type_info : typeid, 
 			when type_info == Rect_info {
 				v := active_elements[cast(Element)handle.(Button)].element;
 				r, ok := v.(Button_info);
-				assert(ok, "the handle type does not match the internal type", loc);
+				fmt.assertf(ok, "the handle type %v does not match the internal type %v", h, v, loc = loc);
 				return r;
 			}
 		case Checkbox:
@@ -121,7 +121,7 @@ get_element_data :: proc (state : ^Scene, handle : Handle, $type_info : typeid, 
 			when type_info == Rect_info {
 				v := active_elements[cast(Element)handle.(Checkbox)].element;
 				r, ok := v.(Checkbox_info);
-				assert(ok, "the handle type does not match the internal type", loc);
+				fmt.assertf(ok, "the handle type %v does not match the internal type %v", h, v, loc = loc);
 				return r;
 			}
 		case Label:
@@ -129,7 +129,7 @@ get_element_data :: proc (state : ^Scene, handle : Handle, $type_info : typeid, 
 			when type_info == Label_info {
 				v := active_elements[cast(Element)handle.(Label)].element;
 				r, ok := v.(Label_info);
-				assert(ok, "the handle type does not match the internal type", loc);
+				fmt.assertf(ok, "the handle type %v does not match the internal type %v", h, v, loc = loc);
 				return r;
 			}
 		case Slider:
@@ -137,7 +137,7 @@ get_element_data :: proc (state : ^Scene, handle : Handle, $type_info : typeid, 
 			when type_info == Slider_info {
 				v := active_elements[cast(Element)handle.(Slider)].element;
 				r, ok := v.(Slider_info);
-				assert(ok, "the handle type does not match the internal type", loc);
+				fmt.assertf(ok, "the handle type %v does not match the internal type %v", h, v, loc = loc);
 				return r;
 			}
 		case Int_slider:
@@ -145,7 +145,7 @@ get_element_data :: proc (state : ^Scene, handle : Handle, $type_info : typeid, 
 			when type_info == Int_slider_info {
 				v := active_elements[cast(Element)handle.(Int_slider)].element;
 				r, ok := v.(Int_slider_info);
-				assert(ok, "the handle type does not match the internal type", loc);
+				fmt.assertf(ok, "the handle type %v does not match the internal type %v", h, v, loc = loc);
 				return r;
 			}
 		case Text_field:
@@ -153,7 +153,7 @@ get_element_data :: proc (state : ^Scene, handle : Handle, $type_info : typeid, 
 			when type_info == Rect_info {
 				v := active_elements[cast(Element)handle.(Text_field)].element;
 				r, ok := v.(Text_field_info);
-				assert(ok, "the handle type does not match the internal type", loc);
+				fmt.assertf(ok, "the handle type %v does not match the internal type %v", h, v, loc = loc);
 				return r;
 			}
 		/*case Int_field:
