@@ -1,0 +1,11 @@
+
+//These are uniforms for both shaders
+$uniform uModel : mat4; //This name may collide with other names in other functions, if their types match.
+
+$sampler my_texture : sampler2D;
+
+my_other_file_function :: proc () -> mat4 {
+	return uModel;
+}
+
+//hello

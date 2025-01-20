@@ -24,7 +24,6 @@
 *.lai
 *.la
 *.a
-*.lib
 
 # Executables
 *.exe
@@ -33,3 +32,4 @@
 
 # Program info
 *.pdb
+/glslang/.vs

@@ -8,6 +8,7 @@ import "core:unicode"
 import "core:unicode/utf8"
 import "core:strconv"
 import "core:strings"
+import "core:log"
 
 @require_results
 read_csv_file_as_signal :: proc (filepath : string, begin_row := 0, end_row := max(int), x_columb := 0, y_columb := 1, resample := false, loc := #caller_location) -> (signal : Signal) {
@@ -17,7 +18,7 @@ read_csv_file_as_signal :: proc (filepath : string, begin_row := 0, end_row := m
 	{
 		t, ok := os.read_entire_file_from_filename(filepath, loc = loc);
 		csv_data = string(t);
-		csv_data, was_alloc := strings.replace_all(csv_data, "\r", "");
+		csv_data, was_alloc := strings.replace_all(csv_data, "\n\r", "\n");
 		if was_alloc {
 			delete(t);
 		}
@@ -50,6 +51,7 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row : int = 0, end_row
 	}
 	state : State = .reading;
 	
+	assert(csv_data != "", "csv_data is empty");
 	for r in csv_data {
 		
 		if cur_row < begin_row {
@@ -64,6 +66,7 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row : int = 0, end_row
 		
 		if state == .found_surfix {
 			fmt.assertf(r == ',' || r == ' ' || r == '\n', "surfix must be at the last charactor, found %v after %v at line %i", r, cur_entry[len(cur_entry)-1], cur_row);
+			panic("found surfix... todo?");
 		}
 		
 		read : bool = true;
@@ -149,7 +152,7 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row : int = 0, end_row
 	
 	assert(len(ordinate) == len(abscissa), "ordinate and abscissa must have same length, internal passing error.");
 	
-	if resample {
+	if resample &&  len(abscissa) >= 2 {
 		
 		sampled_ordinate := make([]f64, len(abscissa) - 1, loc = loc);
 		sampled_abscissa := make([]f64, len(abscissa) - 1, loc = loc);
@@ -160,7 +163,7 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row : int = 0, end_row
 		origi_index : int = 0;
 		
 		for i in 0..<len(sampled_ordinate) {
-			time := cast(f64)i * 1 / sampling_rate;
+			time := xlow + cast(f64)i * 1 / sampling_rate;
 			for abscissa[origi_index] < time {
 				origi_index += 1;
 			}
@@ -187,6 +190,10 @@ read_csv_data_as_signal :: proc (csv_data : string, begin_row : int = 0, end_row
 			"",
 			sampled_abscissa //TODO it might make sense to make it into a span: Span(f64){xlow, xhigh, 1 / sampling_rate},
 		};
+	}
+	
+	if len(abscissa) == 0 {
+		log.warnf("No CSV data was loaded!");
 	}
 	
 	return Signal {
