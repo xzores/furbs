@@ -58,13 +58,13 @@ Attribute_type :: enum {
 	_vec3  = int(Primitive_kind._vec3),
 	_vec4  = int(Primitive_kind._vec4),
 
-	_vec2i = int(Primitive_kind._vec2i),
-	_vec3i = int(Primitive_kind._vec3i),
-	_vec4i = int(Primitive_kind._vec4i),
+	_vec2i = int(Primitive_kind._ivec2),
+	_vec3i = int(Primitive_kind._ivec3),
+	_vec4i = int(Primitive_kind._ivec4),
 
-	_vec2u = int(Primitive_kind._vec2u),
-	_vec3u = int(Primitive_kind._vec3u),
-	_vec4u = int(Primitive_kind._vec4u),
+	_vec2u = int(Primitive_kind._uvec2),
+	_vec3u = int(Primitive_kind._uvec3),
+	_vec4u = int(Primitive_kind._uvec4),
 
 	_mat2  = int(Primitive_kind._mat2),
 	_mat3  = int(Primitive_kind._mat3),
@@ -100,13 +100,13 @@ Frag_out_type :: enum {
 	_vec3	= int(Primitive_kind._vec3),
 	_vec4	= int(Primitive_kind._vec4),
 
-	_ivec2	= int(Primitive_kind._vec2i),
-	_ivec3	= int(Primitive_kind._vec3i),
-	_ivec4	= int(Primitive_kind._vec4i),
+	_ivec2	= int(Primitive_kind._ivec2),
+	_ivec3	= int(Primitive_kind._ivec3),
+	_ivec4	= int(Primitive_kind._ivec4),
 
-	_uvec2	= int(Primitive_kind._vec2u),
-	_uvec3	= int(Primitive_kind._vec3u),
-	_uvec4	= int(Primitive_kind._vec4u),
+	_uvec2	= int(Primitive_kind._uvec2),
+	_uvec3	= int(Primitive_kind._uvec3),
+	_uvec4	= int(Primitive_kind._uvec4),
 }
 
 Uniform :: struct {
@@ -213,6 +213,7 @@ Function :: struct {
 	
 	location : token.Location,
 };
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -336,9 +337,7 @@ attribute_consumption_table := #sparse[Attribute_type]int {
 	//Return types matches
 	//Type check everything
 
-finalize :: proc (parsed : parser.State_infos) -> State {
-	
-	state : State;
+finalize :: proc (parsed : parser.State_infos) -> (state : State, errs : []Error) {
 	
 	{ ////////////// Finalize Struct, Globals and function headers //////////////
 		final_structs : [dynamic]Struct;
@@ -634,10 +633,15 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 				param[:],
 				output,
 				{},
+				{},
 				pf.location,
 			};
 			
 			append(&final_functions, func);
+		}
+		
+		if len(errs) != 0 {
+			return state, errs[:];
 		}
 		
 		//Transfer ownsership to state
@@ -653,34 +657,105 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 		state.storage = storage[:];
 	}
 	
-	{ ////////////// Finalize Function bodies //////////////
+	//fmt.printf("parsed : %#v\n", parsed.functions);
+	
+	{ ////////////// Finalize Function Bodies //////////////
+		
+		errs : [dynamic]Error;
+		
 		//Check function bodies
 		for pf in parsed.functions {
 			
 			for statement in pf.body.block.statements {
-				#partial switch ment in statement {
-					case parser.Return:
-						
-						switch v in Maybe {
-							 
+				#partial switch ment in statement.type {
+					case parser.Return:{
+						if v, ok := ment.value.?; ok {
+							type, refs, err := resolve_type_from_parser_expression(state, v);
+							
+							if e, ok := err.?; ok {
+								emit_error(&errs, statement.location, e);
+								break;
+							}
+							
+							//TODO what here? we now know the return type
+							fmt.printf("return type is : %v\n", type);
 						}
-						type, refs, ok := resolve_type_from_parser_expression(ment.value);
-						
+					}
 					case: {
 						panic("TODO");
 					}
 				}
 			}
 		}
+		
+		if len(errs) != 0 {
+			return state, errs[:];
+		}
 	}
 	
 	/////////////// create information about what calls what and what is used where //////////////
 	
-	{ /////////////// Assign entries /////////////
+	{/////////////// Assign entries /////////////
 		
+		errs : [dynamic]Error;
+		
+		for func in parsed.functions {
+			#partial switch func.annotation {
+				case .none:
+					//Do nothing
+				case .vertex:
+					if state.vertex_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the vertex entry, collides with %v.", state.vertex_func.entry.location);
+					}
+					state.vertex_func = Vertex_entry{
+						structs 	= {}, //TODO
+						functions 	= {}, //TODO
+						
+						uniforms	= {}, //TODO
+						attributes  = {}, //TODO
+						varyings	= {}, //TODO
+						samplers	= {}, //TODO
+						storage	 	= {}, //TODO
+						
+						entry = func,
+					};
+					 
+				case .fragment:
+					if state.fragment_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the fragment entry, collides with %v.", state.fragment_func.entry.location);
+					}
+					state.fragment_func = func;
+				
+				case .compute:
+					if state.compute_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the compute entry, collides with %v.", state.compute_func.entry.location);
+					}
+					state.compute_func = func;
+				
+				case .tesselation_control:
+					if state.tesselation_control_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the tesselation control entry, collides with %v.", state.tesselation_control_func.entry.location);
+					}
+					state.tesselation_control_func = func;
+				
+				case .tesselation_valuation:
+					if state.tesselation_eval_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the tesselation evaluation entry, collides with %v.", state.tesselation_eval_func.entry.location);
+					}
+					state.tesselation_eval_func = func;
+				
+				case:
+					panic("TODO");
+			}
+		}
+		
+		if len(errs) != 0 {
+			return state, errs[:];
+		}
+				
 	}
 	
-	return state;
+	return state, nil;
 }
 
 is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
@@ -697,13 +772,13 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 					
 					switch t {
 						case ._bool, ._i32, ._u32, ._f32, ._vec2, ._vec3, ._vec4,
-							._vec2i, ._vec3i, ._vec4i, ._vec2u, ._vec3u, ._vec4u,
-							._vec2b, ._vec3b, ._vec4b, ._mat2, ._mat3, ._mat4,
+							._ivec2, ._ivec3, ._ivec4, ._uvec2, ._uvec3, ._uvec4,
+							._bvec2, ._bvec3, ._bvec4, ._mat2, ._mat3, ._mat4,
 							._mat2x3, ._mat2x4, ._mat3x2, ._mat3x4, ._mat4x2, ._mat4x3: {
 							// OK
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d, ._mat2d, ._mat3d, ._mat4d,
-							._mat2x3d, ._mat2x4d, ._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4, ._dmat2, ._dmat3, ._dmat4,
+							._dmat2x3, ._dmat2x4, ._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, it's not possible to upload f64 (doubles) into uniforms.";
 						}
 					}
@@ -725,13 +800,13 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 					
 					switch t {
 						case ._bool, ._i32, ._u32, ._f32, ._vec2, ._vec3, ._vec4,
-							._vec2i, ._vec3i, ._vec4i, ._vec2u, ._vec3u, ._vec4u,
-							._vec2b, ._vec3b, ._vec4b, ._mat2, ._mat3, ._mat4,
+							._ivec2, ._ivec3, ._ivec4, ._uvec2, ._uvec3, ._uvec4,
+							._bvec2, ._bvec3, ._bvec4, ._mat2, ._mat3, ._mat4,
 							._mat2x3, ._mat2x4, ._mat3x2, ._mat3x4, ._mat4x2, ._mat4x3: {
 							// OK
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d, ._mat2d, ._mat3d, ._mat4d,
-							._mat2x3d, ._mat2x4d, ._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4, ._dmat2, ._dmat3, ._dmat4,
+							._dmat2x3, ._dmat2x4, ._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, it's not possible to upload f64 (doubles) into attributes.";
 						}
 					}
@@ -755,17 +830,17 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 								return "A varing primitive may not have a size above 64";
 							}
 						}
-						case ._vec2, ._vec2u, ._vec2b, ._vec2i: {
+						case ._vec2, ._uvec2, ._bvec2, ._ivec2: {
 							if type.sized_array_length >= 32 {
 								return "A varing vec2 may not have a size above 32";
 							}	
 						} 
-						case ._vec3, ._vec3u, ._vec3b, ._vec3i: {
+						case ._vec3, ._uvec3, ._bvec3, ._ivec3: {
 							if type.sized_array_length >= 16 {
 								return "A varing vec3 may not have a size above 16";
 							}
 						}
-						case ._vec4, ._vec4u, ._vec4b, ._vec4i, ._mat2: {
+						case ._vec4, ._uvec4, ._bvec4, ._ivec4, ._mat2: {
 							if type.sized_array_length >= 16 {
 								return "A varing vec4 or mat2 may not have a size above 16";
 							}
@@ -775,9 +850,9 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 								return "A varing matrix of 3 or bigger may not have a size above 8";
 							}
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d,
-							._mat2d, ._mat3d, ._mat4d, ._mat2x3d, ._mat2x4d,
-							._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4,
+							._dmat2, ._dmat3, ._dmat4, ._dmat2x3, ._dmat2x4,
+							._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, doubles are not allowed for varying.";
 						}
 					}
@@ -799,13 +874,13 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 					// Also no doubles for typical usage
 					switch t {
 						case ._bool, ._i32, ._u32, ._f32, ._vec2, ._vec3, ._vec4,
-							._vec2i, ._vec3i, ._vec4i, ._vec2u, ._vec3u, ._vec4u,
-							._vec2b, ._vec3b, ._vec4b, ._mat2, ._mat3, ._mat4,
+							._ivec2, ._ivec3, ._ivec4, ._uvec2, ._uvec3, ._uvec4,
+							._bvec2, ._bvec3, ._bvec4, ._mat2, ._mat3, ._mat4,
 							._mat2x3, ._mat2x4, ._mat3x2, ._mat3x4, ._mat4x2, ._mat4x3: {
 							// OK
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d, ._mat2d, ._mat3d, ._mat4d,
-							._mat2x3d, ._mat2x4d, ._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4, ._dmat2, ._dmat3, ._dmat4,
+							._dmat2x3, ._dmat2x4, ._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, doubles are not allowed for fragment outputs.";
 						}
 					}
@@ -820,14 +895,14 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 					// Double checks
 					switch t {
 						case ._bool, ._i32, ._u32, ._f32, ._vec2, ._vec3, ._vec4,
-							._vec2i, ._vec3i, ._vec4i, ._vec2u, ._vec3u, ._vec4u,
-							._vec2b, ._vec3b, ._vec4b, ._mat2, ._mat3, ._mat4,
+							._ivec2, ._ivec3, ._ivec4, ._uvec2, ._uvec3, ._uvec4,
+							._bvec2, ._bvec3, ._bvec4, ._mat2, ._mat3, ._mat4,
 							._mat2x3, ._mat2x4, ._mat3x2, ._mat3x4, ._mat4x2, ._mat4x3: {
 							// OK
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d,
-							._mat2d, ._mat3d, ._mat4d, ._mat2x3d, ._mat2x4d,
-							._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4,
+							._dmat2, ._dmat3, ._dmat4, ._dmat2x3, ._dmat2x4,
+							._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, double-based types are not allowed in local (shared) memory."; //TODO this might be a good idea to make legal
 						}
 					}
@@ -976,18 +1051,18 @@ primitive_kind_size := map[Primitive_kind]int {
 	._vec2   = 8,    // 2 floats (4 bytes each), padded to 8 bytes
 	._vec3   = 12,   // 3 floats, padded to 16 bytes in arrays/structs
 	._vec4   = 16,   // 4 floats, naturally aligned to 16 bytes
-	._vec2i  = 8,    // 2 32-bit integers, aligned to 8 bytes
-	._vec3i  = 12,   // 3 integers, padded to 16 bytes
-	._vec4i  = 16,   // 4 integers, aligned to 16 bytes
-	._vec2u  = 8,    // 2 unsigned integers
-	._vec3u  = 12,   // 3 unsigned integers, padded to 16 bytes
-	._vec4u  = 16,   // 4 unsigned integers
-	._vec2b  = 8,    // 2 booleans (treated as 32-bit integers)
-	._vec3b  = 12,   // 3 booleans, padded to 16 bytes
-	._vec4b  = 16,   // 4 booleans						(1x4bytes = 4)
-	._vec2d  = 16,   // 2 doubles (8 bytes each) 		(2x8bytes = 16)
-	._vec3d  = 24,   // 3 doubles, padded to 32 bytes 	(3x8bytes = 24)
-	._vec4d  = 32,   // 4 doubles, naturally aligned 	(4x8bytes = 32)
+	._ivec2  = 8,    // 2 32-bit integers, aligned to 8 bytes
+	._ivec3  = 12,   // 3 integers, padded to 16 bytes
+	._ivec4  = 16,   // 4 integers, aligned to 16 bytes
+	._uvec2  = 8,    // 2 unsigned integers
+	._uvec3  = 12,   // 3 unsigned integers, padded to 16 bytes
+	._uvec4  = 16,   // 4 unsigned integers
+	._bvec2  = 8,    // 2 booleans (treated as 32-bit integers)
+	._bvec3  = 12,   // 3 booleans, padded to 16 bytes
+	._bvec4  = 16,   // 4 booleans						(1x4bytes = 4)
+	._dvec2  = 16,   // 2 doubles (8 bytes each) 		(2x8bytes = 16)
+	._dvec3  = 24,   // 3 doubles, padded to 32 bytes 	(3x8bytes = 24)
+	._dvec4  = 32,   // 4 doubles, naturally aligned 	(4x8bytes = 32)
 
 	// Matrix Types
 	._mat2      = 32,    // 2x2 floats, 2 columns of vec2 (16 bytes per column)
@@ -1000,15 +1075,15 @@ primitive_kind_size := map[Primitive_kind]int {
 	._mat4x2    = 32,    // 4x2 floats, 4 columns of vec2 (16 bytes per column)
 	._mat4x3    = 48,    // 4x3 floats, 4 columns of vec3 (aligned as vec4, 16 bytes per column)
 
-	._mat2d     = 64,    // 2x2 doubles, 2 columns of dvec2 (32 bytes per column)
-	._mat3d     = 96,    // 3x3 doubles, 3 columns of dvec3 (aligned as dvec4, 32 bytes per column)
-	._mat4d     = 128,   // 4x4 doubles, 4 columns of dvec4 (32 bytes per column)
-	._mat2x3d   = 96,    // 2x3 doubles, 2 columns of dvec3 (aligned as dvec4, 32 bytes per column)
-	._mat2x4d   = 128,   // 2x4 doubles, 2 columns of dvec4 (32 bytes per column)
-	._mat3x2d   = 64,    // 3x2 doubles, 3 columns of dvec2 (32 bytes per column)
-	._mat3x4d   = 128,   // 3x4 doubles, 3 columns of dvec4 (32 bytes per column)
-	._mat4x2d   = 64,    // 4x2 doubles, 4 columns of dvec2 (32 bytes per column)
-	._mat4x3d   = 96,    // 4x3 doubles, 4 columns of dvec3 (aligned as dvec4, 32 bytes per column)
+	._dmat2     = 64,    // 2x2 doubles, 2 columns of dvec2 (32 bytes per column)
+	._dmat3     = 96,    // 3x3 doubles, 3 columns of dvec3 (aligned as dvec4, 32 bytes per column)
+	._dmat4     = 128,   // 4x4 doubles, 4 columns of dvec4 (32 bytes per column)
+	._dmat2x3   = 96,    // 2x3 doubles, 2 columns of dvec3 (aligned as dvec4, 32 bytes per column)
+	._dmat2x4   = 128,   // 2x4 doubles, 2 columns of dvec4 (32 bytes per column)
+	._dmat3x2   = 64,    // 3x2 doubles, 3 columns of dvec2 (32 bytes per column)
+	._dmat3x4   = 128,   // 3x4 doubles, 3 columns of dvec4 (32 bytes per column)
+	._dmat4x2   = 64,    // 4x2 doubles, 4 columns of dvec2 (32 bytes per column)
+	._dmat4x3   = 96,    // 4x3 doubles, 4 columns of dvec3 (aligned as dvec4, 32 bytes per column)
 }
 
 //Return the size of a member in bytes.
@@ -1110,7 +1185,7 @@ resolve_type_from_parser_expression :: proc (state : State, exp : ^parser.Expres
 		case parser.Call: {
 			func := find_function(state, e.called)
 			
-			if  func == nil {
+			if func == nil {
 				return nil, nil, fmt.tprintf("No function called : '%v'", e.called);
 			}
 			
@@ -1123,10 +1198,10 @@ resolve_type_from_parser_expression :: proc (state : State, exp : ^parser.Expres
 			return func.output, referrals, nil;
 		}
 		case parser.Float_literal: {
-			return Primitive_kind._f32, {}, nil; //TODO this can be many values liek f32, f64, i32, u32 or whatever
+			return Primitive_kind._f32, {}, nil; //TODO this can be many values like f32, f64, i32, u32 or whatever
 		}
 		case parser.Int_literal: {
-			return Primitive_kind._i32, {}, nil; //TODO this can be many values liek f32, f64, i32, u32 or whatever
+			return Primitive_kind._i32, {}, nil; //TODO this can be many values like f32, f64, i32, u32 or whatever
 		}
 		case parser.Binary_operator: {
 			lhs, lrefs := resolve_type_from_parser_expression(state, e.left) or_return;
@@ -1148,11 +1223,12 @@ resolve_type_from_parser_expression :: proc (state : State, exp : ^parser.Expres
 		}
 		case:
 			panic("TODO");
-	}	
+	}
 	
 	unreachable();
 }
 
+@(private="file")
 find_function :: proc (state : State, name : string) -> ^Function {
 	
 	for &f in state.functions {
@@ -1162,4 +1238,50 @@ find_function :: proc (state : State, name : string) -> ^Function {
 	}
 	
 	return nil;
+}
+
+@(private="file")
+function_from_function_info :: proc (info : parser.Function_info) -> Function {
+	
+	/*
+	Function_info :: struct {
+		name : string,
+		annotation : Annotation_type,
+		
+		inputs : []Parameter_info,
+		output : string,
+		output_type : Type_type,
+		
+		body_start_token : int,
+		body_end_token : int,
+		
+		body : Function_body_info,
+		
+		compute_dim : [3]int,
+		location : token.Location,
+	}
+	
+	Function :: struct {
+		name  : string,
+		inputs : []Function_param,
+		output : Final_type,
+		
+		body : Function_body,
+		
+		referrals : []Referral,
+		
+		location : token.Location,
+	};*/
+	
+	return Function{
+		info.name,
+		inputs : []Function_param,
+		output : Final_type,
+		
+		body : Function_body,
+		
+		referrals : []Referral,
+		
+		location : token.Location,
+	}; 
 }

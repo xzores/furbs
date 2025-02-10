@@ -188,7 +188,7 @@ lex :: proc (s : ^Shader_context) {
 	}
 }
 
-parse :: proc (s : ^Shader_context) {
+parse_and_check :: proc (s : ^Shader_context) {
 	//Contruct the AST.
 	//There is an AST, it does not error even if invalid, the user may change the AST.
 	
@@ -200,12 +200,38 @@ parse :: proc (s : ^Shader_context) {
 	}
 	
 	res_state, errs := parser.parse(tokens_sources[:]);
-
+	
+	if len(errs) != 0 {
+		msg := strings.builder_make();
+		defer strings.builder_destroy(&msg);
+		strings.write_string(&msg, "Found parser errors:");
+		
+		for e in errs {
+			strings.write_string(&msg, "\tError at ");
+			strings.write_string(&msg, e.token.source);
+			strings.write_string(&msg, " in ");
+			strings.write_string(&msg, e.token.file);
+			strings.write_string(&msg, "(");
+			strings.write_int(&msg, e.token.line);
+			strings.write_string(&msg, ")");
+			strings.write_string(&msg, " : ");
+			strings.write_string(&msg, e.message);
+			strings.write_string(&msg, "\n");
+		}
+		
+		log.errorf(strings.to_string(msg));
+	}
+	
 	//type_resolve and such.
 	//The AST can return errors here and will check compatility with the target.
-	s.final_state = final.finalize(res_state);
-	s.finalized = true;
-	
+	type_errs : []final.Error;
+	s.final_state, type_errs = final.finalize(res_state);
+	if len(type_errs) == 0 {
+		s.finalized = true;
+	}
+	else {
+		panic("error msgs")
+	}
 }
 
 //For embedded and webGL

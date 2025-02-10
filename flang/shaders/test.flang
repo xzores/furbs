@@ -39,6 +39,10 @@ my_global_function :: proc(my_first_variable : u32, my_secound_variable : f32) -
 	return a;
 }
 
+my_global_function2 :: proc(my_first_variable : u32, my_secound_variable : f32) -> u32 {
+	return my_global_function(4, 2);
+}
+
 /*
 $storage my_tesselation_input : []f32;
 
@@ -70,8 +74,8 @@ compute_main :: proc () {
 compute_main2 :: proc () {
 	index := gl_GlobalInvocationID.x;
 	my_compute_output[index] = my_compute_input[index] * 2.0;
-	return something_to_return((a + b) + my_global_function(a, b));
-	return kalkun(1 + k * h);
+	//return something_to_return((a + b) + my_global_function(a, b));
+	//return kalkun(1 + k * h);
 	//return something_to_return(a * (((2 + b))), b + a * 4, c * my_global_function(a, b), d) * something_to_return() * (something_to_return() + (a) + (((b))));
 }
 
