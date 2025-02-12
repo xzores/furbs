@@ -12,7 +12,7 @@ import "core:log"
 
 import "token"
 import "parser"
-import "final"
+import "emit"
 
 File_load :: token.File_load;
 
@@ -35,7 +35,7 @@ Shader_context :: struct {
 	sources : map[string]Shader_file,
 	defines : map[string]token.Token_type,
 	
-	final_state : final.State,
+	final_state : parser.State,
 	finalized : bool, 
 }
 
@@ -224,8 +224,8 @@ parse_and_check :: proc (s : ^Shader_context) {
 	
 	//type_resolve and such.
 	//The AST can return errors here and will check compatility with the target.
-	type_errs : []final.Error;
-	s.final_state, type_errs = final.finalize(res_state);
+	type_errs : []parser.Error;
+	s.final_state, type_errs = parser.finalize(res_state);
 	if len(type_errs) == 0 {
 		s.finalized = true;
 	}
@@ -241,8 +241,23 @@ emit_glsl_300ES :: proc () {
 
 emit_glsl_330 :: proc (con : ^Shader_context) {
 	//Emit the glsl
-	log.warnf("Outputted vertex shader :\n%v", final.emit_glsl(con.final_state, .vertex, 330));
-	log.warnf("Outputted fragment shader :\n%v", final.emit_glsl(con.final_state, .fragment, 330));
+	
+	vert, vert_err := emit.emit_glsl(con.final_state, .vertex, 330);
+	if vert_err != "" {
+		log.errorf("Error emitting vertex shader : %v\n", vert_err);
+	}
+	else {
+		log.infof("Outputted vertex shader :\n%v", vert);
+	}
+	
+	frag, frag_err := emit.emit_glsl(con.final_state, .fragment, 330);
+	if frag_err != "" {
+		log.errorf("Error emitting fragment shader : %v\n", frag_err);
+	}
+	else {
+		log.infof("Outputted fragment shader :\n%v", frag);
+	}
+	
 }
 
 emit_glsl_450 :: proc (con : Shader_context) {

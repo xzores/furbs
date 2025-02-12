@@ -1,4 +1,4 @@
-package flang_finalizer;
+package flang_emit;
 
 import "core:fmt"
 import "core:strings"
@@ -14,6 +14,20 @@ import "core:path/slashpath"
 
 import "../token"
 import "../parser"
+
+Primitive_kind :: parser.Primitive_kind;
+Sampler_kind :: parser.Sampler_kind;
+Uniform :: parser.Uniform;
+State :: parser.State;
+Attribute :: parser.Attribute;
+Function :: parser.Function;
+Expression :: parser.Expression;
+Int_literal :: parser.Int_literal;
+Float_literal :: parser.Float_literal;
+Final_type :: parser.Final_type;
+Return :: parser.Return;
+Struct :: parser.Struct;
+Call :: parser.Call;
 
 Entry_target :: enum {
 	vertex,
@@ -93,7 +107,7 @@ sampler_type_glsl_name : [Sampler_kind]string = {
 	._sampler_buffer_uint = "usamplerBuffer", // GLSL 3.10
 };
 
-emit_glsl :: proc (state : State, target : Entry_target, version : int = 330) -> string {
+emit_glsl :: proc (state : State, target : Entry_target, version : int = 330) -> (code : string, err : string) {
 	using strings;
 	
 	glsl_code := builder_make();
@@ -111,6 +125,7 @@ emit_glsl :: proc (state : State, target : Entry_target, version : int = 330) ->
 	
 	output_uniforms : []^Uniform;
 	output_attributes : []^Attribute;
+	output_functions : []^Function;
 	
 	entry_func : ^Function;
 	
@@ -118,14 +133,17 @@ emit_glsl :: proc (state : State, target : Entry_target, version : int = 330) ->
 		case .vertex: {
 			output_uniforms = state.vertex_func.uniforms;
 			output_attributes = state.vertex_func.attributes;
+			output_functions = state.vertex_func.functions;
 			entry_func = state.vertex_func.entry;
 		}
 		case .fragment: {
 			output_uniforms = state.fragment_func.uniforms;
+			output_functions = state.fragment_func.functions;
 			entry_func = state.fragment_func.entry;
 		}
 		case .compute: {
 			output_uniforms = state.compute_func.uniforms;
+			output_functions = state.fragment_func.functions;
 			entry_func = state.compute_func.entry;
 		}
 		case .tesselation_control: {
@@ -138,7 +156,7 @@ emit_glsl :: proc (state : State, target : Entry_target, version : int = 330) ->
 	
 	if entry_func == nil {
 		log.errorf("The entry %v does not exists", target);
-		return "The entry does not exists";
+		return "", "The entry does not exists";
 	}
 	
 	if target == .vertex { //Write attriburtes
@@ -208,27 +226,44 @@ emit_glsl :: proc (state : State, target : Entry_target, version : int = 330) ->
 				panic("TODO");
 			}
 		}
+		
+		write_string(&glsl_code, "\n");
+	}
+	
+	{ //Write Structs
+		
 	}
 	
 	{ //Write Functions
 		
+		write_string(&glsl_code, "//// Functions ////\n");
+		for func in output_functions {
+			write_glsl_function(&glsl_code, func, func.name);
+			write_string(&glsl_code, "\n");
+		}
+		
+		write_string(&glsl_code, "\n");
 	}
 	
 	{ //Write Entry
-		write_glsl_function(&glsl_code, entry_func);
+	
+		write_string(&glsl_code, "//// Entry ////\n");
+		write_glsl_function(&glsl_code, entry_func, "main");
 	}
 	
-	return strings.clone(to_string(glsl_code));
+	write_string(&glsl_code, "\n");
+	
+	return strings.clone(to_string(glsl_code)), "";
 }
 
 @(private="file")
-write_glsl_function :: proc (glsl_code : ^strings.Builder, func : ^Function) {
+write_glsl_function :: proc (glsl_code : ^strings.Builder, func : ^Function, output_func_name : string) {
 	using strings;
 	
 	write_glsl_final_variable(glsl_code, func.output);
 	
 	write_string(glsl_code, " ");
-	write_string(glsl_code, func.name);
+	write_string(glsl_code, output_func_name);
 	write_string(glsl_code, "(");
 	for input, i in func.inputs {
 		
@@ -240,16 +275,28 @@ write_glsl_function :: proc (glsl_code : ^strings.Builder, func : ^Function) {
 		write_string(glsl_code, " ");
 		write_string(glsl_code, input.name);
 	}
-	write_string(glsl_code, ")");
 	
-	write_string(glsl_code, "{\n");
+	write_string(glsl_code, ")");
+	write_string(glsl_code, " {\n");
 	
 	for statement in func.body.statements {
-	
+		
+		#partial switch ment in statement.type {
+			case Return:{
+				
+				write_string(glsl_code, "\treturn");
+				if exp, ok := ment.value.?; ok {
+					write_string(glsl_code, " ");
+					write_expression(glsl_code, exp);
+				}
+				write_string(glsl_code, ";\n");
+			}
+			case: panic("TODO");
+		}
+		
 	}
 	
 	write_string(glsl_code, "}");
-	
 }
 
 @(private="file")
@@ -272,6 +319,40 @@ write_glsl_final_variable :: proc (glsl_code : ^strings.Builder, type : Final_ty
 	}
 }
 
+@(private="file")
+write_expression :: proc (glsl_code : ^strings.Builder, type : ^Expression) { 
+	using strings;
+	
+	if type == nil  {
+		return;
+	}
+	
+	#partial switch t in type {
+		case Call: {
+			write_string(glsl_code, t.called);
+			write_string(glsl_code, "(");
+			for a, i in t.args {
+				if i != 0 {
+					write_string(glsl_code, ", ");
+				}
+				write_expression(glsl_code, a);
+			}
+			write_string(glsl_code, ")");
+		}
+		case Int_literal: {
+			write_int(glsl_code, cast(int)t.value);
+		}
+		case Float_literal: {
+			//write_float(glsl_code, t.value, 8, 8, 8);
+			fmt.panicf("TODO : %v", t);
+		}
+		case : {
+			fmt.panicf("TODO : %v", t);
+		}
+	}
+	
+	
+}
 
 
 

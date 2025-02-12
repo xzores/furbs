@@ -13,167 +13,8 @@ import "core:path/slashpath"
 
 import "../token"
 
-Token :: token.Token;
-Storage_qualifiers :: token.Storage_qualifiers;
-Annotation_type :: token.Annotation_type;
-Semicolon :: token.Semicolon;
-Identifier :: token.Identifier;
-Location :: token.Location;
-
-Parameter_info :: struct {
-	name : string,
-	type : string,
-	type_type : Type_type,
-	default_value : string, //if "" there is no default value.
-	default_value_type : Type_type,
-}
-
-Struct_member_info :: struct {
-	name : string,
-	type : string,
-	type_type : Type_type,
-	location : Location,
-}
-
-Struct_info :: struct {
-	name : string,
-	members : []Struct_member_info,
-	location : token.Location,
-}
-
-Global_info :: struct {
-	name : string,
-	
-	type : string,
-	type_type : Type_type,
-	
-	qualifier : Storage_qualifiers,
-	
-	is_unsized_array : bool,
-	sized_array_length : int,
-	
-	location : token.Location,
-}
-
-Function_body_info :: struct {
-	//??
-	block : Block,
-}
-
-Function_info :: struct {
-	name : string,
-	annotation : Annotation_type,
-	
-	inputs : []Parameter_info,
-	output : string,
-	output_type : Type_type,
-	
-	body_start_token : int,
-	body_end_token : int,
-	
-	body : Function_body_info,
-	
-	compute_dim : [3]int,
-	location : token.Location,
-}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-Primitive_kind :: enum {
-	_bool,	//b8
-	_i32,	//i32
-	_u32,	//u32
-	_f32,	//f32
-	_f64, 	//f64
-	
-	// Vector Types
-	_vec2,	   // GLSL 1.00+ 
-	_vec3,	   // GLSL 1.00+ 
-	_vec4,	   // GLSL 1.00+ 
-	_ivec2,	  // GLSL 1.30+ 
-	_ivec3,	  // GLSL 1.30+
-	_ivec4,	  // GLSL 1.30+ 
-	_uvec2,	  // GLSL 1.30+ 
-	_uvec3,	  // GLSL 1.30+
-	_uvec4,	  // GLSL 1.30+
-	_bvec2,	  // GLSL 1.00+
-	_bvec3,	  // GLSL 1.00+
-	_bvec4,	  // GLSL 1.00+
-	_dvec2,	   // GLSL 4.00+
-	_dvec3,	   // GLSL 4.00+
-	_dvec4,	   // GLSL 4.00+
-	
-	// Matrix Types
-	_mat2,	   // GLSL 1.10+
-	_mat3,	   // GLSL 1.10+
-	_mat4,	   // GLSL 1.10+
-	_mat2x3,	 // GLSL 1.50+
-	_mat2x4,	 // GLSL 1.50+
-	_mat3x2,	 // GLSL 1.50+
-	_mat3x4,	 // GLSL 1.50+
-	_mat4x2,	 // GLSL 1.50+
-	_mat4x3,	 // GLSL 1.50+
-	
-	_dmat2,	   // GLSL 4.0+
-	_dmat3,	   // GLSL 4.0+
-	_dmat4,	   // GLSL 4.0+
-	_dmat2x3,	 // GLSL 4.0+
-	_dmat2x4,	 // GLSL 4.0+
-	_dmat3x2,	 // GLSL 4.0+
-	_dmat3x4,	 // GLSL 4.0+
-	_dmat4x2,	 // GLSL 4.0+
-	_dmat4x3,	 // GLSL 4.0+
-}
-
-Sampler_kind :: enum {
-	_sampler1D,			   // GLSL 1.10
-	_sampler2D,			   // GLSL 1.10
-	_sampler3D,			   // GLSL 1.10
-	_sampler1D_depth,		 // GLSL 1.10
-	_sampler2D_depth,		 // GLSL 1.10
-	_sampler_cube,			// GLSL 1.10
-	_sampler2D_array,		 // GLSL 1.50
-	_sampler2_multi,		  // GLSL 3.20
-	_sampler_buffer,		  // GLSL 3.10
-	// _samplerCubeArray,	 // GLSL 4.00 (commented out for being too new and weird)
-
-	_sampler1D_int,		   // GLSL 1.30
-	_sampler2D_int,		   // GLSL 1.30
-	_sampler3D_int,		   // GLSL 1.30
-	_sampler_cube_int,		// GLSL 1.30
-	_sampler2D_array_int,	 // GLSL 3.00
-	_sampler2_multi_int,	  // GLSL 3.20
-	_sampler_buffer_int,	  // GLSL 3.10
-	// _sampler_cube_array_int,// GLSL 4.00 (commented out for being too new and weird)
-
-	_sampler1D_uint,		  // GLSL 1.30
-	_sampler2D_uint,		  // GLSL 1.30
-	_sampler3D_uint,		  // GLSL 1.30
-	_sampler_cube_uint,	   // GLSL 1.30
-	_sampler2D_array_uint,	// GLSL 3.00
-	_sampler2_multi_uint,	 // GLSL 3.20
-	_sampler_buffer_uint,	 // GLSL 3.10
-	// _sampler_cube_array_uint// GLSL 4.00 (commented out for being too new and weird)
-};
-
-Type_type :: union {
-	Primitive_kind,
-	Sampler_kind,
-	^Struct_info,
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-Parse_error :: struct {
-	message : string,
-	token : token.Location,
-}
-
-State_infos :: struct {
-	globals : [dynamic]^Global_info,
-	functions : [dynamic]^Function_info,
-	structs : [dynamic]^Struct_info,
-}
 
 @(private="file")
 State_token :: struct {
@@ -188,12 +29,6 @@ State_token :: struct {
 State :: struct {
 	using _ : State_infos,
 	using _ : State_token,
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-tprint_parse_error :: proc (err : Parse_error) -> string {
-	return fmt.tprintf("%v(%v) Parse error : %v, got '%v'", err.token.file, err.token.line, err.message, err.token.source);	
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -766,6 +601,27 @@ next_token :: proc (using state : ^State_token) -> (tok : Token, is_done : bool)
 }
 
 @(private="file")
+peek_token :: proc (using state : ^State_token, ahead := 1) -> (tok : Token) {
+	
+	if cur_tok > len(tokens) - 1 {
+		return {};
+	}
+	
+	tok = tokens[cur_tok + ahead - 1];
+	
+	{ //If we are about to return a comment, then don't skip ahead.
+		_, is_comment := tok.type.(token.Comment);
+		_, is_multi_comment := tok.type.(token.Multi_line_comment);
+		
+		if is_comment || is_multi_comment {
+			tok = peek_token(state);
+		}
+	}
+	
+	return;
+}
+
+@(private="file")
 emit_error1 :: proc (state : ^State_token, msg : string, tok : token.Token, loc := #caller_location) {
 	
 	msg := strings.clone(msg);
@@ -1047,148 +903,7 @@ parse_struct_or_proc :: proc (using state : ^State) -> (res : union {Function_in
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 //////////////////////////////////////// BLOCK PARSING ////////////////////////////////////////
-
-Variable_declaration :: struct {
-	lhs : string, //the name
-	type : Type_type, //This can be resolved at this stage, because all types have been parsed.
-	rhs : Maybe(Expression),
-}
-
-Call :: struct {
-	called : string,		  // Function name (or reference to a Function)
-	args   : []^Expression,	// List of arguments (expressions)
-}
-
-Assignment :: struct {
-	lhs : ^Expression,   // The left-hand side (e.g., variable)
-	rhs : ^Expression,   // The right-hand side (e.g., value or expression)
-}
-
-Unary_operator_kind :: enum {
-	negation,	 // e.g., -a
-	inversion,	// e.g., !a
-	bitwise_not,  // e.g., ~a
-}
-
-Unary_operator :: struct {
-	op	  : Unary_operator_kind,	// Operator like "-", "++", "!"
-	operand : ^Expression,	  // The expression being operated on
-}
-
-Binary_operator_kind :: enum {
-	add,		  // e.g., a + b
-	subtract,	 // e.g., a - b
-	multiply,	 // e.g., a * b
-	divide,	   // e.g., a / b
-	modulo,	   // e.g., a % b
-	abs_modulo,   // e.g., a %% b
-	logical_and,  // e.g., a && b
-	logical_or,   // e.g., a || b
-	bitwise_and,  // e.g., a & b
-	bitwise_or,   // e.g., a | b
-	bitwise_xor,  // e.g., a ^ b
-	shift_left,   // e.g., a << b
-	shift_right,  // e.g., a >> b
-	equals,	   // e.g., a == b
-	not_equals,   // e.g., a != b
-	greater_than, // e.g., a > b
-	less_than,	// e.g., a < b
-	greater_eq,   // e.g., a >= b
-	less_eq,	  // e.g., a <= b
-}
-
-Binary_operator :: struct {
-	op	  : Binary_operator_kind, 
-	left : ^Expression,	  // The expression being operated on
-	right : ^Expression,	  // The expression being operated on
-}
-
-Return :: struct {
-	value : Maybe(^Expression),
-}
-
-If :: struct {
-	condition : Expression,	  // Condition to evaluate
-	then_body : []^Statement,	 // Block of statements for the true branch
-	else_body : Maybe([]^Statement),  // Optional else block
-}
-
-For :: struct { //Also used as a while
-	init	  : Maybe(^Statement), // Initialization (e.g., Declaration or Assignment)
-	condition : Maybe(Expression), // Loop condition
-	increment : Maybe(Expression), // Increment step
-	body	  : []Statement,	   // Loop body
-}
-
-Float_literal :: struct {
-	value : f64,  // Could be int, float, string, bool, etc.
-}
-
-Int_literal :: struct {
-	value : i128,  // Could be int, float, string, bool, etc.
-}
-
-Boolean_literal :: struct {
-	value : bool,  // Could be int, float, string, bool, etc.
-}
-
-Variable :: struct {
-	name : string,
-	//scope : Maybe(Scope),  // Optional reference to the variable's scope
-}
-
-Expression :: union {
-	Call,
-	Assignment,
-	Unary_operator,
-	Binary_operator,
-	Float_literal,
-	Int_literal,
-	Boolean_literal,
-	Variable,
-}
-
-Statement :: struct {
-	type : union {
-		Variable_declaration,
-		Expression, //Not legal but handled for better error messages
-		Return,
-		If,
-		For,
-		Block,
-	},
-	location : Location,
-}
-
-Symbol :: struct {}
-
-Scope :: struct {
-	parent	 : ^Scope,			  // Link to the parent scope (or `nil` if it's the global scope)
-	symbols	: map[string]Symbol,   // Map from variable/function names to their metadata (Symbol)
-}
-
-Block :: struct {
-	statements : []Statement,  // Ordered list of statements
-	scope	  : Scope,		// Scope associated with the block
-}
 
 //Can handle 0 tokens, so passing 0 tokens is valid (TODO : not tested)
 @(private="file")
@@ -1252,18 +967,99 @@ parse_block :: proc (_tokens : []token.Token, errs : ^[dynamic]Parse_error) -> F
 							continue;
 						}
 						
+						fmt.printf("Creating return statement : %v\n", expressions[0]);
+						
 						//Successfully parsed the expression
 						append(&statements, Statement{Return{expressions[0]}, original_token.origin});
 					}
 					
 				}
 				else {
-					//fmt.printf("handling token : %v", original_token);
+					//this is an assignment, variable declration or both.
+					fmt.printf("handling token : %v\n", original_token);
+					
+					t_next, done = next_token(&state);
+					
+					statement_type : enum {
+						assignment,
+						declartion,
+						both,
+					} = nil;
+					
+					#partial switch tok in t_next.type {
+						case token.Equals_operator: {
+							statement_type = .assignment;
+						}
+						case token.Colon: {
+							
+							statement_type = .declartion;
+							
+							t_next = peek_token(&state);
+							if _, ok := t_next.type.(token.Equals_operator); ok {
+								statement_type = .both;
+								t_next, done = next_token(&state); //consume the token.
+							}
+							
+							panic("TODO, handle types");
+						}
+						case: {
+							emit_error2(errs, original_token.origin, "Expected an assignment (=) or declaration (:)");
+							is_semicolon := false;
+							for !is_semicolon {
+								t_next, done = next_token(&state);
+								if _, ok := t_next.type.(token.Semicolon); ok {
+									is_semicolon = true;
+								}
+							}
+							continue;
+						}
+						
+						expression_start_token := state.cur_tok;
+						expression_end_token : int = -1;
+						
+						ok : bool;
+						for !ok && !done {
+							_, ok = t_next.type.(token.Semicolon);
+							expression_end_token = state.cur_tok;
+							if !ok {
+								t_next, done = next_token(&state);
+							}
+						}
+						
+						if expression_end_token == -1 {
+							emit_error2(errs, original_token.origin, "Missing ';' after assignment or variable declaration statement");
+							continue;
+						} else if expression_start_token != expression_end_token-1 {
+							expression_tokens := state.tokens[expression_start_token:expression_end_token-1];
+							expressions, err := parse_expression(expression_tokens);
+							
+							if err != {} {
+								emit_error2(errs, err.token, err.message);
+								continue;
+							}
+							
+							if len(expressions) > 1 {
+								emit_error2(errs, err.token, "There may only be one assignment value, this might change in the future, todo.");
+								continue;
+							}
+							
+							fmt.printf("Creating return statement : %v\n", expressions[0]);
+							
+							//Successfully parsed the expression
+							append(&statements, Statement{Assignment{original_token.origin.source, expressions[0]}, original_token.origin});
+						}
+						
+						
+						
+					}
+					
+					t_next, done = next_token(&state);
+					
+					
 				}
-				
 			case:
-				//emit_error2(errs, t_next.origin, "Illegal token");
-				//continue;
+				emit_error2(errs, t_next.origin, "Illegal token");
+				continue;
 		}
 	}
 	
@@ -1358,7 +1154,7 @@ parse_expression :: proc (_tokens : []token.Token) -> ([]^Expression, Parse_erro
 						
 						assert(parameters_end_token != -1);
 						
-						parameter_tokens := state.tokens[parameters_start_token:parameters_end_token-1];
+						parameter_tokens := state.tokens[parameters_start_token:parameters_end_token];
 						params, err := parse_expression(parameter_tokens);
 						
 						if err != {} {
@@ -1411,7 +1207,7 @@ parse_expression :: proc (_tokens : []token.Token) -> ([]^Expression, Parse_erro
 					subexpression_end_token = state.cur_tok;
 				}
 				
-				subexpression_tokens := state.tokens[subexpression_start_token:subexpression_end_token-1];
+				subexpression_tokens := state.tokens[subexpression_start_token:subexpression_end_token];
 				exps, err := parse_expression(subexpression_tokens);
 				
 				if err != {} {
