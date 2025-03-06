@@ -1034,7 +1034,7 @@ foreign lib {
 
 @(default_calling_convention="c")
 foreign lib {
-		
+	
 	/*----- 3D Measure ---------------------------------------------------------*/
 	@(link_name="HPDF_Page_Create3DC3DMeasure") Page_Create3DC3DMeasure :: proc(page : Page, firstanchorpoint : Point3D, textanchorpoint : Point3D) -> Measure3D ---;
 	@(link_name="HPDF_Page_CreatePD33DMeasure") Page_CreatePD33DMeasure :: proc(page : Page, annotationPlaneNormal : Point3D, firstAnchorPoint : Point3D, secondAnchorPoint : Point3D, leaderLinesDirection : Point3D, measurementValuePoint : Point3D, textYDirection : Point3D, value : REAL, unitsString : cstring) -> Measure3D ---;

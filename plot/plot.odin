@@ -502,21 +502,35 @@ bodes :: proc (signals : []Signal, use_hertz := true, range : Maybe([2]f64) = ni
 			
 			case .accumulative:
 				//Do nothing
+				for &m in magnetude {
+					if y_log {
+						m = 20 * math.log10(m);
+					}
+				}
 			
 			case .amplitude:
 				for &m in magnetude {
 					m = 2 * math.abs(m) / N;
+					if y_log {
+						m = 20 * math.log10(m);
+					}
 				}
 			
 			case .power_spectrum:
 				for &m in magnetude {
 					m = 2 * (m * m) / (N * N);
+					if y_log {
+						m = 10 * math.log10(m);
+					}
 				}
 			
 			case .power_speactral_density:
 				fs : f64 = (cast(f64)len(span_pos) - 1) / (span_pos[len(span_pos)-1] - span_pos[0]);
 				for &m in magnetude {
 					m = (m * m) / (fs * N);
+					if y_log {
+						m = 10 * math.log10(m);
+					}
 				}
 		}
 		
@@ -985,6 +999,32 @@ abscissa_to_array :: proc (a : Abscissa, alloc := context.allocator, loc := #cal
 	return span_pos;
 }
 
+sort_my_abscissa :: proc (signal : Signal, loc := #caller_location) {
+	
+	do_sort :: proc(a : []$T) {
+		slice.sort(a);
+	}
+	
+	switch abscissa in signal.abscissa {
+		case Span(int):
+			//already sorted
+		case Span(f32):
+			//already sorted
+		case Span(f64):
+			//already sorted
+		case []int:
+			do_sort(abscissa);
+		case []f32:
+			do_sort(abscissa);
+		case []f64:
+			do_sort(abscissa);
+		case []string:
+			panic("Cannot sort by strings");
+	}
+	
+}
+
+
 @(require_results)
 ordinate_to_array :: proc (o : Ordinate, alloc := context.allocator, loc := #caller_location) -> []f64 {
 	context.allocator = alloc;
@@ -1212,5 +1252,6 @@ ensure_render_init :: proc (loc := #caller_location) {
 	
 	render.window_set_vsync(true);
 }
+
 
 
