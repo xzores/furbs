@@ -182,30 +182,34 @@ Key_input_event :: struct {
 	mods : Input_modifier,
 }
 
-
 @(private="file")
 pasted : bool;
 
 //constantly down
+@require_results
 is_key_down :: proc(key : Key_code) -> bool {
 	return state.keys_down[key];
 }
 
 //trigger on pressed key
+@require_results
 is_key_pressed :: proc(key : Key_code) -> bool {
 	return state.keys_pressed[key] ;
 }
 
 //trigger on release key
+@require_results
 is_key_released :: proc(key : Key_code) -> bool {
 	return state.keys_released[key];
 }
 
 //triggers when press and repeat signals
+@require_results
 is_key_triggered :: proc(key : Key_code) -> bool {
 	return state.keys_triggered[key];
 }
 
+@require_results
 recive_next_input :: proc () -> (char : rune, done : bool) {
 
 	done = queue.len(state.char_input) != 0;
@@ -218,6 +222,7 @@ recive_next_input :: proc () -> (char : rune, done : bool) {
 }
 
 //This a view, don't delete it.
+@require_results
 get_clipboard_string :: proc (loc := #caller_location) -> string {
 
 	return glfw.GetClipboardString(state.owner_context);
@@ -252,30 +257,36 @@ Mouse_input_event :: struct {
 }
 
 //constantly down, button means mouse
+@require_results
 is_button_down :: proc(button : Mouse_code) -> bool {
 	return state.button_down[button];
 }
 
 //trigger on pressed key
+@require_results
 is_button_pressed :: proc(button : Mouse_code) -> bool {
 	return state.button_pressed[button];
 }
 
 //trigger on release key
+@require_results
 is_button_released :: proc(button : Mouse_code) -> bool {
 	return state.button_released[button];
 }
 
 //will return the mouse position relative to the window?
+@require_results
 mouse_pos :: proc (window : ^Window) -> [2]f32 {
 	mx, my := glfw.GetCursorPos(window.glfw_window);
 	return [2]f32{auto_cast mx, cast(f32)window.height - auto_cast my};
 }
 
+@require_results
 mouse_delta :: proc() -> [2]f32 {
 	return state.mouse_delta;
 }
 
+@require_results
 scroll_delta :: proc () -> [2]f32 {
 	return state.scroll_delta;
 }

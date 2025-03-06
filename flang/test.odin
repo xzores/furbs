@@ -10,14 +10,11 @@ test :: proc () {
 	defer destroy_contrext(s);
 	
 	lex(s);
+	parse_and_check(s);
 	
-	parse(s);
-	
-	//finalize(s);
-	
+	emit_glsl_330(s);
 	
 }
-
 
 main :: proc () {
 	

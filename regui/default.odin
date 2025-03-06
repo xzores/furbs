@@ -11,6 +11,7 @@ default_appearance : Colored_appearance = {
  	fonts = render.state.default_fonts,
 	limit_by_width = true,
 	limit_by_height = true,
+	limit_horizontal_should_resize = false,
 	text_backdrop_offset = {0.002, -0.002},
 	text_backdrop_color = {0,0,0,1},
 	
@@ -18,7 +19,7 @@ default_appearance : Colored_appearance = {
 	mid_color = {0.6, 0.6, 0.6, 1},
 	mid_margin = 0.02,
 	front_color = {1,1,1,1},
-	front_margin = 0.02,
+	front_margin = 0.01,
 	line_width = 0.01,
 	line_margin = 0.01,
 	
@@ -39,6 +40,7 @@ default_hover_appearance : Colored_appearance = {
  	fonts = render.state.default_fonts,
 	limit_by_width = true,
 	limit_by_height = true,
+	limit_horizontal_should_resize = false,
 	text_backdrop_offset = {0.002, -0.002},
 	text_backdrop_color = {0,0,0,1},
 	
@@ -67,6 +69,7 @@ default_selected_appearance : Colored_appearance = {
  	fonts = render.state.default_fonts,
 	limit_by_width = true,
 	limit_by_height = true,
+	limit_horizontal_should_resize = false,
 	text_backdrop_offset = {0.002, -0.002},
 	text_backdrop_color = {0,0,0,1},
 	
@@ -95,6 +98,7 @@ default_active_appearance : Colored_appearance = {
  	fonts = render.state.default_fonts,
 	limit_by_width = true,
 	limit_by_height = true,
+	limit_horizontal_should_resize = false,
 	text_backdrop_offset = {0.002, -0.002},
 	text_backdrop_color = {0,0,0,1},
 	

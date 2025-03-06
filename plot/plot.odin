@@ -939,7 +939,6 @@ export_pdf_from_window :: proc(plot : ^Plot_window, save_location : string, colo
 	export_pdf(plot.plot_type, save_location, w, h, color_theme, loc);
 }
 
-
 destroy_plot_window :: proc (w : ^Plot_window) {
 	render.window_destroy(w.window);
 	render.frame_buffer_destroy(w.plot_framebuffer);

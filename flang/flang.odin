@@ -8,9 +8,11 @@ import "core:reflect"
 import "core:unicode"
 import "core:os"
 import "core:path/filepath"
+import "core:log"
 
 import "token"
 import "parser"
+import "emit"
 
 File_load :: token.File_load;
 
@@ -24,7 +26,6 @@ Shader_file :: struct {
 		lexed,
 		preprocessed,
 		parsed,
-		//TODO maybe a final stage?
 	},
 	
 	tokens : [dynamic]token.Token,
@@ -33,6 +34,9 @@ Shader_file :: struct {
 Shader_context :: struct {
 	sources : map[string]Shader_file,
 	defines : map[string]token.Token_type,
+	
+	final_state : parser.State,
+	finalized : bool, 
 }
 
 create_context :: proc (loc := #caller_location) -> ^Shader_context {
@@ -44,6 +48,8 @@ create_context :: proc (loc := #caller_location) -> ^Shader_context {
 	s^ = Shader_context {
 		source_files,
 		nil,
+		{},
+		false,
 	}
 	
 	return s;
@@ -98,107 +104,6 @@ add_shader_from_string :: proc (con : ^Shader_context, source_code : string, fil
 	fmt.printf("adding source to shader from file : %v\n", file_path);
 	con.sources[_file_path] = {_file_path, s_code, .source, nil};
 }
-
-Variable_type :: struct {
-	type: enum {
-		_nil,          // Placeholder for uninitialized or undefined types
-		
-		// Scalar Types
-		_float,        // Single-precision floating-point
-		_double,       // Double-precision floating-point
-		_bool,         // Boolean
-		_int,          // Signed integer
-		_uint,         // Unsigned integer
-
-		// Vector Types
-		_vec2,         // 2-component vector of float
-		_vec3,         // 3-component vector of float
-		_vec4,         // 4-component vector of float
-		_ivec2,        // 2-component vector of int
-		_ivec3,        // 3-component vector of int
-		_ivec4,        // 4-component vector of int
-		_uvec2,        // 2-component vector of unsigned int
-		_uvec3,        // 3-component vector of unsigned int
-		_uvec4,        // 4-component vector of unsigned int
-		_bvec2,        // 2-component vector of bool
-		_bvec3,        // 3-component vector of bool
-		_bvec4,        // 4-component vector of bool
-		_dvec2,        // 2-component vector of double
-		_dvec3,        // 3-component vector of double
-		_dvec4,        // 4-component vector of double
-
-		// Matrix Types
-		_mat2,         // 2x2 matrix of float
-		_mat3,         // 3x3 matrix of float
-		_mat4,         // 4x4 matrix of float
-		_mat2x3,       // 2x3 matrix of float
-		_mat2x4,       // 2x4 matrix of float
-		_mat3x2,       // 3x2 matrix of float
-		_mat3x4,       // 3x4 matrix of float
-		_mat4x2,       // 4x2 matrix of float
-		_mat4x3,       // 4x3 matrix of float
-
-		// Sampler Types (For textures)
-		_sampler1D,          // 1D texture sampler
-		_sampler2D,          // 2D texture sampler
-		_sampler3D,          // 3D texture sampler
-		_samplerCube,        // Cubemap texture sampler
-		_sampler1DArray,     // Array of 1D textures
-		_sampler2DArray,     // Array of 2D textures
-		_samplerBuffer,      // Buffer texture sampler
-		_sampler2DRect,      // Rectangular 2D texture
-		_samplerCubeArray,   // Array of cubemaps
-		_sampler2DMS,        // Multisampled 2D texture
-		_sampler2DMSArray,   // Array of multisampled 2D textures
-
-		// Integer Sampler Types
-		_isampler1D,         // 1D integer texture sampler
-		_isampler2D,         // 2D integer texture sampler
-		_isampler3D,         // 3D integer texture sampler
-		_isamplerCube,       // Cubemap integer texture sampler
-		_isampler1DArray,    // Array of 1D integer textures
-		_isampler2DArray,    // Array of 2D integer textures
-		_isamplerBuffer,     // Buffer integer texture sampler
-
-		// Unsigned Integer Sampler Types
-		_usampler1D,         // 1D unsigned integer texture sampler
-		_usampler2D,         // 2D unsigned integer texture sampler
-		_usampler3D,         // 3D unsigned integer texture sampler
-		_usamplerCube,       // Cubemap unsigned integer texture sampler
-		_usampler1DArray,    // Array of 1D unsigned integer textures
-		_usampler2DArray,    // Array of 2D unsigned integer textures
-		_usamplerBuffer,     // Buffer unsigned integer texture sampler
-
-		// Image Types (For image load/store operations)
-		_image1D,            // 1D image
-		_image2D,            // 2D image
-		_image3D,            // 3D image
-		_imageCube,          // Cubemap image
-		_imageBuffer,        // Buffer image
-		_image1DArray,       // Array of 1D images
-		_image2DArray,       // Array of 2D images
-		_image2DMS,          // Multisampled 2D image
-		_image2DMSArray,     // Array of multisampled 2D images
-
-		// Integer Image Types
-		_iimage1D,           // 1D integer image
-		_iimage2D,           // 2D integer image
-		_iimage3D,           // 3D integer image
-		_iimageCube,         // Cubemap integer image
-		_iimageBuffer,       // Buffer integer image
-
-		// Unsigned Integer Image Types
-		_uimage1D,           // 1D unsigned integer image
-		_uimage2D,           // 2D unsigned integer image
-		_uimage3D,           // 3D unsigned integer image
-		_uimageCube,         // Cubemap unsigned integer image
-		_uimageBuffer,       // Buffer unsigned integer image
-
-		// Special Types
-		_struct,             // User-defined struct
-		_array,              // Array of any type
-	},
-};
 
 //This will keep going unstil there are no more uknown tokens left or the unknown tokens cannot be determined. 
 lex :: proc (s : ^Shader_context) {
@@ -281,42 +186,81 @@ lex :: proc (s : ^Shader_context) {
 	if !is_done {
 		lex(s);
 	}
-	
 }
 
-parse :: proc (s : ^Shader_context) {
+parse_and_check :: proc (s : ^Shader_context) {
 	//Contruct the AST.
 	//There is an AST, it does not error even if invalid, the user may change the AST.
 	
 	tokens_sources : [dynamic][dynamic]token.Token;
-	defer delete(tokens_sources);
+	defer delete(tokens_sources); //This does not delete the token stirngs and such onlt the arrays.
 	
 	for _, source in s.sources {
 		append(&tokens_sources, source.tokens);
 	}
 	
-	errs := parser.parse(tokens_sources[:]);
+	res_state, errs := parser.parse(tokens_sources[:]);
 	
-} 
-
-finalize :: proc () {
+	if len(errs) != 0 {
+		msg := strings.builder_make();
+		defer strings.builder_destroy(&msg);
+		strings.write_string(&msg, "Found parser errors:");
+		
+		for e in errs {
+			strings.write_string(&msg, "\tError at ");
+			strings.write_string(&msg, e.token.source);
+			strings.write_string(&msg, " in ");
+			strings.write_string(&msg, e.token.file);
+			strings.write_string(&msg, "(");
+			strings.write_int(&msg, e.token.line);
+			strings.write_string(&msg, ")");
+			strings.write_string(&msg, " : ");
+			strings.write_string(&msg, e.message);
+			strings.write_string(&msg, "\n");
+		}
+		
+		log.errorf(strings.to_string(msg));
+	}
+	
 	//type_resolve and such.
 	//The AST can return errors here and will check compatility with the target.
-	
-	
+	type_errs : []parser.Error;
+	s.final_state, type_errs = parser.finalize(res_state);
+	if len(type_errs) == 0 {
+		s.finalized = true;
+	}
+	else {
+		panic("error msgs")
+	}
 }
-
 
 //For embedded and webGL
 emit_glsl_300ES :: proc () {
 	//Emit the glsl
 }
 
-emit_glsl_330 :: proc () {
+emit_glsl_330 :: proc (con : ^Shader_context) {
 	//Emit the glsl
+	
+	vert, vert_err := emit.emit_glsl(con.final_state, .vertex, 330);
+	if vert_err != "" {
+		log.errorf("Error emitting vertex shader : %v\n", vert_err);
+	}
+	else {
+		log.infof("Outputted vertex shader :\n%v", vert);
+	}
+	
+	frag, frag_err := emit.emit_glsl(con.final_state, .fragment, 330);
+	if frag_err != "" {
+		log.errorf("Error emitting fragment shader : %v\n", frag_err);
+	}
+	else {
+		log.infof("Outputted fragment shader :\n%v", frag);
+	}
+	
 }
 
-emit_glsl_450 :: proc () {
+emit_glsl_450 :: proc (con : Shader_context) {
 	//Emit the glsl
 }
 
@@ -326,5 +270,9 @@ emit_spriv_100 :: proc () {
 
 emit_odin :: proc () {
 	//Emit the odin
+}
+
+emit_flang :: proc () {
+	//Emit the flang
 }
 

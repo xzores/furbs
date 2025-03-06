@@ -30,7 +30,7 @@ Power_of_operator :: struct {};
 Logical_operator :: struct {};
 Comparison_operator :: struct {};
 Bitwise_operator :: struct {};
-Assignment_operator :: struct {}; //TODO assign or assign and declare.
+Equals_operator :: struct {}; //TODO assign or assign and declare.
 Unitary_operator :: struct {};
 Semicolon :: struct{};
 Colon :: struct{};
@@ -135,6 +135,7 @@ Preprocessor_token :: struct {
 }
 
 Storage_qualifiers :: enum {
+	invalid = 0,
 	attribute,	//Input of the fragment shader
 	varying,	//The output of the vertex shader and input of the fragment shader.
 	frag_out,	//The output of the fragment shader.
@@ -193,7 +194,7 @@ Token_type :: union {
 	Logical_operator,
 	Comparison_operator,
 	Bitwise_operator,
-	Assignment_operator,
+	Equals_operator,
 	Unitary_operator,
 	
 	Semicolon,	
@@ -327,7 +328,7 @@ tokenize :: proc (_source_code : string, _filename : string) -> (toks : [dynamic
 			case '=':
 				token_begin = i;
 				token_start_line = current_line;
-				emit_token(t, true, Assignment_operator{});
+				emit_token(t, true, Equals_operator{});
 			case ',':
 				token_begin = i;
 				token_start_line = current_line;
@@ -478,8 +479,8 @@ tokenize :: proc (_source_code : string, _filename : string) -> (toks : [dynamic
 					}
 					
 					qualifier_type, ok := reflect.enum_from_name(Storage_qualifiers, qualifier_name);
-					if !ok {
-						fmt.panicf("Could not evaluate to the \"%v\" to any of the following %#v", qualifier_name, reflect.enum_field_names(Storage_qualifiers));
+					if !ok || qualifier_type == nil {
+						fmt.panicf("Could not evaluate to the \"%v\" to any of the following %#v", qualifier_name, reflect.enum_field_names(Storage_qualifiers)[1:]);
 					}
 					
 					emit_token(&t, false, Qualifier{qualifier_type});

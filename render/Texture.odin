@@ -129,20 +129,25 @@ Texture2D :: struct {
 }
 
 @(require_results)
-texture2D_load_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8, {0,0,0,0}}, loc := #caller_location) -> Texture2D {
+texture2D_load_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8, {0,0,0,0}}, loc := #caller_location) -> (tex : Texture2D, ok : bool) {
 	
-	data, ok := os.read_entire_file_from_filename(filename);
+	data, load_ok := os.read_entire_file_from_filename(filename);
 	defer delete(data);
+	
+	if !load_ok {
+		log.errorf("loading texture data for %v failed", filename, location = loc);
+		return {}, false;
+	}
 
-	fmt.assertf(ok, "loading texture data for %v failed", filename, loc = loc);
-
-	return texture2D_load_from_png_bytes(desc, data, filename, loc = loc);
+	return texture2D_load_from_png_bytes(desc, data, filename, loc = loc), true;
 }
+
+default_tex_desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8, {0,0,0,0}};
 
 //Load many textures threaded, good for many of the same types of textures.
 //nil is returned if we failed to load. Allocator must be multithread safe if keep_allocator is true.
 @(require_results)
-texture2D_load_multi_from_file :: proc(paths : []string, desc : Texture_desc = {.clamp_to_edge, .linear, true, .RGBA8, {0,0,0,0}}, flipped := true, keep_allocator := false, loc := #caller_location) -> (textures : []Maybe(Texture2D)) {
+texture2D_load_multi_from_file :: proc(paths : []string, desc : Texture_desc = default_tex_desc, flipped := true, keep_allocator := false, loc := #caller_location) -> (textures : []Maybe(Texture2D)) {
 	
 	Load_png_info :: struct {
 		//in
