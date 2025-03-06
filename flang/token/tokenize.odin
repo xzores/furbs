@@ -30,7 +30,7 @@ Power_of_operator :: struct {};
 Logical_operator :: struct {};
 Comparison_operator :: struct {};
 Bitwise_operator :: struct {};
-Assignment_operator :: struct {}; //TODO assign or assign and declare.
+Equals_operator :: struct {}; //TODO assign or assign and declare.
 Unitary_operator :: struct {};
 Semicolon :: struct{};
 Colon :: struct{};
@@ -194,7 +194,7 @@ Token_type :: union {
 	Logical_operator,
 	Comparison_operator,
 	Bitwise_operator,
-	Assignment_operator,
+	Equals_operator,
 	Unitary_operator,
 	
 	Semicolon,	
@@ -328,7 +328,7 @@ tokenize :: proc (_source_code : string, _filename : string) -> (toks : [dynamic
 			case '=':
 				token_begin = i;
 				token_start_line = current_line;
-				emit_token(t, true, Assignment_operator{});
+				emit_token(t, true, Equals_operator{});
 			case ',':
 				token_begin = i;
 				token_start_line = current_line;

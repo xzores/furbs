@@ -24,7 +24,8 @@ $sampler my_texture : sampler2D;
 @vertex
 vertex_main :: proc () {
 	gl_Position = uProjection * uView * uModel * vec4(aPosition, 1.0);
-	vColor = aColor * my_global_function() + my_other_file_function();
+	vColor = my_other_file_function() + aColor * my_global_function();
+	return my_global_function(4, 2);
 }
 
 @fragment
@@ -35,8 +36,12 @@ fragment_main :: proc () {
 
 my_global_function :: proc(my_first_variable : u32, my_secound_variable : f32) -> u32 {
 	//return my_first_variable * 5 + cast(u32)my_secound_variable;
-	a := my_first_variable * 5 + cast(u32)my_secound_variable
+	//a := my_first_variable * 5.0 + cast(u32)my_secound_variable;
 	return a;
+}
+
+my_global_function2 :: proc(my_first_variable : u32, my_secound_variable : f32) -> u32 {
+	return my_global_function(4, 2);
 }
 
 /*
@@ -62,16 +67,16 @@ tesselation_valuation_main :: proc () {
 //may also be written as @compute(32 1 1)
 @compute(32,1, 2) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
 compute_main :: proc () {
-	index := gl_GlobalInvocationID.x;
+	//index := gl_GlobalInvocationID.x;
 	my_compute_output[index] = my_compute_input[index] * 2.0;
 }
 
 @compute(4 4 		2) //Watch: https://www.youtube.com/watch?v=nF4X9BIUzx0
 compute_main2 :: proc () {
-	index := gl_GlobalInvocationID.x;
+	//index := gl_GlobalInvocationID.x;
 	my_compute_output[index] = my_compute_input[index] * 2.0;
-	return something_to_return((a + b) + my_global_function(a, b));
-	return kalkun(1 + k * h);
+	//return something_to_return((a + b) + my_global_function(a, b));
+	//return kalkun(1 + k * h);
 	//return something_to_return(a * (((2 + b))), b + a * 4, c * my_global_function(a, b), d) * something_to_return() * (something_to_return() + (a) + (((b))));
 }
 

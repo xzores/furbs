@@ -10,8 +10,7 @@ test :: proc () {
 	defer destroy_contrext(s);
 	
 	lex(s);
-	
-	parse(s);
+	parse_and_check(s);
 	
 	emit_glsl_330(s);
 	

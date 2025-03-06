@@ -1,4 +1,4 @@
-package flang_finalizer;
+package flang_parser;
 
 import "core:fmt"
 import "core:strings"
@@ -13,279 +13,6 @@ import "core:slice"
 import "core:path/slashpath"
 
 import "../token"
-import "../parser"
-
-Type_type :: parser.Type_type;
-Primitive_kind :: parser.Primitive_kind;
-Sampler_kind :: parser.Sampler_kind;
-Location :: token.Location;
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-Statement_if :: struct {
-
-}
-
-Statement_return :: struct {
-
-}
-
-Statement_for :: struct {
-
-}
-
-Statement_block :: struct {
-
-}
-
-Statement_assign :: struct {
-
-}
-
-Statement_var_declare :: struct {
-
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-Attribute_type :: enum {
-	_i32   = int(Primitive_kind._i32),
-	_u32   = int(Primitive_kind._u32),
-	_f32   = int(Primitive_kind._f32),
-
-	_vec2  = int(Primitive_kind._vec2),
-	_vec3  = int(Primitive_kind._vec3),
-	_vec4  = int(Primitive_kind._vec4),
-
-	_vec2i = int(Primitive_kind._vec2i),
-	_vec3i = int(Primitive_kind._vec3i),
-	_vec4i = int(Primitive_kind._vec4i),
-
-	_vec2u = int(Primitive_kind._vec2u),
-	_vec3u = int(Primitive_kind._vec3u),
-	_vec4u = int(Primitive_kind._vec4u),
-
-	_mat2  = int(Primitive_kind._mat2),
-	_mat3  = int(Primitive_kind._mat3),
-	_mat4  = int(Primitive_kind._mat4),
-}
-
-Varying_type :: enum {
-	_f32	= int(Primitive_kind._f32),
-
-	_vec2	= int(Primitive_kind._vec2),
-	_vec3	= int(Primitive_kind._vec3),
-	_vec4	= int(Primitive_kind._vec4),
-
-	/* TODO these should be $flat not $varying
-	_vec2i	= int(Primitive_kind._vec2i), //TODO handle flat
-	_vec3i	= int(Primitive_kind._vec3i), //TODO handle flat
-	_vec4i	= int(Primitive_kind._vec4i), //TODO handle flat
-
-	_vec2u	= int(Primitive_kind._vec2u), //TODO handle flat
-	_vec3u	= int(Primitive_kind._vec3u), //TODO handle flat
-	_vec4u	= int(Primitive_kind._vec4u), //TODO handle flat
-	*/
-
-	_mat2	= int(Primitive_kind._mat2),
-	_mat3	= int(Primitive_kind._mat3),
-	_mat4	= int(Primitive_kind._mat4),
-}
-
-Frag_out_type :: enum {
-	_f32	= int(Primitive_kind._f32),
-
-	_vec2	= int(Primitive_kind._vec2),
-	_vec3	= int(Primitive_kind._vec3),
-	_vec4	= int(Primitive_kind._vec4),
-
-	_ivec2	= int(Primitive_kind._vec2i),
-	_ivec3	= int(Primitive_kind._vec3i),
-	_ivec4	= int(Primitive_kind._vec4i),
-
-	_uvec2	= int(Primitive_kind._vec2u),
-	_uvec3	= int(Primitive_kind._vec3u),
-	_uvec4	= int(Primitive_kind._vec4u),
-}
-
-Uniform :: struct {
-	name		: string,
-	type		: Struct_member_type,  	// e.g., mat4, float
-	array_size  : int,			//1 = no array
-	location	: Location,
-}
-
-Attribute :: struct {
-	name		: string,
-	type		: Attribute_type,  // e.g., vec3, mat4
-	location	: Location,
-}
-
-Varying :: struct {
-	name		: string,
-	type		: Varying_type,  	// e.g., float, vec3, mat4, etc.
-	array_size	: int,		  		//1 = no array
-	location	: Location,
-}
-
-Frag_out :: struct {
-	name			: string,
-	type			: Frag_out_type,
-	layout_location	: int,					// e.g., layout(location = X)
-	location		: Location,
-}
-
-Sampler :: struct {
-	name			: string,
-	kind			: Sampler_kind,
-	array_size		: int,				// 1 = no array
-	location		: Location,
-}
-
-Local :: struct {
-	name		: string,
-	type		: Struct_member_type,  	// e.g., mat4, float
-	array_size  : int,			//1 = no array
-	location	: Location,
-}
-
-Storage :: struct {
-	name			: string,
-	type			: Type_type,  	// e.g., mat4, float
-	unsized_array 	: bool,
-	array_size  	: int,			//1 = no array
-	location		: Location,
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-Final_type :: union {
-	Primitive_kind,
-	Sampler_kind,
-	^Struct,
-}
-
-//Also used for uniforms
-Struct_member_type :: union {
-	Primitive_kind,
-	^Struct,
-}
-
-Struct_member :: struct {
-	name : string,
-	offset : int,
-	size : int,
-	type : Struct_member_type,
-}
-
-Struct :: struct {
-	name : string,
-	members : []Struct_member,
-	location : Location,
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-Statement :: union {
-	Statement_return,
-};
-
-Function_body :: struct {
-	
-	statements : []Statement,
-};
-
-Function_param :: struct {
-	name : string,
-	type : Final_type,
-	//Todo default value
-}
-
-Function :: struct {
-	name  : string,
-	inputs : []Function_param,
-	output : Final_type,
-	
-	body : Function_body,
-	
-	referrals : []Referral,
-	
-	location : token.Location,
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-//Anything that can be refered to
-Referral :: union {
-	^Uniform,
-	^Attribute,
-	^Varying,
-	^Frag_out,
-	^Sampler,
-	^Local,
-	^Storage,
-	^Struct,
-	^Function,
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-Vertex_entry :: struct {
-	structs 	: []^Struct,		//Sorted structs used by other structs are first, otherwise sort by name
-	functions 	:  []^Function,	//Sorted functions called by others are first, otherwise sort by name
-	
-	uniforms	: []^Uniform,  // Only uniform qualifier
-	attributes  : []^Attribute,  // Only attribute qualifier
-	varyings	: []^Varying,
-	samplers	: []^Sampler, 
-	storage	 	: []^Storage,  // For SSBO
-	
-	entry : ^Function, //The entry function itself.
-}
-
-Fragment_entry :: struct {
-	structs 	: []^Struct,		//Sorted structs used by other structs are first, otherwise sort by name
-	functions 	:  []^Function,	//Sorted functions called by others are first, otherwise sort by name
-	
-	uniforms	: []^Uniform,  // Only uniform qualifier
-	frag_outs   : []Frag_out,
-	varyings	: []^Varying,
-	samplers	: []^Sampler, 
-	storage	 	: []^Storage,  // For SSBO
-	
-	entry : ^Function, //The entry function itself.
-}
-
-Tess_cont_entry :: struct {
-	structs 	: []^Struct,		//Sorted structs used by other structs are first, otherwise sort by name
-	functions 	:  []^Function,	//Sorted functions called by others are first, otherwise sort by name
-	
-	//TODO.
-	
-	entry : ^Function, //The entry function itself.
-}
-
-Tess_eval_entry :: struct {
-	structs 	: []^Struct,		//Sorted structs used by other structs are first, otherwise sort by name
-	functions 	:  []^Function,	//Sorted functions called by others are first, otherwise sort by name
-	
-	//TODO.
-	
-	entry : ^Function, //The entry function itself.
-}
-
-Compute_entry :: struct {
-	structs 	: []^Struct,		//Sorted structs used by other structs are first, otherwise sort by name
-	functions 	: []^Function,	//Sorted functions called by others are first, otherwise sort by name
-	
-	uniforms	: []^Uniform,  // Only uniform qualifier
-	samplers	: []^Sampler,  
-	locals	  	: []^Local,  // For compute shared
-	storage	 	: []^Storage,  // For SSBO
-	
-	entry : ^Function, //The entry function itself.
-}
 
 State :: struct {
 	//Owns the data
@@ -336,9 +63,7 @@ attribute_consumption_table := #sparse[Attribute_type]int {
 	//Return types matches
 	//Type check everything
 
-finalize :: proc (parsed : parser.State_infos) -> State {
-	
-	state : State;
+finalize :: proc (parsed : State_infos) -> (state : State, errs : []Error) {
 	
 	{ ////////////// Finalize Struct, Globals and function headers //////////////
 		final_structs : [dynamic]Struct;
@@ -428,7 +153,7 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 					new_type : Attribute_type;
 					
 					#partial switch t in pg.type_type {
-						case parser.Primitive_kind: {
+						case Primitive_kind: {
 							new_type = auto_cast t;
 							ok := reflect.enum_value_has_name(new_type);
 							assert(ok);
@@ -457,7 +182,7 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 					new_type : Struct_member_type;
 					
 					#partial switch t in pg.type_type {
-						case parser.Primitive_kind: {
+						case Primitive_kind: {
 							new_type = auto_cast t;
 							ok := reflect.enum_value_has_name(new_type.(Primitive_kind));
 							assert(ok);
@@ -486,7 +211,7 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 					sampler_type : Sampler_kind;
 					
 					#partial switch t in pg.type_type {
-						case parser.Sampler_kind: {
+						case Sampler_kind: {
 							sampler_type = auto_cast t;
 							ok := reflect.enum_value_has_name(sampler_type);
 							assert(ok);
@@ -516,15 +241,15 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 					vayring_type : Varying_type;
 					
 					#partial switch t in pg.type_type {
-						case parser.Primitive_kind: {
+						case Primitive_kind: {
 							vayring_type = auto_cast t;
 							ok := reflect.enum_value_has_name(vayring_type);
 							assert(ok);
 						}
-						case ^parser.Struct_info: {
+						case ^Struct_info: {
 							panic("TODO");
 						}
-						case parser.Sampler_kind: {
+						case Sampler_kind: {
 							panic("Vayring type must not be a sampler kind");
 						}
 					}
@@ -548,7 +273,7 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 					frag_out_type : Frag_out_type;
 					
 					#partial switch t in pg.type_type {
-						case parser.Primitive_kind: {
+						case Primitive_kind: {
 							frag_out_type = auto_cast t;
 							ok := reflect.enum_value_has_name(frag_out_type);
 							assert(ok);
@@ -578,9 +303,9 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 					new_type : Struct_member_type;
 					
 					#partial switch t in pg.type_type {
-						case parser.Primitive_kind: {
+						case Primitive_kind: {
 							new_type = auto_cast t;
-							ok := reflect.enum_value_has_name(new_type.(parser.Primitive_kind));
+							ok := reflect.enum_value_has_name(new_type.(Primitive_kind));
 							assert(ok);
 						}
 						case: {
@@ -614,6 +339,7 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 		for pf in parsed.functions {
 			
 			param : [dynamic]Function_param;
+			output := get_final_type_from_type_type(final_structs[:], pf.output_type);
 			
 			for p in pf.inputs {
 				
@@ -624,9 +350,7 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 					in_type,
 					//Todo default value
 				});
-			}
-			
-			output := get_final_type_from_type_type(final_structs[:], pf.output_type);
+			}			
 			
 			//Pass to final_functions
 			func : Function = {
@@ -634,10 +358,15 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 				param[:],
 				output,
 				{},
+				{},
 				pf.location,
 			};
 			
 			append(&final_functions, func);
+		}
+		
+		if len(errs) != 0 {
+			return state, errs[:];
 		}
 		
 		//Transfer ownsership to state
@@ -653,40 +382,271 @@ finalize :: proc (parsed : parser.State_infos) -> State {
 		state.storage = storage[:];
 	}
 	
-	{ ////////////// Finalize Function bodies //////////////
+	//fmt.printf("parsed : %#v\n", parsed.functions);
+	
+	{ ////////////// Finalize Function Bodies //////////////
+		
+		errs : [dynamic]Error;
+		
 		//Check function bodies
 		for pf in parsed.functions {
 			
+			new_statements : [dynamic]Statement;
+			referrals : map[Referral]bool; //This is just a set of Referrals
+			
 			for statement in pf.body.block.statements {
-				#partial switch ment in statement {
-					case parser.Return:
-						
-						switch v in Maybe {
-							 
+				
+				new_statement : Statement;
+				
+				#partial switch ment in statement.type {
+					case Return:{
+						if v, ok := ment.value.?; ok {
+							type, refs, err := resolve_type_from_parser_expression(state, v);
+							
+							for r in refs {
+								referrals[r] = true;
+							}
+							
+							if e, ok := err.?; ok {
+								emit_error(&errs, statement.location, e);
+								break;
+							}
+							
+							//TODO what here? we now know the return type
+							fmt.printf("return type is : %v\n", type);
+							
+							new_statement = Statement {
+								Return{ment.value},
+								statement.location,
+							}
 						}
-						type, refs, ok := resolve_type_from_parser_expression(ment.value);
-						
+					}
 					case: {
 						panic("TODO");
 					}
 				}
+				
+				append(&new_statements, new_statement);
 			}
+			
+			referrals_list : [dynamic]Referral;
+			
+			for len(referrals) != 0 {
+				
+				ready : [dynamic]Referral;
+				to_remove : [dynamic]Referral;
+				
+				//Ouput ordered reffereals
+				for r in referrals {
+					#partial switch ref in r {
+						case ^Function: {
+							
+							//Somehow get referrals for the Function here and see if any are in the refferels map.
+							//If no then add it otherwise we are not ready.....
+							
+							found_dep := false;
+							
+							for other_ref in ref.referrals {
+								if other_ref in referrals {
+									//This is not ready, its dependencies have not been outputed
+									found_dep = true;
+									break;
+								}
+							}
+							
+							if !found_dep {
+								append(&ready, ref);
+								append(&to_remove, ref);
+							}
+						}
+						case ^Struct: {
+							//Somehow get referrals for the struct here and see if any are in the refferels map.
+							//If no then add it otherwise we are not ready.....
+							panic("TODO");
+						}
+						case: {
+							append(&ready, ref);
+							append(&to_remove, ref);
+						}
+					}
+				}
+				
+				for remove in to_remove {
+					delete_key(&referrals, remove);
+				}
+				
+				//Sort the ready result alphabeticly
+				slice.sort_by(ready[:], proc(a, b : Referral) -> bool {
+					
+					front_letter_from_referral :: proc (r : Referral) -> rune {
+						switch t in r {
+							case ^Attribute: {
+								return cast(rune)t.name[0];
+							}
+							case ^Frag_out: {
+								return cast(rune)t.name[0];
+							}
+							case ^Function: {
+								return cast(rune)t.name[0];
+							}
+							case ^Varying: {
+								return cast(rune)t.name[0];
+							}
+							case ^Uniform: {
+								return cast(rune)t.name[0];
+							}
+							case ^Sampler: {
+								return cast(rune)t.name[0];
+							}
+							case ^Storage: {
+								return cast(rune)t.name[0];
+							}
+							case ^Struct: {
+								return cast(rune)t.name[0];
+							}
+							case ^Local: {
+								return cast(rune)t.name[0];
+							}
+						}
+						
+						unreachable();
+					}
+					
+					a_name := front_letter_from_referral(a);
+					b_name := front_letter_from_referral(b);
+					
+					return a_name < b_name;
+				});
+				
+				for new in ready {
+					append(&referrals_list, new);
+				}
+			}
+			
+			body := Function_body{new_statements[:]};
+			
+			final_func := find_function(state, pf.name);
+			final_func.body = body
+			final_func.referrals = referrals_list[:];
+		}
+		
+		if len(errs) != 0 {
+			return state, errs[:];
 		}
 	}
 	
 	/////////////// create information about what calls what and what is used where //////////////
 	
-	{ /////////////// Assign entries /////////////
+	{/////////////// Assign entries /////////////
 		
+		errs : [dynamic]Error;
+		
+		for func in parsed.functions {
+			#partial switch func.annotation {
+				case .none:
+					//Do nothing
+				case .vertex:
+					if state.vertex_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the vertex entry, collides with %v.", state.vertex_func.entry.location);
+					}
+					
+					entry := find_function(state, func.name);
+					
+					structs : [dynamic]^Struct;
+					functions : [dynamic]^Function;
+					uniforms : [dynamic]^Uniform;
+					attributes : [dynamic]^Attribute;
+					varyings : [dynamic]^Varying;
+					samplers : [dynamic]^Sampler;
+					storage : [dynamic]^Storage;
+					
+					for referral in entry.referrals {
+						switch ref in referral {
+							case ^Struct: {
+								append(&structs, ref);
+							}
+							case ^Function: {
+								append(&functions, ref);
+							}
+							case ^Uniform: {
+								append(&uniforms, ref);
+							}
+							case ^Attribute: {
+								append(&attributes, ref);
+							}
+							case ^Varying: {
+								append(&varyings, ref);
+							}
+							case ^Sampler: {
+								append(&samplers, ref);
+							}
+							case ^Storage: {
+								append(&storage, ref);
+							}
+							case ^Frag_out: {
+								emit_error(&errs, func.location, "A vertex shader may not refer to a Frag_out at %v", ref.location);
+							}
+							case ^Local: {
+								emit_error(&errs, func.location, "A vertex shader may not refer to a Local at %v", ref.location);
+							}
+						}
+					}
+					
+					fmt.printf("functions : %#v\n", functions);
+					
+					state.vertex_func = Vertex_entry{
+						structs[:],
+						functions[:],
+						uniforms[:],
+						attributes[:],
+						varyings[:],
+						samplers[:],
+						storage[:],
+						entry,
+					};
+					
+				case .fragment:
+					if state.fragment_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the fragment entry, collides with %v.", state.fragment_func.entry.location);
+					}
+					//state.fragment_func = function_info_to_function(state, func);
+					
+				case .compute:
+					if state.compute_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the compute entry, collides with %v.", state.compute_func.entry.location);
+					}
+					//state.compute_func = function_info_to_function(state, func);
+					
+				case .tesselation_control:
+					if state.tesselation_control_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the tesselation control entry, collides with %v.", state.tesselation_control_func.entry.location);
+					}
+					//state.tesselation_control_func = function_info_to_function(state, func);
+					
+				case .tesselation_valuation:
+					if state.tesselation_eval_func.entry != nil {
+						emit_error(&errs, func.location, "There are multiple location for the tesselation evaluation entry, collides with %v.", state.tesselation_eval_func.entry.location);
+					}
+					//state.tesselation_eval_func = function_info_to_function(state, func);
+					
+				case:
+					panic("TODO");
+			}
+		}
+		
+		if len(errs) != 0 {
+			return state, errs[:];
+		}
+				
 	}
 	
-	return state;
+	return state, nil;
 }
 
-is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
+is_global_configuration_valid :: proc(type : Global_info) -> string {
 	
 	switch t in type.type_type {
-		case parser.Primitive_kind: {
+		case Primitive_kind: {
 			
 			switch type.qualifier {
 				
@@ -697,13 +657,13 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 					
 					switch t {
 						case ._bool, ._i32, ._u32, ._f32, ._vec2, ._vec3, ._vec4,
-							._vec2i, ._vec3i, ._vec4i, ._vec2u, ._vec3u, ._vec4u,
-							._vec2b, ._vec3b, ._vec4b, ._mat2, ._mat3, ._mat4,
+							._ivec2, ._ivec3, ._ivec4, ._uvec2, ._uvec3, ._uvec4,
+							._bvec2, ._bvec3, ._bvec4, ._mat2, ._mat3, ._mat4,
 							._mat2x3, ._mat2x4, ._mat3x2, ._mat3x4, ._mat4x2, ._mat4x3: {
 							// OK
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d, ._mat2d, ._mat3d, ._mat4d,
-							._mat2x3d, ._mat2x4d, ._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4, ._dmat2, ._dmat3, ._dmat4,
+							._dmat2x3, ._dmat2x4, ._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, it's not possible to upload f64 (doubles) into uniforms.";
 						}
 					}
@@ -725,13 +685,13 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 					
 					switch t {
 						case ._bool, ._i32, ._u32, ._f32, ._vec2, ._vec3, ._vec4,
-							._vec2i, ._vec3i, ._vec4i, ._vec2u, ._vec3u, ._vec4u,
-							._vec2b, ._vec3b, ._vec4b, ._mat2, ._mat3, ._mat4,
+							._ivec2, ._ivec3, ._ivec4, ._uvec2, ._uvec3, ._uvec4,
+							._bvec2, ._bvec3, ._bvec4, ._mat2, ._mat3, ._mat4,
 							._mat2x3, ._mat2x4, ._mat3x2, ._mat3x4, ._mat4x2, ._mat4x3: {
 							// OK
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d, ._mat2d, ._mat3d, ._mat4d,
-							._mat2x3d, ._mat2x4d, ._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4, ._dmat2, ._dmat3, ._dmat4,
+							._dmat2x3, ._dmat2x4, ._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, it's not possible to upload f64 (doubles) into attributes.";
 						}
 					}
@@ -755,17 +715,17 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 								return "A varing primitive may not have a size above 64";
 							}
 						}
-						case ._vec2, ._vec2u, ._vec2b, ._vec2i: {
+						case ._vec2, ._uvec2, ._bvec2, ._ivec2: {
 							if type.sized_array_length >= 32 {
 								return "A varing vec2 may not have a size above 32";
 							}	
 						} 
-						case ._vec3, ._vec3u, ._vec3b, ._vec3i: {
+						case ._vec3, ._uvec3, ._bvec3, ._ivec3: {
 							if type.sized_array_length >= 16 {
 								return "A varing vec3 may not have a size above 16";
 							}
 						}
-						case ._vec4, ._vec4u, ._vec4b, ._vec4i, ._mat2: {
+						case ._vec4, ._uvec4, ._bvec4, ._ivec4, ._mat2: {
 							if type.sized_array_length >= 16 {
 								return "A varing vec4 or mat2 may not have a size above 16";
 							}
@@ -775,9 +735,9 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 								return "A varing matrix of 3 or bigger may not have a size above 8";
 							}
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d,
-							._mat2d, ._mat3d, ._mat4d, ._mat2x3d, ._mat2x4d,
-							._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4,
+							._dmat2, ._dmat3, ._dmat4, ._dmat2x3, ._dmat2x4,
+							._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, doubles are not allowed for varying.";
 						}
 					}
@@ -799,13 +759,13 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 					// Also no doubles for typical usage
 					switch t {
 						case ._bool, ._i32, ._u32, ._f32, ._vec2, ._vec3, ._vec4,
-							._vec2i, ._vec3i, ._vec4i, ._vec2u, ._vec3u, ._vec4u,
-							._vec2b, ._vec3b, ._vec4b, ._mat2, ._mat3, ._mat4,
+							._ivec2, ._ivec3, ._ivec4, ._uvec2, ._uvec3, ._uvec4,
+							._bvec2, ._bvec3, ._bvec4, ._mat2, ._mat3, ._mat4,
 							._mat2x3, ._mat2x4, ._mat3x2, ._mat3x4, ._mat4x2, ._mat4x3: {
 							// OK
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d, ._mat2d, ._mat3d, ._mat4d,
-							._mat2x3d, ._mat2x4d, ._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4, ._dmat2, ._dmat3, ._dmat4,
+							._dmat2x3, ._dmat2x4, ._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, doubles are not allowed for fragment outputs.";
 						}
 					}
@@ -820,14 +780,14 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 					// Double checks
 					switch t {
 						case ._bool, ._i32, ._u32, ._f32, ._vec2, ._vec3, ._vec4,
-							._vec2i, ._vec3i, ._vec4i, ._vec2u, ._vec3u, ._vec4u,
-							._vec2b, ._vec3b, ._vec4b, ._mat2, ._mat3, ._mat4,
+							._ivec2, ._ivec3, ._ivec4, ._uvec2, ._uvec3, ._uvec4,
+							._bvec2, ._bvec3, ._bvec4, ._mat2, ._mat3, ._mat4,
 							._mat2x3, ._mat2x4, ._mat3x2, ._mat3x4, ._mat4x2, ._mat4x3: {
 							// OK
 						}
-						case ._f64, ._vec2d, ._vec3d, ._vec4d,
-							._mat2d, ._mat3d, ._mat4d, ._mat2x3d, ._mat2x4d,
-							._mat3x2d, ._mat3x4d, ._mat4x2d, ._mat4x3d: {
+						case ._f64, ._dvec2, ._dvec3, ._dvec4,
+							._dmat2, ._dmat3, ._dmat4, ._dmat2x3, ._dmat2x4,
+							._dmat3x2, ._dmat3x4, ._dmat4x2, ._dmat4x3: {
 							return "For compatibility reasons, double-based types are not allowed in local (shared) memory."; //TODO this might be a good idea to make legal
 						}
 					}
@@ -865,7 +825,7 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 			}
 		}
 		
-		case parser.Sampler_kind: {
+		case Sampler_kind: {
 		
 			#partial switch type.qualifier {
 				case .sampler:
@@ -885,7 +845,7 @@ is_global_configuration_valid :: proc(type : parser.Global_info) -> string {
 			}
 		}
 		
-		case ^parser.Struct_info: {
+		case ^Struct_info: {
 			switch type.qualifier {
 				case .uniform: {
 					// A struct can be used as a uniform if it's fully known at compile time (no unsized arrays).
@@ -976,18 +936,18 @@ primitive_kind_size := map[Primitive_kind]int {
 	._vec2   = 8,    // 2 floats (4 bytes each), padded to 8 bytes
 	._vec3   = 12,   // 3 floats, padded to 16 bytes in arrays/structs
 	._vec4   = 16,   // 4 floats, naturally aligned to 16 bytes
-	._vec2i  = 8,    // 2 32-bit integers, aligned to 8 bytes
-	._vec3i  = 12,   // 3 integers, padded to 16 bytes
-	._vec4i  = 16,   // 4 integers, aligned to 16 bytes
-	._vec2u  = 8,    // 2 unsigned integers
-	._vec3u  = 12,   // 3 unsigned integers, padded to 16 bytes
-	._vec4u  = 16,   // 4 unsigned integers
-	._vec2b  = 8,    // 2 booleans (treated as 32-bit integers)
-	._vec3b  = 12,   // 3 booleans, padded to 16 bytes
-	._vec4b  = 16,   // 4 booleans						(1x4bytes = 4)
-	._vec2d  = 16,   // 2 doubles (8 bytes each) 		(2x8bytes = 16)
-	._vec3d  = 24,   // 3 doubles, padded to 32 bytes 	(3x8bytes = 24)
-	._vec4d  = 32,   // 4 doubles, naturally aligned 	(4x8bytes = 32)
+	._ivec2  = 8,    // 2 32-bit integers, aligned to 8 bytes
+	._ivec3  = 12,   // 3 integers, padded to 16 bytes
+	._ivec4  = 16,   // 4 integers, aligned to 16 bytes
+	._uvec2  = 8,    // 2 unsigned integers
+	._uvec3  = 12,   // 3 unsigned integers, padded to 16 bytes
+	._uvec4  = 16,   // 4 unsigned integers
+	._bvec2  = 8,    // 2 booleans (treated as 32-bit integers)
+	._bvec3  = 12,   // 3 booleans, padded to 16 bytes
+	._bvec4  = 16,   // 4 booleans						(1x4bytes = 4)
+	._dvec2  = 16,   // 2 doubles (8 bytes each) 		(2x8bytes = 16)
+	._dvec3  = 24,   // 3 doubles, padded to 32 bytes 	(3x8bytes = 24)
+	._dvec4  = 32,   // 4 doubles, naturally aligned 	(4x8bytes = 32)
 
 	// Matrix Types
 	._mat2      = 32,    // 2x2 floats, 2 columns of vec2 (16 bytes per column)
@@ -1000,22 +960,22 @@ primitive_kind_size := map[Primitive_kind]int {
 	._mat4x2    = 32,    // 4x2 floats, 4 columns of vec2 (16 bytes per column)
 	._mat4x3    = 48,    // 4x3 floats, 4 columns of vec3 (aligned as vec4, 16 bytes per column)
 
-	._mat2d     = 64,    // 2x2 doubles, 2 columns of dvec2 (32 bytes per column)
-	._mat3d     = 96,    // 3x3 doubles, 3 columns of dvec3 (aligned as dvec4, 32 bytes per column)
-	._mat4d     = 128,   // 4x4 doubles, 4 columns of dvec4 (32 bytes per column)
-	._mat2x3d   = 96,    // 2x3 doubles, 2 columns of dvec3 (aligned as dvec4, 32 bytes per column)
-	._mat2x4d   = 128,   // 2x4 doubles, 2 columns of dvec4 (32 bytes per column)
-	._mat3x2d   = 64,    // 3x2 doubles, 3 columns of dvec2 (32 bytes per column)
-	._mat3x4d   = 128,   // 3x4 doubles, 3 columns of dvec4 (32 bytes per column)
-	._mat4x2d   = 64,    // 4x2 doubles, 4 columns of dvec2 (32 bytes per column)
-	._mat4x3d   = 96,    // 4x3 doubles, 4 columns of dvec3 (aligned as dvec4, 32 bytes per column)
+	._dmat2     = 64,    // 2x2 doubles, 2 columns of dvec2 (32 bytes per column)
+	._dmat3     = 96,    // 3x3 doubles, 3 columns of dvec3 (aligned as dvec4, 32 bytes per column)
+	._dmat4     = 128,   // 4x4 doubles, 4 columns of dvec4 (32 bytes per column)
+	._dmat2x3   = 96,    // 2x3 doubles, 2 columns of dvec3 (aligned as dvec4, 32 bytes per column)
+	._dmat2x4   = 128,   // 2x4 doubles, 2 columns of dvec4 (32 bytes per column)
+	._dmat3x2   = 64,    // 3x2 doubles, 3 columns of dvec2 (32 bytes per column)
+	._dmat3x4   = 128,   // 3x4 doubles, 3 columns of dvec4 (32 bytes per column)
+	._dmat4x2   = 64,    // 4x2 doubles, 4 columns of dvec2 (32 bytes per column)
+	._dmat4x3   = 96,    // 4x3 doubles, 4 columns of dvec3 (aligned as dvec4, 32 bytes per column)
 }
 
 //Return the size of a member in bytes.
 get_size_of_struct_member :: proc(m : Struct_member_type) -> int {
 	
 	switch k in m {
-		case parser.Primitive_kind:{
+		case Primitive_kind:{
 			return primitive_kind_size[k];
 		}
 		case ^Struct: {
@@ -1050,13 +1010,13 @@ emit_error :: proc (errs : ^[dynamic]Error, origin : Location, msg : string, arg
 get_struct_member_type_from_type_type :: proc (final_structs : []Struct, _t : Type_type) -> (member_type : Struct_member_type, ok : bool) {
 
 	switch t in _t {
-		case parser.Primitive_kind:
+		case Primitive_kind:
 			member_type = t;
 			
-		case parser.Sampler_kind:
+		case Sampler_kind:
 			return {}, false;
 			
-		case ^parser.Struct_info:
+		case ^Struct_info:
 			found := false;
 			
 			for s, i in final_structs {
@@ -1076,13 +1036,13 @@ get_struct_member_type_from_type_type :: proc (final_structs : []Struct, _t : Ty
 get_final_type_from_type_type :: proc (final_structs : []Struct, _t : Type_type) -> Final_type {
 		
 	switch t in _t {
-		case parser.Primitive_kind:
+		case Primitive_kind:
 			return t;
 			
-		case parser.Sampler_kind:
+		case Sampler_kind:
 			return t;
 			
-		case ^parser.Struct_info:
+		case ^Struct_info:
 			for &s, i in final_structs {
 				if s.name == t.name {
 					return &s;
@@ -1096,7 +1056,7 @@ get_final_type_from_type_type :: proc (final_structs : []Struct, _t : Type_type)
 }
 
 @(private="file")
-resolve_type_from_parser_expression :: proc (state : State, exp : ^parser.Expression) -> (type : Final_type, referrals : map[Referral]bool, err : Maybe(string)) {
+resolve_type_from_parser_expression :: proc (state : State, exp : ^Expression) -> (type : Final_type, referrals : map[Referral]bool, err : Maybe(string)) {
 	
 	/*
 		Expression :: union {
@@ -1107,10 +1067,10 @@ resolve_type_from_parser_expression :: proc (state : State, exp : ^parser.Expres
 	*/
 	
 	#partial switch e in exp {
-		case parser.Call: {
+		case Call: {
 			func := find_function(state, e.called)
 			
-			if  func == nil {
+			if func == nil {
 				return nil, nil, fmt.tprintf("No function called : '%v'", e.called);
 			}
 			
@@ -1122,13 +1082,13 @@ resolve_type_from_parser_expression :: proc (state : State, exp : ^parser.Expres
 			
 			return func.output, referrals, nil;
 		}
-		case parser.Float_literal: {
-			return Primitive_kind._f32, {}, nil; //TODO this can be many values liek f32, f64, i32, u32 or whatever
+		case Float_literal: {
+			return Primitive_kind._f32, {}, nil; //TODO this can be many values like f32, f64, i32, u32 or whatever
 		}
-		case parser.Int_literal: {
-			return Primitive_kind._i32, {}, nil; //TODO this can be many values liek f32, f64, i32, u32 or whatever
+		case Int_literal: {
+			return Primitive_kind._i32, {}, nil; //TODO this can be many values like f32, f64, i32, u32 or whatever
 		}
-		case parser.Binary_operator: {
+		case Binary_operator: {
 			lhs, lrefs := resolve_type_from_parser_expression(state, e.left) or_return;
 			rhs, rrefs := resolve_type_from_parser_expression(state, e.right) or_return;
 			// e.op tells which operation it is, like * or +
@@ -1148,11 +1108,12 @@ resolve_type_from_parser_expression :: proc (state : State, exp : ^parser.Expres
 		}
 		case:
 			panic("TODO");
-	}	
+	}
 	
 	unreachable();
 }
 
+@(private="file")
 find_function :: proc (state : State, name : string) -> ^Function {
 	
 	for &f in state.functions {
@@ -1163,3 +1124,48 @@ find_function :: proc (state : State, name : string) -> ^Function {
 	
 	return nil;
 }
+
+/*
+@(private="file")
+function_info_to_function :: proc (state : State, info : ^Function_info) -> (func : Function, err : string) {
+	
+	inputs : [dynamic]Function_param;
+	final_output := get_final_type_from_type_type(state.structs, info.output_type);
+	body : Function_body;
+	referrals : [dynamic]Referral
+	
+	for i in info.inputs {
+		final_type := get_final_type_from_type_type(state.structs, i.type_type);
+		
+		if final_type == nil {
+			return {}, fmt.tprintf("The input type %v with type %v for procedure %v is not a valid type", i.name, i.type, info.name);
+		}
+		
+		append(&inputs, Function_param{
+			info.name,
+			final_type,
+		});
+	}
+	
+	if final_output == nil {
+		return {}, "return type of function is not valid";
+	}
+	
+	//info.body.block.statements
+	
+	return Function{
+		info.name,
+		inputs[:],
+		final_output,
+		
+		body,
+		
+		referrals[:],
+		
+		func.location,
+	}, "";
+}
+*/
+
+
+
