@@ -8,6 +8,7 @@ import "core:reflect"
 import "base:intrinsics"
 import "core:strconv"
 import "core:mem"
+import "core:slice"
 
 import "core:time" //Temp
 
@@ -216,7 +217,8 @@ Font_appearance :: struct {
  	fonts : render.Fonts, 		// Used if the element contains text
 	
 	limit_by_width, limit_by_height : bool, //These tell if size shoud be limited by the parent gui element.
-	
+	limit_horizontal_should_resize : bool,
+		
 	text_backdrop_offset : [2]f32, //This is for makeing a backdrop / shadow. This is in screen space, likely something like 0.001
 	text_backdrop_color : [4]f32, //This is the color of the backdrop / shadow
 }
@@ -332,8 +334,8 @@ Slider :: distinct i64;
 Int_slider :: distinct i64;
 Text_field :: distinct i64;
 Int_field :: distinct i64; 	//TODO
-Float_field :: distinct i64;	//TODO
-Text_area :: distinct i64;	
+Float_field :: distinct i64;//TODO
+Text_area :: distinct i64;
 Radio_buttons :: distinct i64;
 Dropdown :: distinct i64;
 
@@ -388,6 +390,7 @@ Element_info :: union {
 	Int_slider_info,
 	Text_field_info,
 	Panel_info,
+	Custom_info,
 }
 
 //A box with no text, and no interactions.
@@ -437,9 +440,33 @@ Int_slider_info :: struct {
 	current_val_res : ^int,
 }
 
+//Common for Text_field, Int_field, text_area and other input things.
+Base_text_info :: struct {
+	//User settings
+	max_rune_cnt : Maybe(int),
+	max_line_cnt : Maybe(int),
+	display_line_number : bool,
+	
+	//What runes are allowed
+	allow_letters : bool,
+	capital_behavior : enum {keep, capital_only, lower_only},
+	allow_numbers : bool,
+	allow_white_space : bool,
+	allow_symbols : bool, //everything else
+	white_list : []rune,
+	black_list : []rune,
+	
+	//Internal
+	runes : ^[dynamic]rune,
+	view_start : ^int,
+	cursor_pos : ^int,
+	
+	bg_text : string,
+}
+
 Text_field_info :: struct {
 	//User settings
-	max_rune_length : int,
+	max_rune_cnt : Maybe(int),
 	
 	//Internal
 	runes : [dynamic]rune,
@@ -448,6 +475,13 @@ Text_field_info :: struct {
 	
 	bg_text : string,
 	text_res : ^string,
+}
+
+Custom_info :: struct {
+	update_call 	: proc(data : rawptr),
+	draw_call 		: proc(data : rawptr),
+	destroy_call 	: proc(data : rawptr),
+	custom_data 	: rawptr,
 }
 
 @(private)
@@ -533,6 +567,12 @@ bound_scene : ^Scene;
 
 @(private)
 active_elements : map[Element]Element_container;
+
+debug_draw : bool;
+
+set_debug_draw :: proc (enable : bool) {
+	debug_draw = enable;
+}
 
 ////////////////// Private Functions ////////////////////
 
@@ -888,26 +928,27 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 	unit_size := bound_scene.unit_size;
 	
 	switch &e in container.element {
-		case Rect_info:
+		case Rect_info:{
 			//A rect has not logic
-			
-		case Button_info:
+		}
+		case Button_info:{
 			if e.clicked != nil {
 				e.clicked^ = container.is_active;
 			}
-		
-		case Checkbox_info:
+		}
+		case Checkbox_info: {
 			if container.is_active {
 				e.checked = !e.checked;
 			}
 			if e.checked_res != nil {
 				e.checked_res^ = e.checked;
 			}
-		
-		case Label_info:
+		}
+		case Label_info: {
 			//A label has not logic
+		}
+		case Slider_info: {
 		
-		case Slider_info:
 			
 			margin : f32 = get_logical_margin(style);
 			x := mouse_pos().x;
@@ -924,8 +965,8 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 			if e.current_val_res != nil {
 				e.current_val_res^ = e.current_val;
 			}
-			
-		case Int_slider_info:
+		}
+		case Int_slider_info:{
 			
 			margin : f32 = get_logical_margin(style);
 			x := mouse_pos().x;
@@ -940,81 +981,40 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 			if e.current_val_res != nil {
 				e.current_val_res^ = e.current_val;
 			}
+		}
+		case Text_field_info:{
 			
-		case Text_field_info:
-			
-			margin : f32 = get_logical_margin(style);
-			x := mouse_pos().x;
-			
-			dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
-			field_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, unit_size); //to convert to pixel space
-			
-			font : render.Font;
-			font_size : f32;
-			
-			//How many rune fit in rect
-			{
-				switch a in style.default {
-					
-					case Textured_appearance:
-						
-					case Colored_appearance:
-						font = render.text_get_font_from_fonts(a.bold, a.italic, a.fonts);
-						font_size = math.min(rect.w, a.text_size * unit_size);
-					
-					case Patched_appearance:
-						
-				}	
+			base := Base_text_info{
+				e.max_rune_cnt, 		//max_rune_cnt : Maybe(int),
+				1, 						//max_line_cnt : Maybe(int),
+				false, 					//display_line_number : bool,
 				
-				//TODO something is wrong here.
-				e.view_start = math.clamp(e.view_start, 0, len(e.runes));
-				text := utf8.runes_to_string(e.runes[e.view_start:]);
-				defer delete(text);
-				dims := render.text_get_dimensions(text, font_size, font); //In pixel space
-				for dims.x > field_rect.z {
-					e.view_start += 1;
-					e.view_start = math.clamp(e.view_start, 0, len(e.runes));
-					text := utf8.runes_to_string(e.runes[e.view_start:]);
-					defer delete(text);
-					dims = render.text_get_dimensions(text, font_size, font); //In pixel space
-				}
+				true,					//allow_letters : bool,
+				.keep,					//capital_behavior : enum {keep, capital_only, lower_only},
+				true,					//allow_numbers : bool,
+				true,					//allow_white_space : bool,
+				true,					//allow_symbols : bool, //everything else
+				{},						//white_list : []rune,
+				{},						//black_list : []rune,
 				
+				&e.runes,				//runes : ^[dynamic]rune,
+				&e.view_start,			//view_start : ^int,
+				&e.cursor_pos,			//cursor_pos : ^int,
+				e.bg_text				//bg_text : string,
 			}
 			
-			if container.is_selected && mouse_button_pressed(.mouse_button_1) {
-				//The user clicked
-				t := math.clamp((x - field_rect.x) / field_rect.z, 0, 1);
-				//
-				fmt.printf("t : %v", t);
-			}
-			
-			if container.is_selected == true {
-				
-				if render.is_key_triggered(.backspace) {
-					if len(e.runes) != 0 {
-						pop(&e.runes);
-					}
-				}
-				
-				if render.is_key_triggered(.v) && render.is_key_down(.control_left) {
-					s := render.get_clipboard_string();
-					for r in s {
-						append(&e.runes, r);
-					}
-				}
-				
-				for codepoint in render.recive_next_input() {
-					append(&e.runes, codepoint);
-				}
-			}
-		
-		case Panel_info:
-			panel_rect := get_screen_space_position_rect(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, bound_scene.unit_size);
+			update_text_base(base, container.is_selected, style, dest, rect, unit_size, loc);
+		}
+		case Panel_info:{
 			
 			for key in e.sub_elements {
 				e := &active_elements[key];
-				element_update(e, style, panel_rect);
+				element_update(e, style, rect);
 			}
+		}
+		case Custom_info: {
+			e.update_call(e.custom_data);
+		}
 	}
 }
 
@@ -1176,6 +1176,7 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 			
 		case Text_field_info:
 			
+			fmt.assertf(e.view_start <= len(e.runes), "e.view_start is greater then the runes length, e.view_start : %v, runes : %v", e.view_start, e.runes);
 			text := utf8.runes_to_string(e.runes[e.view_start:]);
 			defer delete(text);
 			
@@ -1194,6 +1195,11 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 					if len(e.runes) != 0 {
 						text_dest := mid_dest - {0,0, a.front_margin, a.front_margin};
 						draw_text(text, text_dest, new_rect, a.front_color, a);
+						
+						if debug_draw {
+							render.set_texture(.texture_diffuse, render.texture2D_get_white());
+							draw_quad(.center_center, .center_center, text_dest, new_rect, {1,0.1,0.1,0.5});
+						}
 					}
 					else {
 						text_dest := mid_dest - {0,0, a.additional_margin, a.additional_margin};
@@ -1201,11 +1207,18 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 							{}, a.text_backdrop_offset, a.limit_by_height, a.limit_by_width);
 					}
 					
+					//Draw cursor
+					cursor_text := utf8.runes_to_string(e.runes[e.view_start:e.cursor_pos])
+					defer delete(cursor_text);
+					render.set_texture(.texture_diffuse, render.texture2D_get_white());
+					fmt.printf("render.text_get_dimensions(cursor_text, a.text_size).x : %v\n", render.text_get_dimensions(cursor_text, a.text_size).x);
+					draw_quad(.center_left, .center_center, {render.text_get_dimensions(cursor_text, a.text_size).x, mid_dest.y, 0.005, 0.1}, new_rect, a.mid_color);
+					
 				case Patched_appearance:
 
 			}	
 			
-		case Panel_info:
+		case Panel_info: {
 			switch a in style.default {
 				
 				case Textured_appearance:
@@ -1222,8 +1235,10 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Patched_appearance:
 
 			}
-			
-	
+		}
+		case Custom_info: {
+			e.update_call(e.custom_data);
+		}
 	}
 }
 
@@ -1241,8 +1256,8 @@ element_get :: proc (handle : Element, $T : typeid, loc := #caller_location) -> 
 element_cleanup :: proc(container : Element_container) {
 	switch e in container.element {
 		case Rect_info: 
-			//TODO 
-
+			//TODO
+			
 		case Button_info:
 			button_destroy(e);
 		
@@ -1263,6 +1278,9 @@ element_cleanup :: proc(container : Element_container) {
 			
 		case Panel_info:
 			panel_destroy(e);
+			
+		case Custom_info:
+			e.destroy_call(e.custom_data);
 		
 	}
 }
@@ -1310,3 +1328,73 @@ panel_destroy :: proc (panel : Panel_info) {
 	delete(panel.sub_elements);
 }
 
+@(private)
+update_text_base :: proc (e : Base_text_info, is_selected : bool, style : Style, dest : Destination, rect : [4]f32, unit_size : f32, loc := #caller_location) {
+	margin : f32 = get_logical_margin(style);
+	
+	x := mouse_pos().x;
+	
+	dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
+	field_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, unit_size); //to convert to pixel space
+	
+	font : render.Font;
+	font_size : f32;
+	
+	//How many rune fit in rect
+	{
+		switch a in style.default {
+				
+			case Textured_appearance:
+				
+			case Colored_appearance:
+				font = render.text_get_font_from_fonts(a.bold, a.italic, a.fonts);
+				if a.limit_horizontal_should_resize {
+					font_size = a.text_size;
+				}
+				else {
+					font_size = math.min(rect.w, a.text_size * unit_size);
+				}
+				
+			case Patched_appearance:
+				
+		}
+		
+		//TODO something is wrong here.
+		e.view_start^ = math.clamp(e.view_start^, 0, len(e.runes));
+		text := utf8.runes_to_string(e.runes[e.view_start^:]);
+		defer delete(text);
+		dims := render.text_get_dimensions(text, font_size, font); //In pixel space
+		for dims.x > field_rect.z {
+			e.view_start^ += 1;
+			e.view_start^ = math.clamp(e.view_start^, 0, len(e.runes));
+			text := utf8.runes_to_string(e.runes[e.view_start^:]);
+			defer delete(text);
+			dims = render.text_get_dimensions(text, font_size, font); //In pixel space
+		}
+	}
+	
+	if is_selected == true {
+		
+		if render.is_key_triggered(.backspace) {
+			if len(e.runes) != 0 {
+				pop(e.runes);
+				e.view_start^ -= 1;
+				e.view_start^ = math.clamp(e.view_start^, 0, len(e.runes));
+			}
+		}
+		
+		if render.is_key_triggered(.v) && render.is_key_down(.control_left) {
+			s := render.get_clipboard_string();
+			for r in s {
+				append(e.runes, r);
+			}
+		}
+		
+		for codepoint in render.recive_next_input() {
+			append(e.runes, codepoint);
+		}
+	}
+	
+	e.cursor_pos^= len(e.runes);
+	e.cursor_pos^ = math.clamp(e.cursor_pos^, e.view_start^, len(e.runes));
+}

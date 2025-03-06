@@ -243,7 +243,7 @@ make_text_field :: proc (parent : Parent, dest : Destination, init_text : string
 	fmt.printf("def_appearance : %#v\n", def_appearance);
 	
 	element : Text_field_info = {
-		max_rune_length = 100,
+		max_rune_cnt = nil,
 		runes = nil,
 		view_start = 0,
 		cursor_pos = 0,
