@@ -297,7 +297,7 @@ Text_field_info :: struct {
 
 Custom_info :: struct {
 	update_call 	: proc(data : rawptr),
-	draw_call 		: proc(data : rawptr),
+	draw_call 		: proc(data : rawptr, container : Element_container, style : Style, parent_rect : [4]f32, unit_size : f32),
 	destroy_call 	: proc(data : rawptr),
 	custom_data 	: rawptr,
 }
@@ -576,7 +576,7 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 	}
 }
 
-element_draw :: proc (container : Element_container, style : Style, parent_rect : [4]f32, loc := #caller_location) {
+element_draw :: proc (container : Element_container, style : Style, parent_rect : [4]f32) {
 	
 	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
 	
@@ -794,8 +794,8 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 			}
 		}
 		case Custom_info: {
-			fmt.printf("calling : %v\n", e);
-			e.update_call(e.custom_data);
+			
+			e.draw_call(e.custom_data, container, style, parent_rect, unit_size);
 		}
 	}
 }

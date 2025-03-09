@@ -47,7 +47,7 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 }
 
 //offset is in "screen coordinates" from top right corner.
-draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offset : [2]f32 = {0.05, 0.05}, scale : f32 = 0.25, loc := #caller_location) {
+draw_coordinate_overlay :: proc (camera : Camera3D, offset : [2]f32 = {0.05, 0.05}, scale : f32 = 0.25, loc := #caller_location) {
 	
 	assert(state.current_target == nil, "There must not be a target, call target_end", loc);
 	
@@ -62,17 +62,15 @@ draw_coordinate_overlay :: proc (target : Render_target, camera : Camera3D, offs
 		far 			= 10,
 	};
 	
-	target_begin(target, nil);
-		aspect : f32 = state.target_pixel_width / state.target_pixel_height;
-		pipeline_begin(state.overlay_pipeline, cam);
-			set_texture(.texture_diffuse, tex);
-			draw_quad(linalg.matrix4_from_trs_f32([3]f32{(aspect) - offset.x - scale/2, 1.0 - offset.y - scale/2, 0}, 0, {scale,scale,1}));
-		pipeline_end();
-	target_end();
+	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
+	pipeline_begin(state.overlay_pipeline, cam);
+		set_texture(.texture_diffuse, tex);
+		draw_quad(linalg.matrix4_from_trs_f32([3]f32{(aspect) - offset.x - scale/2, 1.0 - offset.y - scale/2, 0}, 0, {scale,scale,1}));
+	pipeline_end();
 }
 
 //offset is in "screen coordinates" from top left corner.
-draw_fps_overlay :: proc (target : Render_target, offset : [2]f32 = {0,0}, scale : f32 = 1) {
+draw_fps_overlay :: proc (offset : [2]f32 = {0,0}, scale : f32 = 1) {
 	
 	//A low pass filter XD
 	smoothing : f32 = 0.94; // larger=more smoothing
@@ -86,7 +84,5 @@ draw_fps_overlay :: proc (target : Render_target, offset : [2]f32 = {0,0}, scale
 	size := scale * 40;
 	text_bounds := text_get_bounds(t, size, get_default_fonts().normal);
 
-	target_begin(target, nil);
-		text_draw_simple(t, {offset.x, state.target_pixel_height - text_bounds.w - offset.y - text_bounds.y}, size, color, {{0,0,0,1}, {2,-2}});
-	target_end();
+	text_draw_simple(t, {offset.x, state.target_pixel_height - text_bounds.w - offset.y - text_bounds.y}, size, color, {{0,0,0,1}, {2,-2}});
 }

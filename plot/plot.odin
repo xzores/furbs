@@ -706,17 +706,88 @@ make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destinati
 	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, appearance, appearance, appearance);
 	
 	Gui_plot_data :: struct {
-		
+		a : int,
 	}
 	
 	update :: proc(data : rawptr) {
 		data := cast(^Gui_plot_data)data;
+		using regui_base;
 		
 	}
 	
-	draw :: proc(data : rawptr) {
+	draw :: proc(data : rawptr, container : regui_base.Element_container, style : regui_base.Style, parent_rect : [4]f32, unit_size : f32) {
 		data := cast(^Gui_plot_data)data;
-		fmt.printf("DRAWing\n");
+		
+		regui_base.draw_quad(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, {1,0,0,1});
+		
+		target_size : [2]i32 = linalg.array_cast(container.dest.rect.zw * unit_size, i32);
+		
+		/*
+		assert(w.plot_framebuffer.id != 0, "frambuffer is nil");
+		if w.plot_framebuffer.width != target_size.x || w.plot_framebuffer.height != target_size.y {
+			render.frame_buffer_resize(&w.plot_framebuffer, target_size);
+			render.texture2D_resize(&w.plot_texture, target_size);
+		}
+
+		//Calculate normalized space coordinates.
+		width_i, height_i := render.get_render_target_size(&w.plot_framebuffer);
+		width_f, height_f := cast(f32)width_i, cast(f32)height_i;
+		aspect_ratio := width_f / height_f;
+		width, height : f32 = aspect_ratio, 1.0;
+
+		render.target_begin(&w.plot_framebuffer, color_theme.plot_bg_color);
+			plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
+			defer delete(x_callout);
+			defer delete(y_callout);
+			
+			switch p in plot_res {
+				case Plot_data:
+					for l in p.lines {
+						
+					}
+					for t in p.texts {
+						
+					}
+			}
+		render.target_end();
+
+		cam_2d : render.Camera2D = {
+			position		= {width / 2, height / 2},
+			target_relative	= {width / 2, height / 2},
+			rotation		= 0,
+			zoom 			= 2,
+			near 			= -1,
+			far 			= 1,
+		};
+
+		inner_plot_position, lines, texts := get_callout_info(plot_res, target_size, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
+		defer {
+			delete(lines);
+			
+			for t in texts {
+				delete(t.value);
+			}
+			delete(texts);
+		}
+
+		render.pipeline_begin(draw_pipeline, cam_2d);
+			
+			//it was using direct draw, so draw whatever is in the texture.
+			render.frame_buffer_blit_color_attach_to_texture(&w.plot_framebuffer, 0, w.plot_texture);					
+			render.set_texture(.texture_diffuse, w.plot_texture);
+			render.draw_quad_rect(inner_plot_position, 0);
+			
+			render.set_texture(.texture_diffuse, render.texture2D_get_white());
+			for l in lines {
+				render.draw_line_2D(l.a, l.b, l.thickness, 0, l.color);
+			}
+			
+		render.pipeline_end();
+		
+		for t in texts {
+			render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
+		}
+		*/		
 	}
 	
 	destroy :: proc(data : rawptr) {
