@@ -1,4 +1,4 @@
-package gui;
+package regui;
 
 import "core:fmt"
 import "core:strings"
@@ -12,6 +12,7 @@ import "core:slice"
 
 import "core:time" //Temp
 
+import "regui_base" //Temp
 import render "../render"
 import utils "../utils"
 
@@ -23,14 +24,14 @@ You likely want to use a label or a panel.
 */
 
 make_rect :: proc (parent : Parent, dest : Destination, show : bool = true, tooltip : Tooltip = nil,
-					 appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Rect {
+					 appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Element {
 	
-	def_appearance, _, _, _ := get_appearences(parent, appearance, nil, nil, nil);
+	def_appearance, _, _, _ := regui_base.get_appearences(parent, appearance, nil, nil, nil);
 	
 	element : Rect_info = {}
 	
 	container : Element_container = {
-		element = element,
+		element_info = element,
 		dest = dest,
 		is_showing = show,
 		is_selected = false,
@@ -44,23 +45,23 @@ make_rect :: proc (parent : Parent, dest : Destination, show : bool = true, tool
 		}
 	}
 
-	return auto_cast element_make(parent, container, loc);
+	return auto_cast regui_base.element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// BUTTON ////////////////////////////////////////////////////////////// 
 
-button_is_hover :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(auto_cast button, Button_info, loc);
+button_is_hover :: proc (button : Element, loc := #caller_location) -> bool {
+	info, container := regui_base.element_get(auto_cast button, Button_info, loc);
 	return container.is_hover;
 }
 
-button_is_selected :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(auto_cast button, Button_info, loc);
+button_is_selected :: proc (button : Element, loc := #caller_location) -> bool {
+	info, container := regui_base.element_get(auto_cast button, Button_info, loc);
 	return container.is_selected;
 }
 
-button_is_pressed :: proc (button : Button, loc := #caller_location) -> bool {
-	info, container := element_get(auto_cast button, Button_info, loc);
+button_is_pressed :: proc (button : Element, loc := #caller_location) -> bool {
+	info, container := regui_base.element_get(auto_cast button, Button_info, loc);
 	return container.is_active;
 }
 
@@ -68,9 +69,9 @@ button_is_pressed :: proc (button : Button, loc := #caller_location) -> bool {
 //Clicked may be nil
 //The text is copied, so you can delete it when wanted.
 make_button :: proc (parent : Parent, dest : Destination, text : string, clicked : ^bool, show : bool = true, tooltip : Tooltip = nil,
-		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Button {
+		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Element {
 	
-	def_appearance, hov_appearance, sel_appearance, act_appearance := get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
+	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
 	
 	element : Button_info = {
 		clicked = clicked,
@@ -78,7 +79,7 @@ make_button :: proc (parent : Parent, dest : Destination, text : string, clicked
 	}
 	
 	container : Element_container = {
-		element = element,
+		element_info = element,
 		dest = dest,
 		is_showing = show,
 		is_selected = false,
@@ -92,30 +93,30 @@ make_button :: proc (parent : Parent, dest : Destination, text : string, clicked
 		}
 	}
 	
-	return auto_cast element_make(parent, container, loc);
+	return auto_cast regui_base.element_make(parent, container, loc);
 }
 
 /////////////////////////////////////////////////////////////// CHECKBOX /////////////////////////////////////////////////////////////// 
 
-checkbox_is_hover :: proc (checkbox : Checkbox, loc := #caller_location) -> bool {
-	info, container := element_get(auto_cast checkbox, Checkbox_info, loc);
+checkbox_is_hover :: proc (checkbox : Element, loc := #caller_location) -> bool {
+	info, container := regui_base.element_get(auto_cast checkbox, Checkbox_info, loc);
 	return container.is_hover;
 }
 
-checkbox_is_selected :: proc (checkbox : Checkbox, loc := #caller_location) -> bool {
-	info, container := element_get(auto_cast checkbox, Checkbox_info, loc);
+checkbox_is_selected :: proc (checkbox : Element, loc := #caller_location) -> bool {
+	info, container := regui_base.element_get(auto_cast checkbox, Checkbox_info, loc);
 	return container.is_active;
 }
 
-checkbox_is_checked :: proc (checkbox : Checkbox, loc := #caller_location) -> bool {
-	info, container := element_get(auto_cast checkbox, Checkbox_info, loc);
+checkbox_is_checked :: proc (checkbox : Element, loc := #caller_location) -> bool {
+	info, container := regui_base.element_get(auto_cast checkbox, Checkbox_info, loc);
 	return info.checked;
 }
 
 make_checkbox :: proc (parent : Parent, dest : Destination, initial_checked : bool, checked : ^bool, show : bool = true, tooltip : Tooltip = nil,
-		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Button {
+		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Element {
 	
-	def_appearance, hov_appearance, sel_appearance, act_appearance := get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
+	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
 	
 	element : Checkbox_info = {
 		checked = initial_checked,
@@ -123,7 +124,7 @@ make_checkbox :: proc (parent : Parent, dest : Destination, initial_checked : bo
 	}
 	
 	container : Element_container = {
-		element = element,
+		element_info = element,
 		dest = dest,
 		is_showing = show,
 		is_selected = false,
@@ -137,22 +138,22 @@ make_checkbox :: proc (parent : Parent, dest : Destination, initial_checked : bo
 		}
 	}
 
-	return auto_cast element_make(parent, container, loc);
+	return auto_cast regui_base.element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// LABEL ////////////////////////////////////////////////////////////// 
 
 make_label :: proc (parent : Parent, dest : Destination, text : string, show : bool = true, tooltip : Tooltip = nil,
-		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Button {
+		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Element {
 	
-	def_appearance, hov_appearance, sel_appearance, act_appearance := get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
+	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
 	
 	element : Label_info = {
 		text = strings.clone(text),
 	}
 	
 	container : Element_container = {
-		element = element,
+		element_info = element,
 		dest = dest,
 		is_showing = show,
 		is_selected = false,
@@ -166,15 +167,15 @@ make_label :: proc (parent : Parent, dest : Destination, text : string, show : b
 		}
 	}
 
-	return auto_cast element_make(parent, container, loc);
+	return auto_cast regui_base.element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// SLIDER ////////////////////////////////////////////////////////////// 
 
 make_slider :: proc (parent : Parent, dest : Destination, init_value, min_value, max_value : f32, value : ^f32, show : bool = true, tooltip : Tooltip = nil,
-		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Button {
+		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Element {
 	
-	def_appearance, hov_appearance, sel_appearance, act_appearance := get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
+	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
 	
 	element : Slider_info = {
 		min_val = min_value,
@@ -184,7 +185,7 @@ make_slider :: proc (parent : Parent, dest : Destination, init_value, min_value,
 	}
 	
 	container : Element_container = {
-		element = element,
+		element_info = element,
 		dest = dest,
 		is_showing = show,
 		is_selected = false,
@@ -198,15 +199,15 @@ make_slider :: proc (parent : Parent, dest : Destination, init_value, min_value,
 		}
 	}
 
-	return auto_cast element_make(parent, container, loc);
+	return auto_cast regui_base.element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// INT SLIDER ////////////////////////////////////////////////////////////// 
 
 make_int_slider :: proc (parent : Parent, dest : Destination, init_value, min_value, max_value : int, value : ^int, show : bool = true, tooltip : Tooltip = nil,
-		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Button {
+		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Element {
 	
-	def_appearance, hov_appearance, sel_appearance, act_appearance := get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
+	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
 	
 	element : Int_slider_info = {
 		min_val = min_value,
@@ -216,7 +217,7 @@ make_int_slider :: proc (parent : Parent, dest : Destination, init_value, min_va
 	}
 	
 	container : Element_container = {
-		element = element,
+		element_info = element,
 		dest = dest,
 		is_showing = show,
 		is_selected = false,
@@ -230,17 +231,15 @@ make_int_slider :: proc (parent : Parent, dest : Destination, init_value, min_va
 		}
 	}
 
-	return auto_cast element_make(parent, container, loc);
+	return auto_cast regui_base.element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// TEXT FEILD ////////////////////////////////////////////////////////////// 
 
 make_text_field :: proc (parent : Parent, dest : Destination, init_text : string, bg_text : string, max_rune_length : int, text_res : ^string, show : bool = true, tooltip : Tooltip = nil,
-		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Button {
+		appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Element {
 	
-	def_appearance, hov_appearance, sel_appearance, act_appearance := get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
-	
-	fmt.printf("def_appearance : %#v\n", def_appearance);
+	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
 	
 	element : Text_field_info = {
 		max_rune_cnt = nil,
@@ -254,7 +253,7 @@ make_text_field :: proc (parent : Parent, dest : Destination, init_text : string
 	element.runes = slice.to_dynamic(utf8.string_to_runes(init_text));
 	
 	container : Element_container = {
-		element = element,
+		element_info = element,
 		dest = dest,
 		is_showing = show,
 		stay_selected = true,
@@ -267,8 +266,8 @@ make_text_field :: proc (parent : Parent, dest : Destination, init_text : string
 			active = act_appearance,
 		}
 	}
-
-	return auto_cast element_make(parent, container, loc);
+	
+	return auto_cast regui_base.element_make(parent, container, loc);
 }
 
 ////////////////////////////////////////////////////////////// PANEL ////////////////////////////////////////////////////////////// 
@@ -276,14 +275,14 @@ make_text_field :: proc (parent : Parent, dest : Destination, init_text : string
 make_panel :: proc (parent : Parent, dest : Destination, show : bool = true, tooltip : Tooltip = nil,
 					appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil, active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> Panel {
 	
-	def_appearance, hov_appearance, sel_appearance, act_appearance := get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
+	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, hover_appearance, selected_appearance, active_appearance);
 	
 	element : Panel_info = {
 		
 	}
 	
 	container : Element_container = {
-		element = element,
+		element_info = element,
 		dest = dest,
 		is_showing = show,
 		is_selected = false,
@@ -297,7 +296,7 @@ make_panel :: proc (parent : Parent, dest : Destination, show : bool = true, too
 		}
 	}
 
-	return auto_cast element_make(parent, container, loc);
+	return auto_cast regui_base.element_make(parent, container, loc);
 }
 
 

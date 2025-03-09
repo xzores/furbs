@@ -1,4 +1,4 @@
-package gui;
+package regui;
 
 import "core:fmt"
 import "core:strings"
@@ -18,11 +18,11 @@ import utils "../utils"
 
 create_panel_from_struct :: proc (value : ^$T, parent : Parent, dest : Destination, show : bool = true, tooltip : Tooltip = nil,
 			appearance : Maybe(Appearance) = nil, hover_appearance : Maybe(Appearance) = nil, selected_appearance : Maybe(Appearance) = nil,
-			active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> (panel : Panel) where intrinsics.type_is_struct(T)
+			active_appearance : Maybe(Appearance) = nil, loc := #caller_location) -> (panel : Element) where intrinsics.type_is_struct(T)
 {
 	
 	
-	
-	return {};
+	//return {};
+	panic("TODO");	
 }
 		

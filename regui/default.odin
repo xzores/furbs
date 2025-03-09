@@ -1,4 +1,4 @@
-package gui;
+package regui;
 
 import render "../render"
 

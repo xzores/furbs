@@ -1,8 +1,10 @@
+#+feature dynamic-literals
 package plot;
 
 import "../render"
 import fs "../fontstash"
-import gui "../regui"
+import "../regui"
+import "../regui/regui_base"
 import haru "../libharu"
 
 import "core:time"
@@ -60,6 +62,9 @@ Magnetude_representation :: enum {
 }
 
 Plot_xy :: struct {
+	plot_framebuffer : render.Frame_buffer,
+	plot_texture : render.Texture2D,
+	
 	traces : []Trace,
 	
 	//plot_desc : 
@@ -76,20 +81,17 @@ Plot_xy :: struct {
 	log_x : Log_style,
 	log_y : Log_style,
 	
-	top_bar : gui.Panel,
+	top_panel : regui.Panel, //This is a panel
 }
 
 Plot_type :: union {
 	Plot_xy,
-};
+}
 
 Plot_window :: struct {
 	window : ^render.Window,
-	plot_type : Plot_type,
-	gui_state : gui.Scene,
-	
-	plot_framebuffer : render.Frame_buffer,
-	plot_texture : render.Texture2D,
+	plots : [dynamic]Plot_type,
+	gui_state : regui.Scene,
 }
 
 Light_mode :: enum {
@@ -101,7 +103,6 @@ plot_bg_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0.2, 0.2, 0.2, 1}, 	
 base_colors : [Light_mode][4]f32 = 		{.dark_mode = [4]f32{0.17, 0.17, 0.17, 1}, 	.bright_mode = [4]f32{1, 1, 1, 1}};
 inverse_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0.8, 0.8, 0.8, 1}, 	.bright_mode = [4]f32{0, 0, 0, 1}};
 backdrop_colors : [Light_mode][4]f32 = 	{.dark_mode = [4]f32{0, 0, 0, 1}, 			.bright_mode = [4]f32{1, 1, 1, 1}};
-
 
 default_trace_colors := [?][4]f32{
 	[4]f32{0.9, 0.2, 0.2, 1},
@@ -116,7 +117,6 @@ default_trace_colors := [?][4]f32{
 	[4]f32{0.5, 0.2, 0.9, 1},
 	[4]f32{0.9, 0.9, 0.2, 1},
 };
-
 
 Span :: struct(T : typeid) {
 	begin : T,
@@ -285,7 +285,8 @@ destroy_signals :: proc (signals : []Signal, loc := #caller_location) {
 	delete(signals);
 }
 
-xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
+//Will not create a window, it will jst return the xy_plot struct
+make_xy_plot :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> Plot_xy {
 	assert(len(signals) != 0, "No signals given", loc);
 	
 	traces := make([]Trace, len(signals));
@@ -357,6 +358,11 @@ xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : M
 	}
 	
 	pt := Plot_xy{
+		//{}, //Framebuffer
+		//{}, //Texture
+		render.frame_buffer_make_render_buffers({.RGBA8}, 1, 1, 16, .depth_component32, loc = loc),
+		render.texture2D_make(false, .clamp_to_edge, .nearest, .RGBA8, 1, 1, .no_upload, nil, loc = loc),
+		
 		traces,															//Y coord
 		Grid_desc{line_width = 0.001, color = {0.5, 0.5, 0.5, 0.5}}, 	//Grid desc
 		[2]Maybe(Axis_desc){nil, nil},
@@ -364,18 +370,51 @@ xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : M
 		_y_label,
 		_title,
 		display_range_x,								//x_view
-		display_range_y,						//y_view
+		display_range_y,								//y_view
 		x_log,
 		y_log,
 		{},																//Top bar panel
 	}
 	
-	window := make_plot_window(pt);
-	
-	return window;
+	return pt;
 }
 
-xy_plot :: proc (signal : Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> ^Plot_window {
+destroy_plot :: proc (p : Plot_type) {
+	
+	switch plot in p {
+		case Plot_xy: {
+			render.frame_buffer_destroy(plot.plot_framebuffer);
+			render.texture2D_destroy(plot.plot_texture);
+			
+			for t in plot.traces {
+				delete(t.abscissa)
+				delete(t.ordinate)
+			}
+			
+			delete(plot.traces);
+			
+			delete(plot.x_label);
+			delete(plot.y_label);
+			delete(plot.title);
+			
+			//top_bar : regui_base.Panel,
+			//top_bar : regui_base.Panel,
+		}
+	}
+	
+}
+
+//Will create a window and display. A const view is returned, can be used to export as PDF 
+xy_plots :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> Plot_xy {
+	
+	pt := make_xy_plot(signals, x_label, y_label, title, x_range, y_range, x_log, y_log, loc);
+	window := make_plot_window(pt);
+	
+	return pt;
+}
+
+//Will create a window and display. A const view is returned, can be used to export as PDF 
+xy_plot :: proc (signal : Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> Plot_xy {
 	return xy_plots({signal}, x_label, y_label, title, x_range, y_range, x_log, y_log, loc);
 }
 
@@ -424,7 +463,7 @@ trig_dft :: proc (signal : Signal, use_hertz := true, loc := #caller_location) {
 
 bodes :: proc (signals : []Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_log := true, y_log := true, representation : Magnetude_representation = .amplitude,
 				 y_unit : Maybe(string) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_view_range : Maybe([2]f64) = nil,
-				 	 y_view_range : Maybe([2]f64) = nil, freq_resolution : Maybe(f64) = nil, loc := #caller_location) -> ^Plot_window {
+				 	 y_view_range : Maybe([2]f64) = nil, freq_resolution : Maybe(f64) = nil, loc := #caller_location) -> Plot_xy {
 	
 	to_plot : [dynamic]Signal;
 	//defer delete(to_plot);
@@ -530,7 +569,7 @@ bodes :: proc (signals : []Signal, use_hertz := true, range : Maybe([2]f64) = ni
 
 bode :: proc (signal : Signal, use_hertz := true, range : Maybe([2]f64) = nil, x_log := true, y_log := true, representation : Magnetude_representation = .amplitude,
 				y_unit : Maybe(string) = nil, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_view_range : Maybe([2]f64) = nil,
-				y_view_range : Maybe([2]f64) = nil, freq_resolution : Maybe(f64) = nil, loc := #caller_location) -> ^Plot_window {
+				y_view_range : Maybe([2]f64) = nil, freq_resolution : Maybe(f64) = nil, loc := #caller_location) -> Plot_xy {
 	
 	return bodes({signal}, use_hertz, range, x_log, y_log, representation, y_unit, x_label, y_label, title, x_view_range, y_view_range, freq_resolution, loc);
 }
@@ -646,6 +685,58 @@ get_callout_info :: proc (plot_res : Plot_result, target_size : [2]i32, pv_pos, 
 	return inner_plot_placement, _lines[:], _texts[:];
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destination, plot : Plot_type, show : bool = true, appearance : Maybe(regui_base.Appearance) = nil, loc := #caller_location) -> regui_base.Element {
+	
+	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, appearance, appearance, appearance);
+	
+	Gui_plot_data :: struct {
+		
+	}
+	
+	update :: proc(data : rawptr) {
+		data := cast(^Gui_plot_data)data;
+		
+	}
+	
+	draw :: proc(data : rawptr) {
+		data := cast(^Gui_plot_data)data;
+		fmt.printf("DRAWing\n");
+	}
+	
+	destroy :: proc(data : rawptr) {
+		data := cast(^Gui_plot_data)data;
+		free(data);
+	}
+	
+	data := new(Gui_plot_data);
+	
+	element : regui_base.Custom_info = {
+		update_call 	= update,
+		draw_call 		= draw,
+		destroy_call	= destroy,
+		custom_data 	= data,
+	}
+	
+	container : regui_base.Element_container = {
+		element_info = element,
+		dest = dest,
+		is_showing = show,
+		is_selected = false,
+		stay_selected = false,
+		tooltip = nil,
+		style = {
+			default = def_appearance,
+			hover = hov_appearance,
+			selected = sel_appearance,
+			active = act_appearance,
+		}
+	}
+
+	return auto_cast regui_base.element_make(parent, container, loc);	
+}
+
 plot_windows : [dynamic]^Plot_window;
 
 //Pauses execution until all windows are closed, and continuesly updates the windows.
@@ -687,80 +778,14 @@ hold :: proc (color_theme := default_color_theme) {
 			
 			draw_pipeline := render.pipeline_make(render.get_default_shader(), depth_test = false);
 			
-			target_size : [2]i32 = {w.window.width, w.window.height};
-			
-			assert(w.plot_framebuffer.id != 0, "frambuffer is nil");
-			if w.plot_framebuffer.width != target_size.x || w.plot_framebuffer.height != target_size.y {
-				render.frame_buffer_resize(&w.plot_framebuffer, target_size);
-				render.texture2D_resize(&w.plot_texture, target_size);
-			}
-			
-			//Calculate normalized space coordinates.
-			width_i, height_i := render.get_render_target_size(&w.plot_framebuffer);
-			width_f, height_f := cast(f32)width_i, cast(f32)height_i;
-			aspect_ratio := width_f / height_f;
-			width, height : f32 = aspect_ratio, 1.0;
-			
-			render.target_begin(&w.plot_framebuffer, color_theme.plot_bg_color);
-				plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
-				defer delete(x_callout);
-				defer delete(y_callout);
-				
-				switch p in plot_res {
-					case Plot_data:
-						for l in p.lines {
-							
-						}
-						for t in p.texts {
-							
-						}
-				}
-			render.target_end();
-			
-			cam_2d : render.Camera2D = {
-				position		= {width / 2, height / 2},
-				target_relative	= {width / 2, height / 2},
-				rotation		= 0,
-				zoom 			= 2,
-				near 			= -1,
-				far 			= 1,
-			};
-			
-			inner_plot_position, lines, texts := get_callout_info(plot_res, target_size, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
-			defer {
-				delete(lines);
-				
-				for t in texts {
-					delete(t.value);
-				}
-				delete(texts);
-			}
-			
 			render.target_begin(w.window, color_theme.base_color);
-				render.pipeline_begin(draw_pipeline, cam_2d);
-					
-					//it was using direct draw, so draw whatever is in the texture.
-					render.frame_buffer_blit_color_attach_to_texture(&w.plot_framebuffer, 0, w.plot_texture);					
-					render.set_texture(.texture_diffuse, w.plot_texture);
-					render.draw_quad_rect(inner_plot_position, 0);
-					
-					render.set_texture(.texture_diffuse, render.texture2D_get_white());
-					for l in lines {
-						render.draw_line_2D(l.a, l.b, l.thickness, 0, l.color);
-					}
-					
-				render.pipeline_end();
-				
-				for t in texts {
-					render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
-				}
-				
+								
 				//Draw the plot texture to the gui panel
-				gui.begin(&w.gui_state, w.window);
+				regui.begin(&w.gui_state, w.window);
 				
 				//TODO make the plot drawn as a gui element instead of emitiate mode.
 				
-				gui.end(&w.gui_state);
+				regui.end(&w.gui_state);
 			render.target_end();
 		}
 		
@@ -836,7 +861,7 @@ export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 10
 		
 		render.begin_frame();
 			render.target_begin(&plot_framebuffer, color_theme.plot_bg_color);
-				plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&plot, width_i, height_i, false);
+				plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&plot.(Plot_xy), width_i, height_i, false);
 				defer delete(x_callout);
 				defer delete(y_callout);
 			render.target_end();
@@ -910,39 +935,24 @@ export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 10
 	os.remove("temp_LinLibertine_R.ttf");
 }
 
-export_pdf_from_window :: proc(plot : ^Plot_window, save_location : string, color_theme := light_color_theme, width : Maybe(i32) = nil, height : Maybe(i32) = nil, loc := #caller_location) {
-	
-	w, h := plot.window.width, plot.window.height;
-	
-	if v, ok := width.?; ok {
-		w = v;
-	}
-	
-	if v, ok := height.?; ok {
-		h = v;
-	}
-	
-	export_pdf(plot.plot_type, save_location, w, h, color_theme, loc);
-}
-
 destroy_plot_window :: proc (w : ^Plot_window) {
 	render.window_destroy(w.window);
-	render.frame_buffer_destroy(w.plot_framebuffer);
-	gui.destroy(&w.gui_state);
+	regui.destroy(&w.gui_state);
 	
-	switch p in w.plot_type {
-		case Plot_xy:
-			for t in p.traces {
-				delete(t.abscissa);
-				delete(t.ordinate);
-			}
-			delete(p.traces)
-			delete(p.x_label);
-			delete(p.y_label);
-			delete(p.title);
+	for plot in w.plots {
+		switch p in plot {
+			case Plot_xy:
+				for t in p.traces {
+					delete(t.abscissa);
+					delete(t.ordinate);
+				}
+				delete(p.traces)
+				delete(p.x_label);
+				delete(p.y_label);
+				delete(p.title);
+		}
 	}
 	
-	render.texture2D_destroy(w.plot_texture);
 	free(w);
 	
 	for win, i in plot_windows {
@@ -1166,11 +1176,11 @@ make_plot_window :: proc (pt : Plot_type, loc := #caller_location) -> ^Plot_wind
 	
 	pw^ = Plot_window {
 		w,
-		pt,
-		gui.init(),
-		render.frame_buffer_make_render_buffers({.RGBA8}, w.width, w.height, 16, .depth_component32, loc = loc),
-		render.texture2D_make(false, .clamp_to_edge, .nearest, .RGBA8, w.width, w.height, .no_upload, nil),
+		make([dynamic]Plot_type),
+		regui.init(),
 	}
+	
+	append_elem(&pw.plots, pt, loc = loc);
 	
 	append_elem(&plot_windows, pw, loc = loc);
 	
@@ -1213,3 +1223,74 @@ ensure_render_init :: proc (loc := #caller_location) {
 }
 
 
+
+/*
+
+target_size : [2]i32 = {w.window.width, w.window.height};
+			
+assert(w.plot_framebuffer.id != 0, "frambuffer is nil");
+if w.plot_framebuffer.width != target_size.x || w.plot_framebuffer.height != target_size.y {
+	render.frame_buffer_resize(&w.plot_framebuffer, target_size);
+	render.texture2D_resize(&w.plot_texture, target_size);
+}
+
+//Calculate normalized space coordinates.
+width_i, height_i := render.get_render_target_size(&w.plot_framebuffer);
+width_f, height_f := cast(f32)width_i, cast(f32)height_i;
+aspect_ratio := width_f / height_f;
+width, height : f32 = aspect_ratio, 1.0;
+
+render.target_begin(&w.plot_framebuffer, color_theme.plot_bg_color);
+	plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
+	defer delete(x_callout);
+	defer delete(y_callout);
+	
+	switch p in plot_res {
+		case Plot_data:
+			for l in p.lines {
+				
+			}
+			for t in p.texts {
+				
+			}
+	}
+render.target_end();
+
+cam_2d : render.Camera2D = {
+	position		= {width / 2, height / 2},
+	target_relative	= {width / 2, height / 2},
+	rotation		= 0,
+	zoom 			= 2,
+	near 			= -1,
+	far 			= 1,
+};
+
+inner_plot_position, lines, texts := get_callout_info(plot_res, target_size, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
+defer {
+	delete(lines);
+	
+	for t in texts {
+		delete(t.value);
+	}
+	delete(texts);
+}
+
+
+	render.pipeline_begin(draw_pipeline, cam_2d);
+		
+		//it was using direct draw, so draw whatever is in the texture.
+		render.frame_buffer_blit_color_attach_to_texture(&w.plot_framebuffer, 0, w.plot_texture);					
+		render.set_texture(.texture_diffuse, w.plot_texture);
+		render.draw_quad_rect(inner_plot_position, 0);
+		
+		render.set_texture(.texture_diffuse, render.texture2D_get_white());
+		for l in lines {
+			render.draw_line_2D(l.a, l.b, l.thickness, 0, l.color);
+		}
+		
+	render.pipeline_end();
+	
+	for t in texts {
+		render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
+	}
+*/

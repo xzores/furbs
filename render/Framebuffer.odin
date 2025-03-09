@@ -93,7 +93,7 @@ frame_buffer_make_render_buffers :: proc (color_formats : []Color_format, width,
 	assert(height != 0, "height is 0", loc);
 	
 	fbo = Frame_buffer{
-		id 				= gl.gen_frame_buffer(),
+		id 				= gl.gen_frame_buffer(loc),
 		width			= width,
 		height			= height,
 		is_color_attachment_texture = false,
@@ -119,7 +119,7 @@ frame_buffer_make_render_buffers :: proc (color_formats : []Color_format, width,
 	
 	//setup depth buffer
 	{
-		depth_buf := gl.gen_render_buffer();
+		depth_buf := gl.gen_render_buffer(loc);
 		depth_samples := gl.associate_depth_render_buffer_with_frame_buffer(fbo.id, depth_buf, width, height, samples_hint, auto_cast depth_format)
 		assert(fbo.samples == depth_samples, "inconsistent FBO samples", loc = loc); 
 

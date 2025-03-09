@@ -8,7 +8,7 @@ import "core:testing"
 test_seri_deseri_dyn_arr :: proc (t : ^testing.T) {
 
 	My_test_struct :: struct {
-		data : [dynamic]u8,
+		data : []u8,
 	}
 
 	my_test_struct : My_test_struct = {data = {1,2,3,4,5,10,20,30,40,50,60,70,80,90}};

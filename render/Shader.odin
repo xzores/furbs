@@ -1,4 +1,5 @@
-package render;
+#+feature dynamic-literals
+package render
 
 import "core:fmt"
 import "core:reflect"

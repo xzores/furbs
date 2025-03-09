@@ -167,7 +167,7 @@ get_callout_lines_log :: proc (min_view, max_view : f64, grid_cnt : int, base : 
 	return callout_dyn;
 }
 
-plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state_change : bool) -> 
+plot_inner :: proc (p : ^Plot_xy, width_i, height_i : i32, allow_state_change : bool) -> 
 		(res : Plot_result, pv_pos, pv_size : [2]f32, x_view, y_view : [2]f64, x_callout, y_callout : []Callout_line, x_label, y_label, title : string) {
 	
 	//Calculate normalized space coordinates.
@@ -176,7 +176,6 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 	width, height : f32 = aspect_ratio, 1.0;
 	
 	res = nil;
-	
 	{
 		instanced_pipeline := render.pipeline_make(render.get_default_instance_shader(), depth_test = false);
 		defer render.pipeline_destroy(instanced_pipeline);
@@ -190,226 +189,221 @@ plot_inner :: proc (plot_type : ^Plot_type, width_i, height_i : i32, allow_state
 			far 			= 1,
 		};
 		
-		//Draw the polt to the plot_texture
-		switch &p in plot_type {
-			case Plot_xy:
-				
-				//handle export variables
-				{
-					
-					x_label = p.x_label;
-					y_label = p.y_label;
-					title = p.title;
-					
-					//plot view
-					pv_pos = {0.20, 0.10};
-					size : [2]f32 = {0.75, 0.82};
-					pv_size = {width - (1.0 - size.x), height - (1.0 - size.y)};
-					
-					//inner view
-					x_view = p.x_view;
-					y_view = p.y_view;
+		//handle export variables
+		{
+			
+			x_label = p.x_label;
+			y_label = p.y_label;
+			title = p.title;
+			
+			//plot view
+			pv_pos = {0.20, 0.10};
+			size : [2]f32 = {0.75, 0.82};
+			pv_size = {width - (1.0 - size.x), height - (1.0 - size.y)};
+			
+			//inner view
+			x_view = p.x_view;
+			y_view = p.y_view;
 
-				}
-				
-				//handle input and change state
-				if allow_state_change {
-					
-					//TODO handle this differently we are in log mode.
-					if render.is_button_down(.middel) {
-						md := render.mouse_delta();
-						
-						total_x : f32 = cast(f32)(p.x_view[1] - p.x_view[0]);
-						total_y : f32 = cast(f32)(p.y_view[1] - p.y_view[0]);
-						p.x_view -= cast(f64)((total_x / pv_size.x) * (md.x / height_f));
-						p.y_view += cast(f64)((total_y / pv_size.y) * (md.y / height_f));
-					}
-					
-					//TODO handle this differently we are in log mode.
-					{
-						scroll_delta := render.scroll_delta();
-						
-						total_x : f64 = cast(f64)(p.x_view[1] - p.x_view[0]);
-						total_y : f64 = cast(f64)(p.y_view[1] - p.y_view[0]);
-						
-						d : f64 = -0.02 * cast(f64)scroll_delta.y;
-						
-						if !render.is_key_down(.shift_left) {
-							p.x_view = p.x_view + d * [2]f64{-total_x, total_x};
-						}
-						if !render.is_key_down(.control_left) {
-							p.y_view = p.y_view + d * [2]f64{-total_y, total_y};
-						}
-					}
-					
-					if render.is_key_down(.r) {
-						xlow, xhigh, ylow, yhigh : f64 = max(f64), min(f64), max(f64), min(f64);
-						for trace in p.traces {
-							xl, xh := get_extremes(trace.abscissa);
-							yl, yh := get_extremes(trace.ordinate);
-							xlow = 	math.min(xlow, xl);
-							xhigh = math.max(xhigh, xh);
-							ylow = 	math.min(ylow, yl);
-							yhigh = math.max(yhigh, yh);
-						}
-						
-						total_y := yhigh - ylow;
-						
-						p.x_view = {xlow, xhigh};
-						p.y_view = {ylow - 0.1 * total_y, yhigh + 0.1 * total_y};
-					}
-				}
-				
-				if p.log_x != .no_log {
-					p.x_view[0] = math.max(p.x_view[0], 1e-15);
-				}				
-				p.x_view[1] = math.max(p.x_view[0] + 1e-15, p.x_view[1]);
-				
-				if p.log_y != .no_log {
-					p.y_view[0] = math.max(p.y_view[0], 1e-15);
-				}
-				p.y_view[1] = math.max(p.y_view[0] + 1e-15, p.y_view[1]);
-				
-				//Callouts
-				{
-					grid_cnt := [2]f64{5.0 * cast(f64)width, 12 * cast(f64)height};
-					
-					switch p.log_x {
-						case .no_log:
-							x_callout = get_callout_lines_linear(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x)[:];
-						case .base10:
-							x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, 10)[:];
-						case .base_2:
-							x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, 2)[:];
-						case .base_ln:
-							x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, math.e)[:];
-					}
-					
-					switch p.log_y {
-						case .no_log:
-							y_callout = get_callout_lines_linear(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y)[:];
-						case .base10:
-							y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, 10)[:];
-						case .base_2:
-							y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, 2)[:];
-						case .base_ln:
-							y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, math.e)[:];
-					}
-				}
-				
-				//Plot the inner plot
-				{
-					render.pipeline_begin(instanced_pipeline, cam_2d);
-						render.set_texture(.texture_diffuse, render.texture2D_get_white());
-						
-						grid_line_width := p.grid_desc.line_width * min(width, height);
-						
-						call_draw_data := make([]render.Default_instance_data, len(x_callout) + len(y_callout), allocator = context.temp_allocator);
-						i : int = 0;
-						for call in x_callout {
-							x : f32 = cast(f32)call.placement * width;
-							trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({x,0}, {x,height}, grid_line_width);
-							
-							call_draw_data[i] = render.Default_instance_data {
-									instance_position 	= trans,
-									instance_scale 		= scale,
-									instance_rotation 	= rot, //Euler rotation
-									instance_tex_pos_scale 	= {},
-							};
-							i += 1;
-						}
-						for call in y_callout {
-							y : f32 = cast(f32)call.placement * height;
-							trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({0,y}, {width,y}, grid_line_width);
-							
-							call_draw_data[i] = render.Default_instance_data {
-									instance_position 	= trans,
-									instance_scale 		= scale,
-									instance_rotation 	= rot, //Euler rotation
-									instance_tex_pos_scale 	= {},
-							};
-							i += 1;
-						}
-						
-						render.draw_quad_instanced(call_draw_data[:], p.grid_desc.color, offset = {0.5, 0, 0});
-						
-						line_width := 0.005 * min(width, height);
-						
-						for trace, it in p.traces {
-							using trace;
-							
-							trace_draw_data := make([]render.Default_instance_data, len(trace.abscissa), allocator = context.temp_allocator);
-							color, marker_style := get_trace_info(it);
-							
-							//TODO draw_quad_instanced();
-							assert(len(abscissa) != 0, "The signal is empty");
-							fmt.assertf(len(abscissa) == len(ordinate), "The x and y does not have same length. x length is %v, y length is %v", len(abscissa), len(ordinate));
-							
-							_, max_x_val := get_extremes(abscissa);
-							_, max_y_val := get_extremes(ordinate);
-							
-							for e, i in ordinate[:len(ordinate)-1] {
-								x_coor1 := abscissa[i];
-								x_coor2 := abscissa[i+1];
-								
-								y_coor1 := cast(f64)e;
-								y_coor2 := cast(f64)ordinate[i+1];
-								
-								switch p.log_x {
-									case .no_log:
-										//do nothing
-									case .base10:
-										x_coor1 = math.log10(x_coor1);
-										x_coor2 = math.log10(x_coor2);
-									case .base_2:
-										x_coor1 = math.log2(x_coor1);
-										x_coor2 = math.log2(x_coor2);
-									case .base_ln:
-										x_coor1 = math.ln(x_coor1);
-										x_coor2 = math.ln(x_coor2);
-								}
-								
-								/*
-								switch p.log_y {
-									case .no_log:
-										//do nothing
-									case .base10:
-										mult := max_y_val / math.log10(max_y_val);
-										y_coor1 = math.log10(y_coor1) * mult;
-										y_coor2 = math.log10(y_coor2) * mult;
-									case .base_2:
-										mult := max_y_val / math.log2(max_y_val);
-										y_coor1 = math.log2(y_coor1);
-										y_coor2 = math.log2(y_coor2);
-									case .base_ln:
-										mult := max_y_val / math.ln(max_y_val);
-										y_coor1 = math.ln(y_coor1);
-										y_coor2 = math.ln(y_coor2);
-								}
-								*/						
-								
-								x1 : f32 = cast(f32)((x_coor1 - x_view[0]) / (x_view[1] - x_view[0]));
-								x2 : f32 = cast(f32)((x_coor2 - x_view[0]) / (x_view[1] - x_view[0]));
-								y1 : f32 = cast(f32)((y_coor1 - y_view[0]) / (y_view[1] - y_view[0]));
-								y2 : f32 = cast(f32)((y_coor2 - y_view[0]) / (y_view[1] - y_view[0]));
-								
-								trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({x1 * width, y1 * height}, {x2 * width, y2 * height}, line_width, 0);
-								
-								trace_draw_data[i] = render.Default_instance_data {
-									instance_position 	= trans,
-									instance_scale 		= scale,
-									instance_rotation 	= rot, //Euler rotation
-									instance_tex_pos_scale 	= {},
-								};
-							}
-							
-							render.draw_quad_instanced(trace_draw_data[:], color, offset = {0.5, 0, 0});
-					}
-					render.pipeline_end();
-				}
-				
-				return;
 		}
+		
+		//handle input and change state
+		if allow_state_change {
+			
+			//TODO handle this differently we are in log mode.
+			if render.is_button_down(.middel) {
+				md := render.mouse_delta();
+				
+				total_x : f32 = cast(f32)(p.x_view[1] - p.x_view[0]);
+				total_y : f32 = cast(f32)(p.y_view[1] - p.y_view[0]);
+				p.x_view -= cast(f64)((total_x / pv_size.x) * (md.x / height_f));
+				p.y_view += cast(f64)((total_y / pv_size.y) * (md.y / height_f));
+			}
+			
+			//TODO handle this differently we are in log mode.
+			{
+				scroll_delta := render.scroll_delta();
+				
+				total_x : f64 = cast(f64)(p.x_view[1] - p.x_view[0]);
+				total_y : f64 = cast(f64)(p.y_view[1] - p.y_view[0]);
+				
+				d : f64 = -0.02 * cast(f64)scroll_delta.y;
+				
+				if !render.is_key_down(.shift_left) {
+					p.x_view = p.x_view + d * [2]f64{-total_x, total_x};
+				}
+				if !render.is_key_down(.control_left) {
+					p.y_view = p.y_view + d * [2]f64{-total_y, total_y};
+				}
+			}
+			
+			if render.is_key_down(.r) {
+				xlow, xhigh, ylow, yhigh : f64 = max(f64), min(f64), max(f64), min(f64);
+				for trace in p.traces {
+					xl, xh := get_extremes(trace.abscissa);
+					yl, yh := get_extremes(trace.ordinate);
+					xlow = 	math.min(xlow, xl);
+					xhigh = math.max(xhigh, xh);
+					ylow = 	math.min(ylow, yl);
+					yhigh = math.max(yhigh, yh);
+				}
+				
+				total_y := yhigh - ylow;
+				
+				p.x_view = {xlow, xhigh};
+				p.y_view = {ylow - 0.1 * total_y, yhigh + 0.1 * total_y};
+			}
+		}
+		
+		if p.log_x != .no_log {
+			p.x_view[0] = math.max(p.x_view[0], 1e-15);
+		}				
+		p.x_view[1] = math.max(p.x_view[0] + 1e-15, p.x_view[1]);
+		
+		if p.log_y != .no_log {
+			p.y_view[0] = math.max(p.y_view[0], 1e-15);
+		}
+		p.y_view[1] = math.max(p.y_view[0] + 1e-15, p.y_view[1]);
+		
+		//Callouts
+		{
+			grid_cnt := [2]f64{5.0 * cast(f64)width, 12 * cast(f64)height};
+			
+			switch p.log_x {
+				case .no_log:
+					x_callout = get_callout_lines_linear(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x)[:];
+				case .base10:
+					x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, 10)[:];
+				case .base_2:
+					x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, 2)[:];
+				case .base_ln:
+					x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, math.e)[:];
+			}
+			
+			switch p.log_y {
+				case .no_log:
+					y_callout = get_callout_lines_linear(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y)[:];
+				case .base10:
+					y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, 10)[:];
+				case .base_2:
+					y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, 2)[:];
+				case .base_ln:
+					y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, math.e)[:];
+			}
+		}
+		
+		//Plot the inner plot
+		{
+			render.pipeline_begin(instanced_pipeline, cam_2d);
+				render.set_texture(.texture_diffuse, render.texture2D_get_white());
+				
+				grid_line_width := p.grid_desc.line_width * min(width, height);
+				
+				call_draw_data := make([]render.Default_instance_data, len(x_callout) + len(y_callout), allocator = context.temp_allocator);
+				i : int = 0;
+				for call in x_callout {
+					x : f32 = cast(f32)call.placement * width;
+					trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({x,0}, {x,height}, grid_line_width);
+					
+					call_draw_data[i] = render.Default_instance_data {
+							instance_position 	= trans,
+							instance_scale 		= scale,
+							instance_rotation 	= rot, //Euler rotation
+							instance_tex_pos_scale 	= {},
+					};
+					i += 1;
+				}
+				for call in y_callout {
+					y : f32 = cast(f32)call.placement * height;
+					trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({0,y}, {width,y}, grid_line_width);
+					
+					call_draw_data[i] = render.Default_instance_data {
+							instance_position 	= trans,
+							instance_scale 		= scale,
+							instance_rotation 	= rot, //Euler rotation
+							instance_tex_pos_scale 	= {},
+					};
+					i += 1;
+				}
+				
+				render.draw_quad_instanced(call_draw_data[:], p.grid_desc.color, offset = {0.5, 0, 0});
+				
+				line_width := 0.005 * min(width, height);
+				
+				for trace, it in p.traces {
+					using trace;
+					
+					trace_draw_data := make([]render.Default_instance_data, len(trace.abscissa), allocator = context.temp_allocator);
+					color, marker_style := get_trace_info(it);
+					
+					//TODO draw_quad_instanced();
+					assert(len(abscissa) != 0, "The signal is empty");
+					fmt.assertf(len(abscissa) == len(ordinate), "The x and y does not have same length. x length is %v, y length is %v", len(abscissa), len(ordinate));
+					
+					_, max_x_val := get_extremes(abscissa);
+					_, max_y_val := get_extremes(ordinate);
+					
+					for e, i in ordinate[:len(ordinate)-1] {
+						x_coor1 := abscissa[i];
+						x_coor2 := abscissa[i+1];
+						
+						y_coor1 := cast(f64)e;
+						y_coor2 := cast(f64)ordinate[i+1];
+						
+						switch p.log_x {
+							case .no_log:
+								//do nothing
+							case .base10:
+								x_coor1 = math.log10(x_coor1);
+								x_coor2 = math.log10(x_coor2);
+							case .base_2:
+								x_coor1 = math.log2(x_coor1);
+								x_coor2 = math.log2(x_coor2);
+							case .base_ln:
+								x_coor1 = math.ln(x_coor1);
+								x_coor2 = math.ln(x_coor2);
+						}
+						
+						/*
+						switch p.log_y {
+							case .no_log:
+								//do nothing
+							case .base10:
+								mult := max_y_val / math.log10(max_y_val);
+								y_coor1 = math.log10(y_coor1) * mult;
+								y_coor2 = math.log10(y_coor2) * mult;
+							case .base_2:
+								mult := max_y_val / math.log2(max_y_val);
+								y_coor1 = math.log2(y_coor1);
+								y_coor2 = math.log2(y_coor2);
+							case .base_ln:
+								mult := max_y_val / math.ln(max_y_val);
+								y_coor1 = math.ln(y_coor1);
+								y_coor2 = math.ln(y_coor2);
+						}
+						*/						
+						
+						x1 : f32 = cast(f32)((x_coor1 - x_view[0]) / (x_view[1] - x_view[0]));
+						x2 : f32 = cast(f32)((x_coor2 - x_view[0]) / (x_view[1] - x_view[0]));
+						y1 : f32 = cast(f32)((y_coor1 - y_view[0]) / (y_view[1] - y_view[0]));
+						y2 : f32 = cast(f32)((y_coor2 - y_view[0]) / (y_view[1] - y_view[0]));
+						
+						trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({x1 * width, y1 * height}, {x2 * width, y2 * height}, line_width, 0);
+						
+						trace_draw_data[i] = render.Default_instance_data {
+							instance_position 	= trans,
+							instance_scale 		= scale,
+							instance_rotation 	= rot, //Euler rotation
+							instance_tex_pos_scale 	= {},
+						};
+					}
+					
+					render.draw_quad_instanced(trace_draw_data[:], color, offset = {0.5, 0, 0});
+			}
+			render.pipeline_end();
+		}
+		
+		return;
 	}
 	
 	unreachable();
