@@ -1663,13 +1663,13 @@ debug_callback : gl.debug_proc_t : proc "c" (source: gl.GLenum, type: gl.GLenum,
 
 	#partial switch severity {
 		case .DEBUG_SEVERITY_NOTIFICATION:
-			log.debugf("From %v, OpenGL Debug Message: %.*s", source, message);
+			log.debugf("From %v, OpenGL Debug Message: %v", source, message);
 		case .DEBUG_SEVERITY_LOW:
-			log.infof("From %v, OpenGL Debug Message: %.*s", source, message);
+			log.infof("From %v, OpenGL Debug Message: %v", source, message);
 		case .DEBUG_SEVERITY_MEDIUM:
-			log.warnf("From %v, OpenGL Debug Message: %.*s", source, message);
+			log.warnf("From %v, OpenGL Debug Message: %v", source, message);
 		case .DEBUG_SEVERITY_HIGH:
-			log.errorf("From %v, OpenGL Debug Message: %.*s", source, message);
+			log.errorf("From %v, OpenGL Debug Message: %v", source, message);
 		case:
 			fmt.panicf("Unhandled severity : %v", severity);
 	}
@@ -3155,8 +3155,9 @@ delete_frame_buffer :: proc(fbo : Fbo_id, loc := #caller_location) {
 
 	fbo := fbo;
 	gl.DeleteFramebuffers(1, auto_cast &fbo);
-
+	
 	when RENDER_DEBUG {
+		fmt.assertf(fbo in debug_state.fbos, "The FBO %v is not valid, valid FBO's are %v", fbo, debug_state.fbos);
 		delete_key(&debug_state.fbos, fbo);
 	}
 }

@@ -49,7 +49,8 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 //offset is in "screen coordinates" from top right corner.
 draw_coordinate_overlay :: proc (camera : Camera3D, offset : [2]f32 = {0.05, 0.05}, scale : f32 = 0.25, loc := #caller_location) {
 	
-	assert(state.current_target == nil, "There must not be a target, call target_end", loc);
+	assert(state.current_target != nil, "There must be a target", loc);
+	assert(state.current_pipeline == {}, "There must not be a pipeline, move draw_coordinate_overlay out of the pipeline", loc);
 	
 	tex := get_coordinate_overlay_texture(camera);
 
@@ -70,7 +71,10 @@ draw_coordinate_overlay :: proc (camera : Camera3D, offset : [2]f32 = {0.05, 0.0
 }
 
 //offset is in "screen coordinates" from top left corner.
-draw_fps_overlay :: proc (offset : [2]f32 = {0,0}, scale : f32 = 1) {
+draw_fps_overlay :: proc (offset : [2]f32 = {0,0}, scale : f32 = 1, loc := #caller_location) {
+	
+	assert(state.current_target != nil, "There must be a target", loc);
+	assert(state.current_pipeline == {}, "There must not be a pipeline, move draw_coordinate_overlay out of the pipeline", loc);
 	
 	//A low pass filter XD
 	smoothing : f32 = 0.94; // larger=more smoothing

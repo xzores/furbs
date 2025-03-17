@@ -274,7 +274,7 @@ frame_buffer_blit_depth_attach_to_texture :: proc (fbo : ^Frame_buffer, tex : Te
 //Destroy and recreate a FBO
 frame_buffer_resize :: proc (fbo : ^Frame_buffer, new_size : [2]i32, loc := #caller_location) {
 	
-	frame_buffer_destroy(fbo^);
+	fbo_old := fbo^;
 	
 	use_depth_attachment : bool;
 	
@@ -321,6 +321,8 @@ frame_buffer_resize :: proc (fbo : ^Frame_buffer, new_size : [2]i32, loc := #cal
 		
 		fbo^ = frame_buffer_make_render_buffers(color_formats, new_size.x, new_size.y, fbo.samples, fbo.depth_format, loc = loc);
 	}
+	
+	frame_buffer_destroy(fbo_old);	
 }
 
 frame_buffer_destroy :: proc(fbo : Frame_buffer) {
@@ -344,7 +346,7 @@ frame_buffer_destroy :: proc(fbo : Frame_buffer) {
 		case Depth_render_texture:
 			gl.delete_texture2D(attachment.id);
 	}
-
+	
 	gl.delete_frame_buffer(fbo.id);
 }
 

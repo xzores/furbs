@@ -241,11 +241,13 @@ destroy :: proc (loc := #caller_location) {
 
 	//Extras
 	state.fps_measurement	= {};
+	if state.overlay_init {
+		frame_buffer_destroy(state.arrow_fbo);			state.arrow_fbo = {};
+		pipeline_destroy(state.shapes_pipeline);		state.shapes_pipeline = {};
+		pipeline_destroy(state.overlay_pipeline);		state.overlay_pipeline = {};
+	}
 	state.overlay_init = false;
-	frame_buffer_destroy(state.arrow_fbo);			state.arrow_fbo = {};
-	pipeline_destroy(state.shapes_pipeline);		state.shapes_pipeline = {};
-	pipeline_destroy(state.overlay_pipeline);		state.overlay_pipeline = {};
-
+	
 	gl.delete_frame_buffer(state.default_copy_fbo); state.default_copy_fbo = 0;
 	
 	//Destroy shaders defines

@@ -61,10 +61,7 @@ Magnetude_representation :: enum {
 	power_speactral_density, 	//This is used for broad band signals //This is kinda a bullshit idea/approximation which idk why people use it. 
 }
 
-Plot_xy :: struct {
-	plot_framebuffer : render.Frame_buffer,
-	plot_texture : render.Texture2D,
-	
+Plot_xy :: struct {	
 	traces : []Trace,
 	
 	//plot_desc : 
@@ -90,7 +87,6 @@ Plot_type :: union {
 
 Plot_window :: struct {
 	window : ^render.Window,
-	plots : [dynamic]Plot_type,
 	gui_state : regui.Scene,
 }
 
@@ -358,11 +354,6 @@ make_xy_plot :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label
 	}
 	
 	pt := Plot_xy{
-		//{}, //Framebuffer
-		//{}, //Texture
-		render.frame_buffer_make_render_buffers({.RGBA8}, 1, 1, 16, .depth_component32, loc = loc),
-		render.texture2D_make(false, .clamp_to_edge, .nearest, .RGBA8, 1, 1, .no_upload, nil, loc = loc),
-		
 		traces,															//Y coord
 		Grid_desc{line_width = 0.001, color = {0.5, 0.5, 0.5, 0.5}}, 	//Grid desc
 		[2]Maybe(Axis_desc){nil, nil},
@@ -383,8 +374,6 @@ destroy_plot :: proc (p : Plot_type) {
 	
 	switch plot in p {
 		case Plot_xy: {
-			render.frame_buffer_destroy(plot.plot_framebuffer);
-			render.texture2D_destroy(plot.plot_texture);
 			
 			for t in plot.traces {
 				delete(t.abscissa)
@@ -706,7 +695,9 @@ make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destinati
 	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, appearance, appearance, appearance);
 	
 	Gui_plot_data :: struct {
-		a : int,
+		plot_framebuffer : render.Frame_buffer,
+		plot_texture : render.Texture2D,
+		plot : Plot_xy,
 	}
 	
 	update :: proc(data : rawptr) {
@@ -718,39 +709,45 @@ make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destinati
 	draw :: proc(data : rawptr, container : regui_base.Element_container, style : regui_base.Style, parent_rect : [4]f32, unit_size : f32) {
 		data := cast(^Gui_plot_data)data;
 		
+		//////////////////////////// STYLE ////////////////////////////
+		
+		plot_bg_color := [4]f32{0.2, 0.2, 0.2, 1} //color_theme.plot_bg_color;
+		
+		//////////////////////////// DRAWING ////////////////////////////
+		
 		regui_base.draw_quad(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, {1,0,0,1});
 		
 		target_size : [2]i32 = linalg.array_cast(container.dest.rect.zw * unit_size, i32);
 		
-		/*
-		assert(w.plot_framebuffer.id != 0, "frambuffer is nil");
-		if w.plot_framebuffer.width != target_size.x || w.plot_framebuffer.height != target_size.y {
-			render.frame_buffer_resize(&w.plot_framebuffer, target_size);
-			render.texture2D_resize(&w.plot_texture, target_size);
+		assert(data.plot_framebuffer.id != 0, "frambuffer is nil");
+		if data.plot_framebuffer.width != target_size.x || data.plot_framebuffer.height != target_size.y {
+			render.frame_buffer_resize(&data.plot_framebuffer, target_size);
+			render.texture2D_resize(&data.plot_texture, target_size);
 		}
-
+		
 		//Calculate normalized space coordinates.
-		width_i, height_i := render.get_render_target_size(&w.plot_framebuffer);
+		width_i, height_i := render.get_render_target_size(&data.plot_framebuffer);
 		width_f, height_f := cast(f32)width_i, cast(f32)height_i;
 		aspect_ratio := width_f / height_f;
 		width, height : f32 = aspect_ratio, 1.0;
-
-		render.target_begin(&w.plot_framebuffer, color_theme.plot_bg_color);
-			plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&w.plot_type, width_i, height_i, render.window_is_focus(w.window));
-			defer delete(x_callout);
-			defer delete(y_callout);
-			
-			switch p in plot_res {
-				case Plot_data:
-					for l in p.lines {
-						
-					}
-					for t in p.texts {
-						
-					}
-			}
-		render.target_end();
-
+		
+		/*
+		is_focused := true; //render.window_is_focus(w.window)
+		plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&data.plot, width_i, height_i, is_focused);
+		defer delete(x_callout);
+		defer delete(y_callout);
+		
+		switch p in plot_res {
+			case Plot_data:
+				for l in p.lines {
+					
+				}
+				for t in p.texts {
+					
+				}
+		}
+		
+		
 		cam_2d : render.Camera2D = {
 			position		= {width / 2, height / 2},
 			target_relative	= {width / 2, height / 2},
@@ -792,10 +789,18 @@ make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destinati
 	
 	destroy :: proc(data : rawptr) {
 		data := cast(^Gui_plot_data)data;
+		render.frame_buffer_destroy(data.plot_framebuffer);
+		render.texture2D_destroy(data.plot_texture);
 		free(data);
 	}
 	
 	data := new(Gui_plot_data);
+	
+	data^ = Gui_plot_data {
+		render.frame_buffer_make_render_buffers({.RGBA8}, 1, 1, 16, .depth_component32, loc = loc),
+		render.texture2D_make(false, .clamp_to_edge, .nearest, .RGBA8, 1, 1, .no_upload, nil, loc = loc),
+		{},
+	}
 	
 	element : regui_base.Custom_info = {
 		update_call 	= update,
@@ -1024,6 +1029,7 @@ destroy_plot_window :: proc (w : ^Plot_window) {
 	render.window_destroy(w.window);
 	regui.destroy(&w.gui_state);
 	
+	/*	
 	for plot in w.plots {
 		switch p in plot {
 			case Plot_xy:
@@ -1037,6 +1043,7 @@ destroy_plot_window :: proc (w : ^Plot_window) {
 				delete(p.title);
 		}
 	}
+	*/
 	
 	free(w);
 	
@@ -1287,11 +1294,8 @@ make_plot_window :: proc (pt : Plot_type, loc := #caller_location) -> ^Plot_wind
 	
 	pw^ = Plot_window {
 		w,
-		make([dynamic]Plot_type),
 		regui.init(),
 	}
-	
-	append_elem(&pw.plots, pt, loc = loc);
 	
 	append_elem(&plot_windows, pw, loc = loc);
 	
