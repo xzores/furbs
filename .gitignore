@@ -33,3 +33,4 @@
 # Program info
 *.pdb
 /glslang/.vs
+glslang/glslang_bindings/lib/windows/SPIRV-Tools-optd.lib
