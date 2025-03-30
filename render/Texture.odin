@@ -57,12 +57,12 @@ texture1D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 }
 
 @(require_results)
-texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture1D {
+texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture1D {
 	assert(state.is_init, "You must init first", loc);
 
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
-	id : gl.Tex1d_id = gl.gen_texture1D(loc);
+	id : gl.Tex1d_id = gl.gen_texture1D(label, loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 
 	gl.wrapmode_texture1D(id, desc.wrapmode);
@@ -298,7 +298,7 @@ texture2D_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textur
 //Clear color is only used if data is nil
 @(require_results)
 texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							#any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture2D {
+							#any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture2D {
 
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -307,12 +307,12 @@ texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 		format 			= internal_format,
 	};
 	
-	return texture2D_make_desc(desc, width, height, upload_format, data, clear_color, loc);
+	return texture2D_make_desc(desc, width, height, upload_format, data, clear_color, label, loc);
 }
 
 //Clear color is only used if data is nil
 @(require_results)
-texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture2D {
+texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture2D {
 	assert(state.is_init, "You must init first", loc);
 	assert(wrapmode != nil, "wrapmode is nil", loc);
 	assert(filtermode != nil, "filtermode is nil", loc);
@@ -324,7 +324,7 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 		assert(data != nil, "Data must not be nil if upload_format is not .no_upload", loc = loc);
 	}
 	
-	id : gl.Tex2d_id = gl.gen_texture2D(loc);
+	id : gl.Tex2d_id = gl.gen_texture2D(label, loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 	
 	gl.wrapmode_texture2D(id, desc.wrapmode);
@@ -381,8 +381,8 @@ texture2D_clear :: proc(tex : ^Texture2D, clear_color : [4]f64, loc := #caller_l
 }
 
 //TODO should this require the pointer?
-texture2D_destroy :: proc(tex : Texture2D) {
-	gl.delete_texture2D(tex.id);
+texture2D_destroy :: proc(tex : Texture2D, loc := #caller_location) {
+	gl.delete_texture2D(tex.id, loc);
 }
 
 @(require_results)
@@ -423,7 +423,7 @@ texture2D_get_white :: proc() -> Texture2D {
 			{0,0,0,0},
 		};
 
-		state.white_texture = texture2D_make_desc(desc, 1, 1, .RGBA8, {255, 255, 255, 255});
+		state.white_texture = texture2D_make_desc(desc, 1, 1, .RGBA8, {255, 255, 255, 255}, label = "Default White Texture");
 	}
 
 	return state.white_texture;
@@ -441,7 +441,7 @@ texture2D_get_black :: proc () -> Texture2D {
 			{0,0,0,0},
 		};
 
-		state.black_texture = texture2D_make_desc(desc, 1, 1, .RGBA8, {0, 0, 0, 255});
+		state.black_texture = texture2D_make_desc(desc, 1, 1, .RGBA8, {0, 0, 0, 255}, label = "Default Black Texture");
 	}
 
 	return state.black_texture;
@@ -459,7 +459,7 @@ Texture3D :: struct {
 
 @(require_results)
 texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filtermode, internal_format : Pixel_format_internal,
-							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture3D {
+							 width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture3D {
 	
 	desc : Texture_desc = {
 		mipmaps 		= mipmaps,
@@ -468,17 +468,17 @@ texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 		format 			= internal_format,
 	};
 	
-	return texture3D_make_desc(desc, width, height, depth, upload_format, data, clear_color, loc);
+	return texture3D_make_desc(desc, width, height, depth, upload_format, data, clear_color, label, loc);
 }
 
 //clear_color is in range 0 to 1
 @(require_results)
-texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, loc := #caller_location) -> Texture3D {
+texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture3D {
 	assert(state.is_init, "You must init first", loc);
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO this is done at startup is that enough?
 	
-	id : gl.Tex3d_id = gl.gen_texture3D(loc);
+	id : gl.Tex3d_id = gl.gen_texture3D(label, loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 	
 	gl.wrapmode_texture3D(id, desc.wrapmode);
@@ -563,9 +563,9 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 	
 	assert(upload_format != nil, "upload_format may not be nil", loc);
 	//TODO remove assert(gl.upload_format_channel_cnt(upload_format) == 4, "upload_format channel count must be 4", loc);
-
+	
 	data := Texture2D_atlas_data {
-		backing = texture2D_make_desc(desc, init_size, init_size, upload_format, nil, loc = loc),
+		backing = texture2D_make_desc(desc, init_size, init_size, upload_format, nil, label = "Texture Atlas", loc = loc),
 		upload_format = upload_format,
 		pixels = make([]u8, init_size * init_size * cast(i32)gl.upload_format_channel_cnt(upload_format)),
 	}

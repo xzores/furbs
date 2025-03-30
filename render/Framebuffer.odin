@@ -88,12 +88,12 @@ Frame_buffer :: struct {
 }
 
 //An attachment is created for each color format passed.
-frame_buffer_make_render_buffers :: proc (color_formats : []Color_format, width, height, samples_hint : i32, depth_format : Depth_format, loc := #caller_location) -> (fbo : Frame_buffer) {
+frame_buffer_make_render_buffers :: proc (color_formats : []Color_format, width, height, samples_hint : i32, depth_format : Depth_format, label := "", loc := #caller_location) -> (fbo : Frame_buffer) {
 	assert(width != 0, "width is 0", loc);
 	assert(height != 0, "height is 0", loc);
 	
 	fbo = Frame_buffer{
-		id 				= gl.gen_frame_buffer(loc),
+		id 				= gl.gen_frame_buffer(label, loc),
 		width			= width,
 		height			= height,
 		is_color_attachment_texture = false,
@@ -109,7 +109,7 @@ frame_buffer_make_render_buffers :: proc (color_formats : []Color_format, width,
 		color_attachments_max : [MAX_COLOR_ATTACH]Rbo_id;
 		color_attachments := color_attachments_max[:len(color_formats)];
 		
-		gl.gen_render_buffers(color_attachments);
+		gl.gen_render_buffers(color_attachments, label);
 		fbo.samples = gl.associate_color_render_buffers_with_frame_buffer(fbo.id, color_attachments, width, height, samples_hint, 0); 
 		
 		for f, i in color_formats {
@@ -118,29 +118,29 @@ frame_buffer_make_render_buffers :: proc (color_formats : []Color_format, width,
 	}
 	
 	//setup depth buffer
-	{
-		depth_buf := gl.gen_render_buffer(loc);
+	{		
+		depth_buf := gl.gen_render_buffer(label, loc);
 		depth_samples := gl.associate_depth_render_buffer_with_frame_buffer(fbo.id, depth_buf, width, height, samples_hint, auto_cast depth_format)
 		assert(fbo.samples == depth_samples, "inconsistent FBO samples", loc = loc); 
-
+		
 		fbo.depth_attachment = Depth_render_buffer{depth_buf};
 	}
-
+	
 	//chekc if everything is good
 	assert(gl.validate_frame_buffer(fbo.id) == true, "Framebuffer is not complete!", loc);
-
+	
 	return;
 }
 
 //Mipmaps not allowed, copy to another texture for that.
 //if depth_tex_desc is nil a render_buffer is used for the depth texture, otherwise a texture is used.
-frame_buffer_make_textures :: proc (color_descs : []Fbo_color_tex_desc, width, height : i32, depth_format : Depth_format, depth_tex_desc : Maybe(Fbo_depth_tex_desc) = nil, loc := #caller_location) -> (fbo : Frame_buffer){
+frame_buffer_make_textures :: proc (color_descs : []Fbo_color_tex_desc, width, height : i32, depth_format : Depth_format, depth_tex_desc : Maybe(Fbo_depth_tex_desc) = nil, label := "", loc := #caller_location) -> (fbo : Frame_buffer){
 	
 	assert(width != 0, "width is 0", loc);
 	assert(height != 0, "height is 0", loc);
 	
 	fbo = Frame_buffer{
-		id 				= gl.gen_frame_buffer(loc),
+		id 				= gl.gen_frame_buffer(label, loc),
 		width			= width,
 		height			= height,
 		is_color_attachment_texture = true,
@@ -156,7 +156,7 @@ frame_buffer_make_textures :: proc (color_descs : []Fbo_color_tex_desc, width, h
 		color_attachments_max : [MAX_COLOR_ATTACH]gl.Tex2d_id;
 		for desc, i in color_descs {
 			
-			id : gl.Tex2d_id = gl.gen_texture2D(loc);
+			id : gl.Tex2d_id = gl.gen_texture2D(label, loc);
 			
 			{ //Setup the texture
 				assert(id > 0, "Failed to create texture ID for FBO", loc);
@@ -176,12 +176,12 @@ frame_buffer_make_textures :: proc (color_descs : []Fbo_color_tex_desc, width, h
 	
 	//setup depth buffer
 	if depth_desc, ok := depth_tex_desc.?; ok {
-		depth_texture := texture2D_make(false, depth_desc.wrapmode, depth_desc.filtermode, auto_cast depth_format, width, height, .no_upload, nil, loc = loc);
+		depth_texture := texture2D_make(false, depth_desc.wrapmode, depth_desc.filtermode, auto_cast depth_format, width, height, .no_upload, nil, label = label, loc = loc);
 		fbo.depth_attachment = Depth_render_texture{depth_texture.id, depth_desc};
 		gl.associate_depth_texture_with_frame_buffer(fbo.id, depth_texture.id);
 	}
 	else {
-		depth_buf := gl.gen_render_buffer();
+		depth_buf := gl.gen_render_buffer(label);
 		depth_samples := gl.associate_depth_render_buffer_with_frame_buffer(fbo.id, depth_buf, width, height, 1, auto_cast depth_format, loc = loc)
 		assert(fbo.samples == depth_samples, "inconsistent FBO samples", loc = loc);
 		fbo.depth_attachment = Depth_render_buffer{depth_buf};
@@ -309,7 +309,7 @@ frame_buffer_resize :: proc (fbo : ^Frame_buffer, new_size : [2]i32, loc := #cal
 				depth_desc = v.desc;
 		}
 		
-		fbo^ = frame_buffer_make_textures(color_descs, new_size.x, new_size.y, depth_format, depth_desc, loc = loc);
+		fbo^ = frame_buffer_make_textures(color_descs, new_size.x, new_size.y, depth_format, depth_desc, gl.get_frame_buffer_label(fbo_old.id), loc);
 	}
 	else {
 		color_formats := make([]Color_format, fbo.color_attachments_cnt);
@@ -319,14 +319,14 @@ frame_buffer_resize :: proc (fbo : ^Frame_buffer, new_size : [2]i32, loc := #cal
 			cd = fbo.color_attachments[i].(Color_render_buffer).format;
 		}
 		
-		fbo^ = frame_buffer_make_render_buffers(color_formats, new_size.x, new_size.y, fbo.samples, fbo.depth_format, loc = loc);
+		fbo^ = frame_buffer_make_render_buffers(color_formats, new_size.x, new_size.y, fbo.samples, fbo.depth_format, gl.get_frame_buffer_label(fbo_old.id), loc);
 	}
 	
 	frame_buffer_destroy(fbo_old);	
 }
 
-frame_buffer_destroy :: proc(fbo : Frame_buffer) {
-
+frame_buffer_destroy :: proc(fbo : Frame_buffer, loc := #caller_location) {
+	
 	for ca, i in fbo.color_attachments {
 		switch &attachment in ca {
 			case nil:
@@ -356,8 +356,9 @@ frame_buffer_recreate :: proc (dst : ^Frame_buffer, src : Frame_buffer, loc := #
 
 	assert(dst^ == {}, "dst must be empty", loc);
 
-	dst_id := gl.gen_frame_buffer();
-
+	dst_id := gl.gen_frame_buffer(gl.get_frame_buffer_label(auto_cast src.id));
+	fmt.printf("get_frame_buffer_label : %v\n", gl.get_frame_buffer_label(auto_cast src.id));
+	
 	for ca,i in src.color_attachments {
 		
 		if ca == nil {

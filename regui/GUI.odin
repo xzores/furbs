@@ -171,3 +171,5 @@ Panel_info 			:: regui_base.Panel_info;
 Element_container 	:: regui_base.Element_container;
 Parent 				:: regui_base.Parent;
 Scene 				:: regui_base.Scene;
+
+Input 				:: regui_base.Input;

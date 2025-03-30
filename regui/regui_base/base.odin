@@ -343,6 +343,12 @@ Element_container :: struct {
 	using style : Style,
 }
 
+Input :: struct {
+	focus : bool,
+	mouse_pos : bool,
+	left, right, middel : bool,
+}
+
 ////////////////// CONTEXT //////////////////
 
 Parent :: union {

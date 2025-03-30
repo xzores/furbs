@@ -166,7 +166,7 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 			assert(indices_len(index_data) <= auto_cast max(u16));
 		}
 
-		state.shapes = mesh_make_single(vertex_data, index_data, .static_use);
+		state.shapes = mesh_make_single(vertex_data, index_data, .static_use, label = "Default Combined Mesh");
 		delete(vertex_data);
 		indices_delete(index_data);
 	}

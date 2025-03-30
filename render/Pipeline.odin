@@ -123,28 +123,27 @@ target_begin :: proc (render_target : Render_target, clear_method : Maybe([4]f32
 	if clear_method != nil {
 		set_depth_write(true);
 	}
-
-	if window, ok := render_target.(^Window); ok {
-		if window.glfw_window == state.owner_context {
-			state.target_pixel_width, state.target_pixel_height = cast(f32)window.width, cast(f32)window.height;
-			gl.bind_frame_buffer(0);
+	
+	switch t in render_target {
+		case ^Window:{
+			if t.glfw_window == state.owner_context {
+				state.target_pixel_width, state.target_pixel_height = cast(f32)t.width, cast(f32)t.height;
+				gl.bind_frame_buffer(0);
+			}
+			else {
+				state.target_pixel_width, state.target_pixel_height = cast(f32)t.framebuffer.width, cast(f32)t.framebuffer.height;
+				gl.bind_frame_buffer(t.framebuffer.id);
+			}
+		}	
+		case ^Frame_buffer:{
+			state.target_pixel_width, state.target_pixel_height = cast(f32)t.width, cast(f32)t.height;
+			gl.bind_frame_buffer(t.id);
 		}
-		else {
-			state.target_pixel_width, state.target_pixel_height = cast(f32)window.framebuffer.width, cast(f32)window.framebuffer.height;
-			gl.bind_frame_buffer(window.framebuffer.id);
-		}
 	}
-	else if fbo, ok := render_target.(^Frame_buffer); ok {
-		state.target_pixel_width, state.target_pixel_height = cast(f32)fbo.width, cast(f32)fbo.height;
-		gl.bind_frame_buffer(fbo.id);
-	}
-	else {
-		panic("!?!?!?");
-	}
-
+	
 	assert(state.target_pixel_width != 0, "target_pixel_width is 0, internal error");
 	assert(state.target_pixel_height != 0, "target_pixel_height is 0, internal error");
-
+	
 	gl.set_viewport(0, 0, state.target_pixel_width, state.target_pixel_height);
 
 	if clear_color, ok := clear_method.?; ok {

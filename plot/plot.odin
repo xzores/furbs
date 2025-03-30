@@ -61,7 +61,11 @@ Magnetude_representation :: enum {
 	power_speactral_density, 	//This is used for broad band signals //This is kinda a bullshit idea/approximation which idk why people use it. 
 }
 
-Plot_xy :: struct {	
+Plot_xy :: struct {
+	
+	inner_plot_framebuffer : render.Frame_buffer,
+	inner_plot_texture : render.Texture2D,
+		
 	traces : []Trace,
 	
 	//plot_desc : 
@@ -77,8 +81,6 @@ Plot_xy :: struct {
 	
 	log_x : Log_style,
 	log_y : Log_style,
-	
-	top_panel : regui.Panel, //This is a panel
 }
 
 Plot_type :: union {
@@ -354,6 +356,8 @@ make_xy_plot :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label
 	}
 	
 	pt := Plot_xy{
+		render.frame_buffer_make_render_buffers({.RGBA8}, 1, 1, 16, .depth_component32, "XY Plot Inner", loc = loc),
+		render.texture2D_make(false, .clamp_to_edge, .nearest, .RGBA8, 1, 1, .no_upload, nil, label = "XY Plot Inner", loc = loc),
 		traces,															//Y coord
 		Grid_desc{line_width = 0.001, color = {0.5, 0.5, 0.5, 0.5}}, 	//Grid desc
 		[2]Maybe(Axis_desc){nil, nil},
@@ -364,7 +368,6 @@ make_xy_plot :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label
 		display_range_y,								//y_view
 		x_log,
 		y_log,
-		{},																//Top bar panel
 	}
 	
 	return pt;
@@ -374,6 +377,9 @@ destroy_plot :: proc (p : Plot_type) {
 	
 	switch plot in p {
 		case Plot_xy: {
+			
+			render.frame_buffer_destroy(plot.inner_plot_framebuffer);
+			render.texture2D_destroy(plot.inner_plot_texture);
 			
 			for t in plot.traces {
 				delete(t.abscissa)
@@ -666,6 +672,7 @@ get_callout_info :: proc (plot_res : Plot_result, target_size : [2]i32, pv_pos, 
 		}
 	}
 	
+	fmt.printf("TODO: Move this out of callout and into the render stuff\n!");
 	if x_label != "" {
 		text_size : f32 = cast(f32)target_size.y / 26;
 		text_pos := [2]f32{0.5 * cast(f32)target_size.x, 0.03 * cast(f32)target_size.y};
@@ -695,111 +702,60 @@ make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destinati
 	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, appearance, appearance, appearance);
 	
 	Gui_plot_data :: struct {
-		plot_framebuffer : render.Frame_buffer,
-		plot_texture : render.Texture2D,
+		
+		outer_plot_framebuffer : render.Frame_buffer,
+		outer_plot_texture : render.Texture2D,
+		
 		plot : Plot_xy,
 	}
 	
 	update :: proc(data : rawptr) {
 		data := cast(^Gui_plot_data)data;
 		using regui_base;
-		
+		update_xy_plot(data.plot, regui.Input{});
 	}
 	
+	//TODO, redo the drawing, we want to restructure, dont make a plot inner function, just do it in one function.
+	//THis means you should have just XY plot and that is it for now, then 3D plot and such later.
+	//It should also only draw, not do logic.
 	draw :: proc(data : rawptr, container : regui_base.Element_container, style : regui_base.Style, parent_rect : [4]f32, unit_size : f32) {
 		data := cast(^Gui_plot_data)data;
 		
-		//////////////////////////// STYLE ////////////////////////////
-		
-		plot_bg_color := [4]f32{0.2, 0.2, 0.2, 1} //color_theme.plot_bg_color;
-		
-		//////////////////////////// DRAWING ////////////////////////////
-		
-		regui_base.draw_quad(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, {1,0,0,1});
-		
 		target_size : [2]i32 = linalg.array_cast(container.dest.rect.zw * unit_size, i32);
 		
-		assert(data.plot_framebuffer.id != 0, "frambuffer is nil");
-		if data.plot_framebuffer.width != target_size.x || data.plot_framebuffer.height != target_size.y {
-			render.frame_buffer_resize(&data.plot_framebuffer, target_size);
-			render.texture2D_resize(&data.plot_texture, target_size);
+		if data.outer_plot_framebuffer.width != target_size.x || data.outer_plot_framebuffer.height != target_size.y {
+			
+			render.frame_buffer_resize(&data.outer_plot_framebuffer, target_size);
+			render.texture2D_resize(&data.outer_plot_texture, target_size);
 		}
 		
-		//Calculate normalized space coordinates.
-		width_i, height_i := render.get_render_target_size(&data.plot_framebuffer);
-		width_f, height_f := cast(f32)width_i, cast(f32)height_i;
-		aspect_ratio := width_f / height_f;
-		width, height : f32 = aspect_ratio, 1.0;
+		render_xy_plot(&data.plot, data.outer_plot_framebuffer);
 		
-		/*
-		is_focused := true; //render.window_is_focus(w.window)
-		plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(&data.plot, width_i, height_i, is_focused);
-		defer delete(x_callout);
-		defer delete(y_callout);
+		render.frame_buffer_blit_color_attach_to_texture(&data.outer_plot_framebuffer, 0, data.outer_plot_texture);
 		
-		switch p in plot_res {
-			case Plot_data:
-				for l in p.lines {
-					
-				}
-				for t in p.texts {
-					
-				}
-		}
-		
-		
-		cam_2d : render.Camera2D = {
-			position		= {width / 2, height / 2},
-			target_relative	= {width / 2, height / 2},
-			rotation		= 0,
-			zoom 			= 2,
-			near 			= -1,
-			far 			= 1,
-		};
-
-		inner_plot_position, lines, texts := get_callout_info(plot_res, target_size, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
-		defer {
-			delete(lines);
-			
-			for t in texts {
-				delete(t.value);
-			}
-			delete(texts);
-		}
-
-		render.pipeline_begin(draw_pipeline, cam_2d);
-			
-			//it was using direct draw, so draw whatever is in the texture.
-			render.frame_buffer_blit_color_attach_to_texture(&w.plot_framebuffer, 0, w.plot_texture);					
-			render.set_texture(.texture_diffuse, w.plot_texture);
-			render.draw_quad_rect(inner_plot_position, 0);
-			
-			render.set_texture(.texture_diffuse, render.texture2D_get_white());
-			for l in lines {
-				render.draw_line_2D(l.a, l.b, l.thickness, 0, l.color);
-			}
-			
-		render.pipeline_end();
-		
-		for t in texts {
-			render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
-		}
-		*/		
+		render.set_texture(.texture_diffuse, data.outer_plot_texture);
+		regui_base.draw_quad(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, {1,1,1,1});
 	}
 	
 	destroy :: proc(data : rawptr) {
 		data := cast(^Gui_plot_data)data;
-		render.frame_buffer_destroy(data.plot_framebuffer);
-		render.texture2D_destroy(data.plot_texture);
+		
+		render.frame_buffer_destroy(data.outer_plot_framebuffer);
+		render.texture2D_destroy(data.outer_plot_texture);
+		
+		destroy_plot(data.plot);
 		free(data);
 	}
 	
 	data := new(Gui_plot_data);
 	
+	p, ok := plot.(Plot_xy);
+	assert(ok, "TODO");
+	
 	data^ = Gui_plot_data {
-		render.frame_buffer_make_render_buffers({.RGBA8}, 1, 1, 16, .depth_component32, loc = loc),
-		render.texture2D_make(false, .clamp_to_edge, .nearest, .RGBA8, 1, 1, .no_upload, nil, loc = loc),
-		{},
+		render.frame_buffer_make_render_buffers({.RGBA8}, 1, 1, 16, .depth_component32, "gui_plot_outer", loc = loc),
+		render.texture2D_make(false, .clamp_to_edge, .nearest, .RGBA8, 1, 1, .no_upload, nil, label = "gui_plot_outer", loc = loc),
+		p,
 	}
 	
 	element : regui_base.Custom_info = {
@@ -823,7 +779,7 @@ make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destinati
 			active = act_appearance,
 		}
 	}
-
+	
 	return auto_cast regui_base.element_make(parent, container, loc);	
 }
 
@@ -939,7 +895,7 @@ export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 10
 			haru.page_fill(page);  // This applies the fill with the specified color
 		haru.page_g_restore(page);
 		
-		plot_framebuffer : render.Frame_buffer = render.frame_buffer_make_render_buffers({.RGBA8}, width_i, height_i, 32, .depth_component32, loc = loc);
+		plot_framebuffer : render.Frame_buffer = render.frame_buffer_make_render_buffers({.RGBA8}, width_i, height_i, 32, .depth_component32, "export_pdf_frame_buffer", loc = loc);
 		assert(plot_framebuffer.id != 0, "frambuffer is nil");
 		defer render.frame_buffer_destroy(plot_framebuffer);
 		
@@ -1337,10 +1293,7 @@ ensure_render_init :: proc (loc := #caller_location) {
 	render.window_set_vsync(true);
 }
 
-
-
 /*
-
 target_size : [2]i32 = {w.window.width, w.window.height};
 			
 assert(w.plot_framebuffer.id != 0, "frambuffer is nil");

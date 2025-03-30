@@ -40,6 +40,7 @@ Camera2D :: struct {
 Camera :: union {
 	Camera2D,
 	Camera3D,
+	Camera_matrices,
 }
 
 
@@ -176,15 +177,14 @@ camera2D_bind :: proc(using camera : Camera2D, loc := #caller_location) {
 
 @(private)
 camera_bind :: proc (camera : Camera, loc := #caller_location) {
-
-	if cam, ok := camera.(Camera2D); ok {
-		camera2D_bind(cam);
-	}
-	else if cam, ok := camera.(Camera3D); ok {
-		camera3D_bind(cam);
-	}
-	else {
-		panic("??");
+	
+	switch cam in camera {
+		case Camera2D:
+			camera2D_bind(cam);
+		case Camera3D:
+			camera3D_bind(cam);
+		case Camera_matrices:
+			state.camera = cam;
 	}
 }
 

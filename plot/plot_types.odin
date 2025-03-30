@@ -1,7 +1,7 @@
 package plot;
 
 import "../render"
-import gui "../regui"
+import "../regui"
 import "core:fmt"
 import "core:math"
 import "core:unicode/utf8"
@@ -409,3 +409,443 @@ plot_inner :: proc (p : ^Plot_xy, width_i, height_i : i32, allow_state_change : 
 	unreachable();
 }
 
+/*
+plot_xy_plot :: proc (plot : Plot_xy, target : render.Frame_buffer) {
+	
+	
+	
+	//////////////////////////// STYLE ////////////////////////////
+	
+	color_theme := default_color_theme;
+	plot_bg_color := [4]f32{0.2, 0.2, 0.2, 1} //color_theme.plot_bg_color;
+	
+	
+	//////////////////////////// DRAWING ////////////////////////////
+	
+	target_size : [2]i32 = linalg.array_cast(container.dest.rect.zw * unit_size, i32);
+	
+	assert(data.outer_plot_framebuffer.id != 0, "frambuffer is nil");
+	assert(data.inner_plot_framebuffer.id != 0, "frambuffer is nil");
+	
+	if data.outer_plot_framebuffer.width != target_size.x || data.outer_plot_framebuffer.height != target_size.y {
+		
+		render.frame_buffer_resize(&data.outer_plot_framebuffer, target_size);
+		render.texture2D_resize(&data.outer_plot_texture, target_size);
+		
+		render.frame_buffer_resize(&data.inner_plot_framebuffer, target_size);
+		render.texture2D_resize(&data.inner_plot_texture, target_size);
+	}
+	
+	//Calculate normalized space coordinates.
+	width_i, height_i := render.get_render_target_size(&data.inner_plot_framebuffer);
+	width_f, height_f := cast(f32)width_i, cast(f32)height_i;
+	aspect_ratio := width_f / height_f;
+	width, height : f32 = aspect_ratio, 1.0;
+	
+	is_focused := true; //render.window_is_focus(w.window)
+	
+	r_state := render.store_target(); {
+		
+		//////////////////////////// DRAWING ////////////////////////////
+		render.target_begin(&data.inner_plot_framebuffer, [4]f32{1,1,1,1});
+			{		
+				//Calculate normalized space coordinates.
+				width_f, height_f := cast(f32)width_i, cast(f32)height_i;
+				aspect_ratio := width_f / height_f;
+				width, height : f32 = aspect_ratio, 1.0;
+				
+				res = nil;
+				{
+					instanced_pipeline := render.pipeline_make(render.get_default_instance_shader(), depth_test = false);
+					defer render.pipeline_destroy(instanced_pipeline);
+					
+					cam_2d : render.Camera2D = {
+						position		= {width / 2, height / 2},
+						target_relative	= {width / 2, height / 2},
+						rotation		= 0,
+						zoom 			= 2,
+						near 			= -1,
+						far 			= 1,
+					};
+					
+					//handle export variables
+					{
+						
+						x_label = p.x_label;
+						y_label = p.y_label;
+						title = p.title;
+						
+						//plot view
+						pv_pos = {0.20, 0.10};
+						size : [2]f32 = {0.75, 0.82};
+						pv_size = {width - (1.0 - size.x), height - (1.0 - size.y)};
+						
+						//inner view
+						x_view = p.x_view;
+						y_view = p.y_view;
+
+					}
+					
+					//handle input and change state
+					if allow_state_change {
+						
+						//TODO handle this differently we are in log mode.
+						if render.is_button_down(.middel) {
+							md := render.mouse_delta();
+							
+							total_x : f32 = cast(f32)(p.x_view[1] - p.x_view[0]);
+							total_y : f32 = cast(f32)(p.y_view[1] - p.y_view[0]);
+							p.x_view -= cast(f64)((total_x / pv_size.x) * (md.x / height_f));
+							p.y_view += cast(f64)((total_y / pv_size.y) * (md.y / height_f));
+						}
+						
+						//TODO handle this differently we are in log mode.
+						{
+							scroll_delta := render.scroll_delta();
+							
+							total_x : f64 = cast(f64)(p.x_view[1] - p.x_view[0]);
+							total_y : f64 = cast(f64)(p.y_view[1] - p.y_view[0]);
+							
+							d : f64 = -0.02 * cast(f64)scroll_delta.y;
+							
+							if !render.is_key_down(.shift_left) {
+								p.x_view = p.x_view + d * [2]f64{-total_x, total_x};
+							}
+							if !render.is_key_down(.control_left) {
+								p.y_view = p.y_view + d * [2]f64{-total_y, total_y};
+							}
+						}
+						
+						if render.is_key_down(.r) {
+							xlow, xhigh, ylow, yhigh : f64 = max(f64), min(f64), max(f64), min(f64);
+							for trace in p.traces {
+								xl, xh := get_extremes(trace.abscissa);
+								yl, yh := get_extremes(trace.ordinate);
+								xlow = 	math.min(xlow, xl);
+								xhigh = math.max(xhigh, xh);
+								ylow = 	math.min(ylow, yl);
+								yhigh = math.max(yhigh, yh);
+							}
+							
+							total_y := yhigh - ylow;
+							
+							p.x_view = {xlow, xhigh};
+							p.y_view = {ylow - 0.1 * total_y, yhigh + 0.1 * total_y};
+						}
+					}
+					
+					if p.log_x != .no_log {
+						p.x_view[0] = math.max(p.x_view[0], 1e-15);
+					}				
+					p.x_view[1] = math.max(p.x_view[0] + 1e-15, p.x_view[1]);
+					
+					if p.log_y != .no_log {
+						p.y_view[0] = math.max(p.y_view[0], 1e-15);
+					}
+					p.y_view[1] = math.max(p.y_view[0] + 1e-15, p.y_view[1]);
+					
+					//Callouts
+					{
+						grid_cnt := [2]f64{5.0 * cast(f64)width, 12 * cast(f64)height};
+						
+						switch p.log_x {
+							case .no_log:
+								x_callout = get_callout_lines_linear(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x)[:];
+							case .base10:
+								x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, 10)[:];
+							case .base_2:
+								x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, 2)[:];
+							case .base_ln:
+								x_callout = get_callout_lines_log(p.x_view[0], p.x_view[1], auto_cast grid_cnt.x, math.e)[:];
+						}
+						
+						switch p.log_y {
+							case .no_log:
+								y_callout = get_callout_lines_linear(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y)[:];
+							case .base10:
+								y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, 10)[:];
+							case .base_2:
+								y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, 2)[:];
+							case .base_ln:
+								y_callout = get_callout_lines_log(p.y_view[0], p.y_view[1], auto_cast grid_cnt.y, math.e)[:];
+						}
+					}
+					
+					//Plot the inner plot
+					{
+						render.pipeline_begin(instanced_pipeline, cam_2d);
+							render.set_texture(.texture_diffuse, render.texture2D_get_white());
+							
+							grid_line_width := p.grid_desc.line_width * min(width, height);
+							
+							call_draw_data := make([]render.Default_instance_data, len(x_callout) + len(y_callout), allocator = context.temp_allocator);
+							i : int = 0;
+							for call in x_callout {
+								x : f32 = cast(f32)call.placement * width;
+								trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({x,0}, {x,height}, grid_line_width);
+								
+								call_draw_data[i] = render.Default_instance_data {
+										instance_position 	= trans,
+										instance_scale 		= scale,
+										instance_rotation 	= rot, //Euler rotation
+										instance_tex_pos_scale 	= {},
+								};
+								i += 1;
+							}
+							for call in y_callout {
+								y : f32 = cast(f32)call.placement * height;
+								trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({0,y}, {width,y}, grid_line_width);
+								
+								call_draw_data[i] = render.Default_instance_data {
+										instance_position 	= trans,
+										instance_scale 		= scale,
+										instance_rotation 	= rot, //Euler rotation
+										instance_tex_pos_scale 	= {},
+								};
+								i += 1;
+							}
+							
+							render.draw_quad_instanced(call_draw_data[:], p.grid_desc.color, offset = {0.5, 0, 0});
+							
+							line_width := 0.005 * min(width, height);
+							
+							for trace, it in p.traces {
+								using trace;
+								
+								trace_draw_data := make([]render.Default_instance_data, len(trace.abscissa), allocator = context.temp_allocator);
+								color, marker_style := get_trace_info(it);
+								
+								//TODO draw_quad_instanced();
+								assert(len(abscissa) != 0, "The signal is empty");
+								fmt.assertf(len(abscissa) == len(ordinate), "The x and y does not have same length. x length is %v, y length is %v", len(abscissa), len(ordinate));
+								
+								_, max_x_val := get_extremes(abscissa);
+								_, max_y_val := get_extremes(ordinate);
+								
+								for e, i in ordinate[:len(ordinate)-1] {
+									x_coor1 := abscissa[i];
+									x_coor2 := abscissa[i+1];
+									
+									y_coor1 := cast(f64)e;
+									y_coor2 := cast(f64)ordinate[i+1];
+									
+									switch p.log_x {
+										case .no_log:
+											//do nothing
+										case .base10:
+											x_coor1 = math.log10(x_coor1);
+											x_coor2 = math.log10(x_coor2);
+										case .base_2:
+											x_coor1 = math.log2(x_coor1);
+											x_coor2 = math.log2(x_coor2);
+										case .base_ln:
+											x_coor1 = math.ln(x_coor1);
+											x_coor2 = math.ln(x_coor2);
+									}
+									
+									/*
+									switch p.log_y {
+										case .no_log:
+											//do nothing
+										case .base10:
+											mult := max_y_val / math.log10(max_y_val);
+											y_coor1 = math.log10(y_coor1) * mult;
+											y_coor2 = math.log10(y_coor2) * mult;
+										case .base_2:
+											mult := max_y_val / math.log2(max_y_val);
+											y_coor1 = math.log2(y_coor1);
+											y_coor2 = math.log2(y_coor2);
+										case .base_ln:
+											mult := max_y_val / math.ln(max_y_val);
+											y_coor1 = math.ln(y_coor1);
+											y_coor2 = math.ln(y_coor2);
+									}
+									*/						
+									
+									x1 : f32 = cast(f32)((x_coor1 - x_view[0]) / (x_view[1] - x_view[0]));
+									x2 : f32 = cast(f32)((x_coor2 - x_view[0]) / (x_view[1] - x_view[0]));
+									y1 : f32 = cast(f32)((y_coor1 - y_view[0]) / (y_view[1] - y_view[0]));
+									y2 : f32 = cast(f32)((y_coor2 - y_view[0]) / (y_view[1] - y_view[0]));
+									
+									trans, rot, scale := render.line_2D_to_quad_trans_rot_scale({x1 * width, y1 * height}, {x2 * width, y2 * height}, line_width, 0);
+									
+									trace_draw_data[i] = render.Default_instance_data {
+										instance_position 	= trans,
+										instance_scale 		= scale,
+										instance_rotation 	= rot, //Euler rotation
+										instance_tex_pos_scale 	= {},
+									};
+								}
+								
+								render.draw_quad_instanced(trace_draw_data[:], color, offset = {0.5, 0, 0});
+						}
+						render.pipeline_end();
+					}
+					
+					return;
+				}
+				
+				unreachable();
+			}
+		render.target_end();
+		
+		defer delete(x_callout);
+		defer delete(y_callout);
+		
+		switch p in plot_res {
+			case Plot_data:
+				for l in p.lines {
+					
+				}
+				for t in p.texts {
+					
+				}
+		}
+		
+		cam_2d : render.Camera2D = {
+			position		= {width / 2, height / 2},
+			target_relative	= {width / 2, height / 2},
+			rotation		= 0,
+			zoom 			= 2,
+			near 			= -1,
+			far 			= 1,
+		};
+		
+		draw_pipeline := render.pipeline_make(render.get_default_shader(), depth_test = false);
+		defer render.pipeline_destroy(draw_pipeline);
+			
+		inner_plot_position, lines, texts := get_callout_info(plot_res, target_size, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
+		defer {
+			delete(lines);
+			
+			for t in texts {
+				delete(t.value);
+			}
+			delete(texts);
+		}
+		
+		render.target_begin(&data.outer_plot_framebuffer, [4]f32{1,1,1,1});
+			render.pipeline_begin(draw_pipeline, cam_2d);
+				
+				//it was using direct draw, so draw whatever is in the texture.
+				render.frame_buffer_blit_color_attach_to_texture(&data.inner_plot_framebuffer, 0, data.inner_plot_texture);					
+				render.set_texture(.texture_diffuse, data.inner_plot_texture);
+				render.draw_quad_rect(inner_plot_position, 0);
+				
+				render.set_texture(.texture_diffuse, render.texture2D_get_white());
+				for l in lines {
+					render.draw_line_2D(l.a, l.b, l.thickness, 0, l.color);
+				}
+				
+			render.pipeline_end()
+		
+			for t in texts {
+				render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
+			}
+			
+		render.target_end();
+		
+	} render.restore_target(r_state);
+	
+	render.frame_buffer_blit_color_attach_to_texture(&data.outer_plot_framebuffer, 0, data.outer_plot_texture);
+	
+	render.set_texture(.texture_diffuse, data.outer_plot_texture);
+	regui_base.draw_quad(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, {1,1,1,1});
+	
+}
+*/
+
+update_xy_plot :: proc (plot : Plot_xy, input : regui.Input) {
+	
+	
+}
+
+//Renders the plot into the target texture.
+render_xy_plot :: proc (plot : ^Plot_xy, target : render.Frame_buffer, color_theme := light_color_theme) {
+	target := target;
+	
+	//////////////////////////// Framebuffers and size calculations ////////////////////////////
+	
+	assert(target.id != 0, "framebuffer is nil");
+	assert(plot.inner_plot_framebuffer.id != 0, "framebuffer is nil");
+	
+	//Calculate normalized space coordinates.
+	width_i, height_i := render.get_render_target_size(&target);
+	width_f, height_f := cast(f32)width_i, cast(f32)height_i;
+	aspect_ratio := width_f / height_f;
+	width, height : f32 = aspect_ratio, 1.0;
+	
+	target_size := [2]i32{1000, 1000};
+	
+	if plot.inner_plot_framebuffer.width != target_size.x || plot.inner_plot_framebuffer.height != target_size.y {
+		
+		render.frame_buffer_resize(&plot.inner_plot_framebuffer, target_size);
+		render.texture2D_resize(&plot.inner_plot_texture, target_size);
+	}
+	
+	r_state := render.store_target(); {
+	
+		//////////////////////////// DRAWING ////////////////////////////
+		render.target_begin(&plot.inner_plot_framebuffer,  color_theme.plot_bg_color);
+			plot_res, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title := plot_inner(plot, width_i, height_i, false);
+			defer delete(x_callout);
+			defer delete(y_callout);
+		render.target_end();
+		
+		switch p in plot_res {
+			case Plot_data:
+				for l in p.lines {
+					
+				}
+				for t in p.texts {
+					
+				}
+		}
+		
+		cam_2d : render.Camera2D = {
+			position		= {width / 2, height / 2},
+			target_relative	= {width / 2, height / 2},
+			rotation		= 0,
+			zoom 			= 2,
+			near 			= -1,
+			far 			= 1,
+		};
+		
+		draw_pipeline := render.pipeline_make(render.get_default_shader(), depth_test = false);
+		defer render.pipeline_destroy(draw_pipeline);
+		
+		inner_plot_position, lines, texts := get_callout_info(plot_res, {width_i, height_i}, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
+		defer {
+			delete(lines);
+			
+			for t in texts {
+				delete(t.value);
+			}
+			delete(texts);
+		}
+		
+		render.target_begin(&target, [4]f32{1,1,1,1});
+			render.pipeline_begin(draw_pipeline, cam_2d);
+				
+				//it was using direct draw, so draw whatever is in the texture.
+				render.frame_buffer_blit_color_attach_to_texture(&plot.inner_plot_framebuffer, 0, plot.inner_plot_texture);					
+				render.set_texture(.texture_diffuse, plot.inner_plot_texture);
+				render.draw_quad_rect(inner_plot_position, 0);
+				
+				render.set_texture(.texture_diffuse, render.texture2D_get_white());
+				for l in lines {
+					render.draw_line_2D(l.a, l.b, l.thickness, 0, l.color);
+				}
+				
+			render.pipeline_end()
+		
+			for t in texts {
+				render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
+			}
+			
+		render.target_end();
+		
+	} render.restore_target(r_state);
+
+	
+}

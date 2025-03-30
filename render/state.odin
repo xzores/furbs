@@ -29,6 +29,16 @@ is_init :: proc () -> bool {
 	return state.is_init;
 }
 
+@(private)
+Camera_matrices :: struct {
+	prj_mat 		: matrix[4,4]f32,
+	inv_prj_mat 	: matrix[4,4]f32,
+	view_mat 		: matrix[4,4]f32,
+	inv_view_mat	: matrix[4,4]f32,
+	view_prj_mat 	: matrix[4,4]f32,
+	inv_view_prj_mat: matrix[4,4]f32,
+}
+
 State :: struct {
 	
 	//Time stuff
@@ -135,14 +145,7 @@ State :: struct {
 	bound_shader : ^Shader,
 
 	//Camera projection stuff
-	using camera : struct {
-		prj_mat 		: matrix[4,4]f32,
-		inv_prj_mat 	: matrix[4,4]f32,
-		view_mat 		: matrix[4,4]f32,
-		inv_view_mat	: matrix[4,4]f32,
-		view_prj_mat 	: matrix[4,4]f32,
-		inv_view_prj_mat: matrix[4,4]f32,
-	},
+	using camera : Camera_matrices,
 
 	render_context : runtime.Context,	
 }

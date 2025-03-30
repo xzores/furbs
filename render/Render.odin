@@ -200,7 +200,7 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	assert(supported_attribs <= len(static_attrib_info) + len(dynamic_attrib_info), "The GPU does not support the amount of attributes needed", loc);
 	*/
 	
-	state.default_copy_fbo = gl.gen_frame_buffer();
+	state.default_copy_fbo = gl.gen_frame_buffer("default_copy_FBO", loc);
 	
 	shaders_init(loc = loc);
 	text_init(loc = loc);
@@ -421,6 +421,39 @@ end_frame :: proc(loc := #caller_location) {
 	input_end();
 
 	state.is_begin_frame = false;
+}
+
+Stored_target :: struct {
+	target : Render_target,
+	pipeline : Stored_pipeline,
+}
+
+store_target :: proc(loc := #caller_location) -> Stored_target {
+	old_target := state.current_target;
+	pipe := store_pipeline();
+	target_end(loc);
+	return { old_target, pipe };
+}
+
+restore_target :: proc(stored : Stored_target, loc := #caller_location) {
+	target_begin(stored.target, nil, nil, loc);
+	restore_pipeline(stored.pipeline, loc);
+}
+
+Stored_pipeline :: struct {
+	pipeline : Pipeline,
+	camera : Camera_matrices,
+}
+
+store_pipeline :: proc(loc := #caller_location) -> Stored_pipeline {
+	old_pipeline, old_cam := state.current_pipeline, state.camera;
+	pipeline_end(loc);
+	
+	return {old_pipeline, old_cam};
+}
+
+restore_pipeline :: proc(state : Stored_pipeline, loc := #caller_location) {
+	pipeline_begin(state.pipeline, state.camera, loc);
 }
 
 set_shader_define :: proc (entry : string, value : string) {

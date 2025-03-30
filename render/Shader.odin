@@ -611,7 +611,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 	//TODO pass though glslang (aka glsl_validator)
 	
 	// Now load the shader program by opengl //
-	shader_id, comp_err := load_shader_program(name, vertex_src, fragment_src);
+	shader_id, comp_err := load_shader_program(name, vertex_src, fragment_src, name);
 	
 	if e, ok := comp_err.?; ok {
 		free(shader);		

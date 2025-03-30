@@ -84,8 +84,9 @@ text_init :: proc (loc := #caller_location) {
 		italic 		= font_RI,
 		italic_bold = font_RBI,
 	};
+	
 	log.info("Default fonts loaded");
-
+	
 	instance_desc : Instance_data_desc = {
 		data_type 	= Default_instance_data,
 		data_points = 1,
@@ -95,8 +96,8 @@ text_init :: proc (loc := #caller_location) {
 	verts, indices := generate_quad({1,1,1}, {0,0,0}, true);
 	defer delete(verts);
 	defer indices_delete(indices);
-	state.char_mesh = mesh_make_single(verts, indices, .static_use, .triangles, instance_desc, loc = loc);
-
+	state.char_mesh = mesh_make_single(verts, indices, .static_use, .triangles, instance_desc, "Text Quad", loc);
+	
 	log.info("Text initialized!");
 }
 
@@ -296,8 +297,10 @@ text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f3
 	
 	if new_size, ok := fs.requires_reupload(&font_context); ok {
 		log.logf(.Debug, "reuploading font texture : %v\n", new_size);
-		texture2D_destroy(state.font_texture);
-		state.font_texture = texture2D_make(false, .repeat, .nearest, .R8, new_size.x, new_size.y, .R8, fs.get_bitmap(&font_context));
+		if state.font_texture != {} {
+			texture2D_destroy(state.font_texture);
+		}
+		state.font_texture = texture2D_make(false, .repeat, .nearest, .R8, new_size.x, new_size.y, .R8, fs.get_bitmap(&font_context), label = "Text texture");
 	}
 	
 	rect, done := fs.get_next_quad_upload(&font_context);

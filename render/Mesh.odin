@@ -228,7 +228,7 @@ Mesh_single :: struct {
 
 //Index_data may be nil if there should be no incidies. 
 @(require_results)
-mesh_make_single :: proc (vertex_data : []$T, index_data : Indices, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
+mesh_make_single :: proc (vertex_data : []$T, index_data : Indices, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, label := "", loc := #caller_location) -> (mesh : Mesh_single) {
 	
 	mesh.vertex_count = len(vertex_data);
 	mesh.data_type = T;
@@ -255,14 +255,14 @@ mesh_make_single :: proc (vertex_data : []$T, index_data : Indices, usage : Usag
 			mesh_index_buf_data = nil;
 	}
 	
-	setup_mesh_single(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, instance, loc);
+	setup_mesh_single(&mesh, slice.reinterpret([]u8,vertex_data), mesh_index_buf_data, instance, label, loc);
 
 	return;
 }
 
 //Makes a mesh_single without data
 @(require_results)
-mesh_make_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, loc := #caller_location) -> (mesh : Mesh_single) {
+mesh_make_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, #any_int index_size : int, index_type : Index_buffer_type, usage : Usage, primitive : gl.Primitive = .triangles, instance : Maybe(Instance_data_desc) = nil, label := "", loc := #caller_location) -> (mesh : Mesh_single) {
 
 	if index_type != .no_index_buffer {
 		assert(index_size != 0, "index size must not be 0, if index_type is not no_index_buffer", loc);
@@ -279,7 +279,7 @@ mesh_make_single_empty :: proc (#any_int vertex_size : int, data_type : typeid, 
 	mesh.index_count = index_size;
 	mesh.indices_type = index_type;
 	
-	setup_mesh_single(&mesh, nil, nil, instance, loc);
+	setup_mesh_single(&mesh, nil, nil, instance, label, loc);
 
 	return;
 }
@@ -433,7 +433,7 @@ upload_instance_data_single :: proc(mesha : ^Mesh_single, #any_int start_index :
 remake_resource :: proc (old_res : gl.Resource, new_size : int, loc := #caller_location) -> gl.Resource {
 	new_desc := old_res.desc;
 	new_desc.bytes_count = new_size;
-	new_res := gl.make_resource_desc(new_desc, nil, loc = loc);
+	new_res := gl.make_resource_desc(new_desc, nil, gl.get_buffer_label(old_res.buffer), loc = loc);
 
 	is_streaming : bool = old_res.usage == .stream_host_only ||old_res.usage == .stream_read || old_res.usage == .stream_read_write || old_res.usage == .stream_write;
 
@@ -999,10 +999,10 @@ get_attribute_info_from_typeid :: proc (t : typeid, loc := #caller_location) -> 
 //Used internally for setup up a resource for a mesh
 //Nil may be passed for init_vertex_data and init_index_data. 
 //If they are not nil, then the len must match that of mesh.vertex_cnt and mesh.index_count respectively.
-setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_index_data : []u8, instance : Maybe(Instance_data_desc), loc := #caller_location) {
-
+setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_index_data : []u8, instance : Maybe(Instance_data_desc), label := "", loc := #caller_location) {
+	
 	assert(mesh.vao == 0, "This mesh is not clean... what are you doing?");
-
+	
 	desc : gl.Resource_desc = {
 		usage = cast(gl.Resource_usage)mesh.usage,
 		buffer_type = .array_buffer,
@@ -1011,37 +1011,37 @@ setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_in
 
 	attrib_info := get_attribute_info_from_typeid(mesh.data_type, loc);
 	defer delete(attrib_info);
-
-	mesh.vao = gl.gen_vertex_array(loc);
-
+	
+	mesh.vao = gl.gen_vertex_array(label, loc);
+	
 	//The vertex data
-	mesh.vertex_data = gl.make_resource_desc(desc, init_vertex_data, loc);
+	mesh.vertex_data = gl.make_resource_desc(desc, init_vertex_data, gl.extend_label(label, " Verticies"), loc);
 	gl.associate_buffer_with_vao(mesh.vao, mesh.vertex_data.buffer, attrib_info, 0, loc);
 
 	//The indicies
 	switch mesh.indices_type {
-
+		
 		case .no_index_buffer:
 			mesh.indices_buf = nil;
 
 		case .unsigned_short, .unsigned_int:
-
+			
 			s : int;
-			if mesh.indices_type == .unsigned_short {
-				s = size_of(u16);
-			} else if mesh.indices_type == .unsigned_int {
-				s = size_of(u32);
+			switch mesh.indices_type {
+				case .unsigned_short:
+					s = size_of(u16);
+				case .unsigned_int:
+					s = size_of(u32);
+				case .no_index_buffer:
+					panic("???");
 			}
-			else {
-				panic("???");
-			}
-
+			
 			index_desc : gl.Resource_desc = {
 				usage = cast(gl.Resource_usage)mesh.usage,
 				buffer_type = .element_array_buffer,
 				bytes_count = mesh.index_count * s,
 			}
-			indices_buf := gl.make_resource_desc(index_desc, init_index_data, loc);
+			indices_buf := gl.make_resource_desc(index_desc, init_index_data, gl.extend_label(label, " Indicies"), loc);
 
 			gl.associate_index_buffer_with_vao(mesh.vao, indices_buf.buffer);
 			mesh.indices_buf = indices_buf;
@@ -1053,7 +1053,7 @@ setup_mesh_single :: proc (mesh : ^Mesh_single, init_vertex_data : []u8, init_in
 		instanced_attrib_info := get_attribute_info_from_typeid(inst.data_type, loc);
 		defer delete(instanced_attrib_info);
 
-		instance_data := Instance_data{data = gl.make_resource(inst.data_points * reflect.size_of_typeid(inst.data_type), .array_buffer, cast(gl.Resource_usage)inst.usage, nil), desc = inst};
+		instance_data := Instance_data{data = gl.make_resource(inst.data_points * reflect.size_of_typeid(inst.data_type), .array_buffer, cast(gl.Resource_usage)inst.usage, nil, gl.extend_label(label, " Instance Data"), loc), desc = inst};
 		gl.associate_buffer_with_vao(mesh.vao, instance_data.data.buffer, instanced_attrib_info, 1, loc);
 		mesh.instance_data = instance_data;
 	}
