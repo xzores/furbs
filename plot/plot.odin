@@ -610,91 +610,6 @@ light_color_theme := Color_theme{
 	backdrop_color	= backdrop_colors[.bright_mode],
 }
 
-get_callout_info :: proc (plot_res : Plot_result, target_size : [2]i32, pv_pos, pv_size : [2]f32, x_view, y_view : [2]f64, x_callout, y_callout : []Callout_line, x_label, y_label, title : string, color_theme : Color_theme) ->
-								(inner_plot_placement : [4]f32, lines : []Line, texts : []Text) {
-	
-	using color_theme;
-	
-	_lines : [dynamic]Line;
-	_texts : [dynamic]Text;
-	
-	switch res in plot_res {
-		case Plot_data:
-			
-			inner_plot_placement = {}; //Do not draw it.
-			
-		case:
-			//it was using direct draw, so draw whatever is in the texture.
-			//append(&_textures, Image{[4]f32{pv_pos.x, pv_pos.y, pv_size.x, pv_size.y}, render.Texture2D{}})
-			inner_plot_placement = [4]f32{pv_pos.x, pv_pos.y, pv_size.x, pv_size.y};
-	}
-	
-	for call in x_callout {
-		x := pv_pos.x + (cast(f32)call.placement * pv_size.x);
-		append(&_lines, Line{{x, pv_pos.y}, {x, pv_pos.y - call.length}, call.thickness, inverse_color})
-	}
-	for call in y_callout {
-		y := pv_pos.y + (cast(f32)call.placement * pv_size.y);
-		append(&_lines, Line{{pv_pos.x, y}, {pv_pos.x - call.length, y}, call.thickness, inverse_color})
-	}
-	
-	append(&_lines, Line{{pv_pos.x, pv_pos.y}, {pv_pos.x + pv_size.x, pv_pos.y}, 0.003, inverse_color});
-	append(&_lines, Line{{pv_pos.x, pv_pos.y}, {pv_pos.x, pv_pos.y + pv_size.y}, 0.003, inverse_color});
-	
-	//Draw the callout lines around the plot, including the entries (like numbers).
-	{
-		text_size : f32 = cast(f32)target_size.y / 26;
-		for call in x_callout {
-			if call.display_value {
-				x := pv_pos.x + (cast(f32)call.placement * pv_size.x);
-				
-				low_p, high_p := x_view[0], x_view[1];
-				
-				val := low_p + call.placement * (high_p - low_p);						
-				s_val := format_val(val);
-				bounds := render.text_get_visible_bounds(s_val, text_size, render.get_default_fonts().normal);
-				text_pos : [2]f32 = ({x, pv_pos.y - call.length} * cast(f32)target_size.y) - ({bounds.z/2, bounds.w} * 1.1);
-				append(&_texts, Text{strings.clone(s_val), text_pos, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
-			}				
-		}
-		for call in y_callout {
-			if call.display_value {
-				y := pv_pos.y + (cast(f32)call.placement * pv_size.y);
-				
-				low_p, high_p := y_view[0], y_view[1];
-				
-				val := low_p + call.placement * (high_p - low_p);
-				s_val := format_val(val);
-				bounds := render.text_get_visible_bounds(s_val, text_size, render.get_default_fonts().normal);
-				text_pos : [2]f32 = ({pv_pos.x - call.length, y} * cast(f32)target_size.y) - ([2]f32{bounds.z, bounds.w/2} * 1.1);
-				append(&_texts, Text{strings.clone(s_val), text_pos, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
-			}
-		}
-	}
-	
-	fmt.printf("TODO: Move this out of callout and into the render stuff\n!");
-	if x_label != "" {
-		text_size : f32 = cast(f32)target_size.y / 26;
-		text_pos := [2]f32{0.5 * cast(f32)target_size.x, 0.03 * cast(f32)target_size.y};
-		dims := render.text_get_visible_bounds(x_label, text_size);
-		append(&_texts, Text{strings.clone(x_label), text_pos - dims.zw/2, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
-	}
-	if y_label != "" {
-		text_size : f32 = cast(f32)target_size.y / 18;
-		text_pos := [2]f32{0.08 * cast(f32)target_size.y, 0.5 * cast(f32)target_size.y};
-		dims := render.text_get_visible_bounds(y_label, text_size);
-		append(&_texts, Text{strings.clone(y_label), text_pos - dims.wz/2, text_size, inverse_color, 90, backdrop_color, {1.5,-1.5}});
-	}
-	if title != "" {
-		text_size : f32 = cast(f32)target_size.y / 18;
-		text_pos := [2]f32{0.5 * cast(f32)target_size.x, 0.97 * cast(f32)target_size.y};
-		dims := render.text_get_visible_bounds(title, text_size);
-		append(&_texts, Text{strings.clone(title), text_pos - dims.zw/2, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
-	}
-	
-	return inner_plot_placement, _lines[:], _texts[:];
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destination, plot : Plot_type, show : bool = true, appearance : Maybe(regui_base.Appearance) = nil, loc := #caller_location) -> regui_base.Element {
@@ -851,6 +766,8 @@ end :: proc (loc := #caller_location) {
 }
 
 export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 1000, height_i : i32 = 1000, color_theme := light_color_theme, loc := #caller_location) {
+	
+	/*
 	ensure_render_init(loc = loc);
 	
 	plot : Plot_type = plot;
@@ -926,6 +843,7 @@ export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 10
 			data[i * 3 + 1] = d.g;
 			data[i * 3 + 2] = d.b;
 		}
+		
 		render.texture2D_flip(data, draw_texture.width, draw_texture.height, 3);
 		
 		image := haru.load_raw_image_from_mem(pdf, data, auto_cast draw_texture.width, auto_cast draw_texture.height, .CS_DEVICE_RGB, 8);
@@ -946,31 +864,57 @@ export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 10
 					haru.draw_text(pdf, page, font, t.value, t.position, text_size_normalized, t.color, t.rotation);
 				}
 		}
+		
 		haru.pop_clipping_region(page);
 		
-		inner_plot_position, lines, texts := get_callout_info(plot_res, {width_i, height_i}, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
-		defer {
-			delete(lines);
-			
-			for t in texts {
-				delete(t.value);
+		/*
+		if x_label != "" {
+			text_size : f32 = cast(f32)target_size.y / 26;
+			text_pos := [2]f32{0.5 * cast(f32)target_size.x, 0.03 * cast(f32)target_size.y};
+			dims := render.text_get_visible_bounds(x_label, text_size);
+			append(&_texts, Text{strings.clone(x_label), text_pos - dims.zw/2, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
+		}
+		if y_label != "" {
+			text_size : f32 = cast(f32)target_size.y / 18;
+			text_pos := [2]f32{0.08 * cast(f32)target_size.y, 0.5 * cast(f32)target_size.y};
+			dims := render.text_get_visible_bounds(y_label, text_size);
+			append(&_texts, Text{strings.clone(y_label), text_pos - dims.wz/2, text_size, inverse_color, 90, backdrop_color, {1.5,-1.5}});
+		}
+		if title != "" {
+			text_size : f32 = cast(f32)target_size.y / 18;
+			text_pos := [2]f32{0.5 * cast(f32)target_size.x, 0.97 * cast(f32)target_size.y};
+			dims := render.text_get_visible_bounds(title, text_size);
+			append(&_texts, Text{strings.clone(title), text_pos - dims.zw/2, text_size, inverse_color, 0, backdrop_color, {1.5,-1.5}});
+		}
+		*/
+		
+		//TODO! 
+		/*{
+			inner_plot_position, lines, texts := get_callout_info(plot_res, {width_i, height_i}, pv_pos, pv_size, x_view, y_view, x_callout, y_callout, x_label, y_label, title, color_theme);
+			defer {
+				delete(lines);
+				
+				for t in texts {
+					delete(t.value);
+				}
+				delete(texts);
 			}
-			delete(texts);
+			
+			for l in lines {
+				a := l.a * height;
+				b := l.b * height;
+				t := l.thickness * height;
+				haru.page_set_line_cap(page, .ROUND_END);
+				haru.draw_lines(pdf, page, {{a, b}}, t, l.color);
+			}
+			
+			// Place the text at a specific position
+			for t in texts {
+				text_size_normalized := t.size / render.text_get_pixel_EM_ratio(t.size);
+				haru.draw_text(pdf, page, font, t.value, t.position, text_size_normalized, t.color, t.rotation);
+			}
 		}
-		
-		for l in lines {
-			a := l.a * height;
-			b := l.b * height;
-			t := l.thickness * height;
-			haru.page_set_line_cap(page, .ROUND_END);
-			haru.draw_lines(pdf, page, {{a, b}}, t, l.color);
-		}
-		
-		// Place the text at a specific position
-		for t in texts {
-			text_size_normalized := t.size / render.text_get_pixel_EM_ratio(t.size);
-			haru.draw_text(pdf, page, font, t.value, t.position, text_size_normalized, t.color, t.rotation);
-		}
+		*/
 		
 		// Save the PDF document
 		haru.save_to_file(pdf, save_location);
@@ -979,6 +923,8 @@ export_pdf :: proc (plot : Plot_type, save_location : string, width_i : i32 = 10
 	}
 	
 	os.remove("temp_LinLibertine_R.ttf");
+	*/
+	
 }
 
 destroy_plot_window :: proc (w : ^Plot_window) {
