@@ -431,13 +431,17 @@ Stored_target :: struct {
 store_target :: proc(loc := #caller_location) -> Stored_target {
 	old_target := state.current_target;
 	pipe := store_pipeline();
-	target_end(loc);
+	if state.current_target != {} {
+		target_end(loc);
+	}
 	return { old_target, pipe };
 }
 
 restore_target :: proc(stored : Stored_target, loc := #caller_location) {
-	target_begin(stored.target, nil, nil, loc);
-	restore_pipeline(stored.pipeline, loc);
+	if stored.target != {} {
+		target_begin(stored.target, nil, nil, loc);
+		restore_pipeline(stored.pipeline, loc);
+	}
 }
 
 Stored_pipeline :: struct {
@@ -447,13 +451,17 @@ Stored_pipeline :: struct {
 
 store_pipeline :: proc(loc := #caller_location) -> Stored_pipeline {
 	old_pipeline, old_cam := state.current_pipeline, state.camera;
-	pipeline_end(loc);
+	if state.current_pipeline != {} {
+		pipeline_end(loc);
+	}
 	
 	return {old_pipeline, old_cam};
 }
 
 restore_pipeline :: proc(state : Stored_pipeline, loc := #caller_location) {
-	pipeline_begin(state.pipeline, state.camera, loc);
+	if state != {} {
+		pipeline_begin(state.pipeline, state.camera, loc);
+	}
 }
 
 set_shader_define :: proc (entry : string, value : string) {

@@ -233,6 +233,10 @@ frame_buffer_depth_attach_as_texture :: proc (fbo : ^Frame_buffer) -> Texture2D 
 
 frame_buffer_blit_color_attach_to_texture :: proc (fbo : ^Frame_buffer, #any_int attach_index : int, tex : Texture2D, linear_interpolation := true, loc := #caller_location) {
 	
+	stored := store_target();
+	defer restore_target(stored);
+	
+	//assert(state.current_target == nil, "Cannot blit while a target is bound (might change in the future, TODO)", loc);
 	assert(tex.width == fbo.width, "Width of the texture and FBO does not match", loc);
 	assert(tex.height == fbo.height, "Height of the texture and FBO does not match", loc);
 	
@@ -261,6 +265,8 @@ frame_buffer_blit_color_attach_to_texture :: proc (fbo : ^Frame_buffer, #any_int
 }
 
 frame_buffer_blit_depth_attach_to_texture :: proc (fbo : ^Frame_buffer, tex : Texture2D) {
+	
+	assert(state.current_target == nil, "Cannot blit while a target is bound (might change in the future, TODO)");
 	
 	//attach the texture to the default fbo
 	gl.associate_depth_texture_with_frame_buffer(state.default_copy_fbo, tex.id);

@@ -272,6 +272,9 @@ text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : 
 }
 
 text_draw :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, color : [4]f32 = {0,0,0,1}, backdrop : Text_backdrop = {}, font : Fonts = state.default_fonts, rotation : f32 = 0, shader := state.default_text_shader, loc := #caller_location) {
+	stored := store_pipeline();
+	defer restore_pipeline(stored);
+	//TODO WE SHOULD ALSO STORE THE TEXTURE!
 	font := text_get_font_from_fonts(bold, italic, font);
 	text_draw_simple(text, position, size, color, backdrop, font, rotation, shader, loc);
 }

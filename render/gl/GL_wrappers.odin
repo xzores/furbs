@@ -2035,7 +2035,7 @@ record_err :: proc (from_loc: runtime.Source_Code_Location, err_val: any, err : 
 				gl.GetDebugMessageLog(1, l, raw_data(message_sources[:]), raw_data(message_types[:]), nil, raw_data(message_severities[:]), &l, raw_data(err_str));
 				//(count : GLuint, bufSize : GLsizei, sources : ^GLenum, types : ^GLenum, ids : ^GLuint, severities : ^GLenum, lengths : ^GLsizei, messageLog : GLoutstring
 				
-				log.errorf("recive debug message : %v", string(err_str));
+				log.error("recive debug message : %v", string(err_str));
 				gl.GetIntegerv(.DEBUG_LOGGED_MESSAGES, &mes_cnt)
 			}
 		}
@@ -3259,8 +3259,10 @@ gen_frame_buffer :: proc (label : string, loc := #caller_location) -> Fbo_id {
 		debug_state.fbos[framebuffer_id] = {loc, strings.clone(label)};;
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
 			if cpu_state.gl_version < .opengl_4_5 {
+				//prev_buf : i32;
+				//gl.GetIntegerv(.FRAMEBUFFER_BINDING, &prev_buf); // Save current FBO
 				bind_frame_buffer(framebuffer_id);
-				unbind_frame_buffer();
+				bind_frame_buffer(0);
 			}
 			clabel := fmt.ctprintf("Framebuffer %v: %v", framebuffer_id, label);
 			gl.ObjectLabel(.FRAMEBUFFER, auto_cast framebuffer_id, auto_cast len(clabel), clabel, loc);
@@ -3433,6 +3435,8 @@ associate_color_render_buffers_with_frame_buffer :: proc(fbo : Fbo_id, render_bu
 		}
 	}
 	else {
+		//prev_buf : i32;
+		//gl.GetIntegerv(.FRAMEBUFFER_BINDING, &prev_buf); // Save current FBO
 		
 		//TODO move the generation out of this function so we can reuse more code. Have the function be like "attach_frame_buffer_render_attachmetns".
 		bind_frame_buffer(fbo);
@@ -3487,6 +3491,8 @@ associate_depth_render_buffer_with_frame_buffer :: proc(fbo : Fbo_id, render_buf
 		
 	}
 	else {
+		//prev_buf : i32;
+		//gl.GetIntegerv(.FRAMEBUFFER_BINDING, &prev_buf); // Save current FBO
 		bind_frame_buffer(fbo);
 		bind_render_buffer(render_buffer);
 		
@@ -3511,6 +3517,8 @@ associate_depth_texture_with_frame_buffer :: proc(fbo : Fbo_id, texture : Tex2d_
 		gl.NamedFramebufferTexture(auto_cast fbo, .DEPTH_ATTACHMENT, auto_cast texture, 0);
 	}
 	else {
+		//prev_buf : i32;
+		//gl.GetIntegerv(.FRAMEBUFFER_BINDING, &prev_buf); // Save current FBO
 		bind_frame_buffer(fbo);
 		bind_texture2D(texture);
 		gl.FramebufferTexture(.FRAMEBUFFER, .DEPTH_ATTACHMENT, auto_cast texture, 0);
@@ -3521,6 +3529,7 @@ associate_depth_texture_with_frame_buffer :: proc(fbo : Fbo_id, texture : Tex2d_
 
 associate_color_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex2d_id, start_index : int = 0, loc := #caller_location) {
 
+
 	assert(len(textures) + start_index <= MAX_COLOR_ATTACH, "you can only have up to 8 color attachments", loc);
 	if cpu_state.gl_version >= .opengl_4_5 {
 		
@@ -3530,8 +3539,10 @@ associate_color_texture_with_frame_buffer :: proc(fbo : Fbo_id, textures : []Tex
 		}
 	}
 	else {
-		
+	
 		//TODO move the generation out of this function so we can reuse more code. Have the function be like "attach_frame_buffer_render_attachmetns".
+		//prev_buf : i32;
+		//gl.GetIntegerv(.FRAMEBUFFER_BINDING, &prev_buf); // Save current FBO
 		bind_frame_buffer(fbo);
 		
 		// Create a (non-)multisampled renderbuffer object for color attachment
@@ -3559,14 +3570,16 @@ validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid 
 		status = gl.CheckNamedFramebufferStatus(auto_cast fbo, .FRAMEBUFFER);
 	} 
 	else {
+		//prev_buf : i32;
+		//gl.GetIntegerv(.FRAMEBUFFER_BINDING, &prev_buf); // Save current FBO
 		bind_frame_buffer(fbo);
 		status = gl.CheckFramebufferStatus(.FRAMEBUFFER);
-		unbind_frame_buffer();
+		bind_frame_buffer(0);
 	}
 
 	if (status != .FRAMEBUFFER_COMPLETE) {
 		
-		/* 
+		/*
 		TODO move the the associate functions
 		for ca, i in color_attachements {
 			if attachment, ok := ca.?; ok {
@@ -3590,9 +3603,10 @@ validate_frame_buffer :: proc (fbo : Fbo_id, loc := #caller_location) -> (valid 
 		assert(depth_attachment_type == .RENDERBUFFER, "attachment_type is not a renderbuffer!");
 		fmt.panicf("TODO move this. Framebuffer is not complete! Statues : %v", status, loc = loc);
 		*/
+		log.warnf("Failed to create framebuffer");
 		return false;
 	}
-
+	
 	return true;
 }
 
@@ -3610,6 +3624,10 @@ blit_fbo_color_to_screen :: proc(fbo : Fbo_id, #any_int src_color_attach, src_x,
 		gl.BlitNamedFramebuffer(auto_cast fbo, 0, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation);
 	}
 	else {
+		//prev_draw_buf : i32;
+		//prev_read_buf : i32;
+		//gl.GetIntegerv(.DRAW_FRAMEBUFFER_BINDING, &prev_draw_buf); // Save current FBO
+		//gl.GetIntegerv(.READ_FRAMEBUFFER_BINDING, &prev_read_buf); // Save current FBO
 		bind_frame_buffer_read(fbo);
 		bind_frame_buffer_draw(0);
 		gl.ReadBuffer(gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)src_color_attach);
@@ -3634,8 +3652,13 @@ blit_fbo_color_attach :: proc(src, dst : Fbo_id, #any_int src_color_attach, dst_
 		gl.BlitNamedFramebuffer(auto_cast src, auto_cast dst, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation);
 	}
 	else {
+		//prev_draw_buf : i32;
+		//prev_read_buf : i32;
+		//gl.GetIntegerv(.DRAW_FRAMEBUFFER_BINDING, &prev_draw_buf); // Save current FBO
+		//gl.GetIntegerv(.READ_FRAMEBUFFER_BINDING, &prev_read_buf); // Save current FBO
 		bind_frame_buffer_read(src);
 		bind_frame_buffer_draw(dst);
+		fmt.printf("src : %v, dst : %v\n", src, dst);
 		gl.ReadBuffer(gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)src_color_attach);
 		gl.DrawBuffer(gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)dst_color_attach);
 		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); 
@@ -3651,6 +3674,10 @@ blit_fbo_depth_attach :: proc(src, dst : Fbo_id, src_x, src_y, src_width, src_he
 		gl.BlitNamedFramebuffer(auto_cast src, auto_cast dst, src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .DEPTH_ATTACHMENT, .NEAREST);
 	}
 	else {
+		//prev_draw_buf : i32;
+		//prev_read_buf : i32;
+		//gl.GetIntegerv(.DRAW_FRAMEBUFFER_BINDING, &prev_draw_buf); // Save current FBO
+		//gl.GetIntegerv(.READ_FRAMEBUFFER_BINDING, &prev_read_buf); // Save current FBO
 		bind_frame_buffer_read(src);
 		bind_frame_buffer_draw(dst);
 		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .DEPTH_ATTACHMENT, .NEAREST); 

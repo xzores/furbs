@@ -537,8 +537,7 @@ render_xy_plot :: proc (plot : ^Plot_xy, target : render.Frame_buffer, mouse_pos
 			zoom 			= 2,
 			near 			= -1,
 			far 			= 1,
-		};
-		
+		};		
 		render.target_begin(&target, [4]f32{1,1,1,1});
 			
 			if plot.x_label != "" {
@@ -562,7 +561,7 @@ render_xy_plot :: proc (plot : ^Plot_xy, target : render.Frame_buffer, mouse_pos
 			render.pipeline_begin(draw_pipeline, cam_2d);
 				
 				//it was using direct draw, so draw whatever is in the texture.
-				render.frame_buffer_blit_color_attach_to_texture(&plot.inner_plot_framebuffer, 0, plot.inner_plot_texture);					
+				render.frame_buffer_blit_color_attach_to_texture(&plot.inner_plot_framebuffer, 0, plot.inner_plot_texture);
 				render.set_texture(.texture_diffuse, plot.inner_plot_texture);
 				render.draw_quad_rect(inner_plot_rect / height_f, 0);
 				
@@ -574,11 +573,12 @@ render_xy_plot :: proc (plot : ^Plot_xy, target : render.Frame_buffer, mouse_pos
 					render.draw_line_2D(l.a, l.b, l.thickness, 0, l.color);
 				}
 				
+				for t in texts {
+					render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
+				}
+				
 			render.pipeline_end()
 		
-			for t in texts {
-				render.text_draw(t.value, t.position, t.size, false, false, t.color, {t.backdrop_color, t.backdrop}, rotation = t.rotation);
-			}
 			
 		render.target_end();
 		

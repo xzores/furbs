@@ -18,10 +18,10 @@ Error_Enum :: enum {
 }
 
 capture_error_callback_type :: #type proc (runtime.Source_Code_Location, any, Error_Enum, []any, runtime.Source_Code_Location);
-capture_error_callback : capture_error_callback_type = nil;
+capture_error_callback : capture_error_callback_type;
 
 capture_gl_callback_type :: #type proc (runtime.Source_Code_Location, any, []any, runtime.Source_Code_Location);
-capture_gl_callback : capture_gl_callback_type = nil;
+capture_gl_callback : capture_gl_callback_type;
 
 when GL_DEBUG {
 	debug_helper :: proc"c"(from_loc: runtime.Source_Code_Location, ret_val : any, args: ..any, loc := #caller_location) {
