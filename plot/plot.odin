@@ -617,26 +617,27 @@ make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destinati
 	def_appearance, hov_appearance, sel_appearance, act_appearance := regui_base.get_appearences(parent, appearance, appearance, appearance, appearance);
 	
 	Gui_plot_data :: struct {
-		
 		outer_plot_framebuffer : render.Frame_buffer,
 		outer_plot_texture : render.Texture2D,
 		
 		plot : Plot_xy,
 	}
 	
-	update :: proc(data : rawptr) {
+	update :: proc(data : rawptr, container : regui_base.Element_container, parent_rect : [4]f32, unit_size : f32, mp : [2]f32) {
 		data := cast(^Gui_plot_data)data;
 		using regui_base;
-		update_xy_plot(data.plot, regui.Input{});
+		update_xy_plot(data.plot, mp, container.is_hover, container.is_selected);
 	}
 	
 	//TODO, redo the drawing, we want to restructure, dont make a plot inner function, just do it in one function.
 	//THis means you should have just XY plot and that is it for now, then 3D plot and such later.
 	//It should also only draw, not do logic.
-	draw :: proc(data : rawptr, container : regui_base.Element_container, style : regui_base.Style, parent_rect : [4]f32, unit_size : f32) {
+	draw :: proc(data : rawptr, container : regui_base.Element_container, parent_rect : [4]f32, unit_size : f32, mp : [2]f32, style : regui_base.Style) {
 		data := cast(^Gui_plot_data)data;
 		
-		target_size : [2]i32 = linalg.array_cast(container.dest.rect.zw * unit_size, i32);
+		dest_rect := regui.get_rect(container.dest.rect, parent_rect);
+		
+		target_size : [2]i32 = linalg.array_cast(dest_rect.zw * unit_size, i32);
 		
 		if data.outer_plot_framebuffer.width != target_size.x || data.outer_plot_framebuffer.height != target_size.y {
 			
@@ -644,12 +645,12 @@ make_regui_plot :: proc (parent : regui_base.Parent, dest : regui_base.Destinati
 			render.texture2D_resize(&data.outer_plot_texture, target_size);
 		}
 		
-		render_xy_plot(&data.plot, data.outer_plot_framebuffer);
+		render_xy_plot(&data.plot, data.outer_plot_framebuffer, mp);
 		
 		render.frame_buffer_blit_color_attach_to_texture(&data.outer_plot_framebuffer, 0, data.outer_plot_texture);
 		
 		render.set_texture(.texture_diffuse, data.outer_plot_texture);
-		regui_base.draw_quad(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, {1,1,1,1});
+		regui_base.draw_quad(container.dest.anchor, container.dest.self_anchor, dest_rect, parent_rect, {1,1,1,1});
 	}
 	
 	destroy :: proc(data : rawptr) {

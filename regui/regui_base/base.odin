@@ -128,6 +128,11 @@ Anchor_point :: enum {
 	top_right,
 }
 
+Fill_x :: struct {y, w : f32}
+Fill_y :: struct {x, z : f32}
+Fill :: struct {};
+Rect :: union{[4]f32, Fill_x, Fill_y, Fill};
+
 //Common for all elements, determines screen position in a 0-1 range.
 //The range is 0-1 for a square screen
 //For a non-square screen the range will extend in the longest direction propertionally to the width/heigth or heigth/width ratio.
@@ -135,7 +140,27 @@ Anchor_point :: enum {
 Destination :: struct {
 	anchor : Anchor_point, // This decides where 0,0 is on the screen
 	self_anchor : Anchor_point, // This decides at which point on element is anchored to 0,0
-	rect : [4]f32,
+	rect : Rect,
+}
+
+get_rect :: proc (rect : Rect, parent : [4]f32) -> [4]f32 {
+	aspect := parent;
+	
+	switch r in rect {
+		case [4]f32: 
+			return r;
+			
+		case Fill_x:
+			return {0, r.y, math.max(1, parent.z / parent.w), r.w};
+			
+		case Fill_y:
+			return {r.x, 0, r.z, math.max(1, parent.w / parent.z)};
+		
+		case Fill:
+			return {0, 0, math.max(1, parent.z / parent.w), math.max(1, parent.w / parent.z)};
+	}
+	
+	unreachable();
 }
 
 ////////////////////////////////////////////////////////////
@@ -296,8 +321,8 @@ Text_field_info :: struct {
 }
 
 Custom_info :: struct {
-	update_call 	: proc(data : rawptr),
-	draw_call 		: proc(data : rawptr, container : Element_container, style : Style, parent_rect : [4]f32, unit_size : f32),
+	update_call 	: proc(data : rawptr, container : Element_container, parent_rect : [4]f32, unit_size : f32, mouse_pos : [2]f32),
+	draw_call 		: proc(data : rawptr, container : Element_container, parent_rect : [4]f32, unit_size : f32, mouse_pos : [2]f32, style : Style),
 	destroy_call 	: proc(data : rawptr),
 	custom_data 	: rawptr,
 }
@@ -341,12 +366,6 @@ Element_container :: struct {
 	
 	//If any of these are set, they will override the style for the specific element.
 	using style : Style,
-}
-
-Input :: struct {
-	focus : bool,
-	mouse_pos : bool,
-	left, right, middel : bool,
 }
 
 ////////////////// CONTEXT //////////////////
@@ -464,8 +483,9 @@ element_cleanup :: proc(container : Element_container) {
 //TODO take in parent_rect, it is needed for panels.
 element_update :: proc (container : ^Element_container, style : Style, parent_rect : [4]f32, loc := #caller_location) {
 	
-	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
-	rect := get_screen_space_position_rect(dest.anchor, dest.self_anchor, dest.rect, parent_rect, bound_scene.unit_size);
+	dest : Destination = container.dest; //Dest is in unit space (0 to 1 ish)
+	dest_rect := get_rect(container.dest.rect, parent_rect); 
+	rect := get_screen_space_position_rect(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, bound_scene.unit_size);
 	
 	container.is_active = false;
 	container.is_hover = false;
@@ -512,14 +532,13 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 			//A label has not logic
 		}
 		case Slider_info: {
-		
-			
+						
 			margin : f32 = get_logical_margin(style);
 			x := mouse_pos().x;
 			
 			//offset : f32 = margin/2 + (e.current_val - e.min_val) / (e.max_val - e.min_val) * (dest.rect.z - margin);
 			
-			dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
+			dragable_dest : [4]f32 = {0, 0, dest_rect.z - margin, dest_rect.w};
 			slider_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, bound_scene.unit_size); //to convert to pixel space
 			if container.is_selected {
 				t := ((x - slider_rect.x) / slider_rect.z * (e.max_val - e.min_val)) + e.min_val;
@@ -535,7 +554,7 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 			margin : f32 = get_logical_margin(style);
 			x := mouse_pos().x;
 			
-			dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
+			dragable_dest : [4]f32 = {0, 0, dest_rect.z - margin, dest_rect.w};
 			slider_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, bound_scene.unit_size); //to convert to pixel space
 			if container.is_selected {
 				t := ((x - slider_rect.x) / slider_rect.z * f32(e.max_val - e.min_val)) + f32(e.min_val);
@@ -577,7 +596,7 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 			}
 		}
 		case Custom_info: {
-			e.update_call(e.custom_data);
+			e.update_call(e.custom_data, container^, parent_rect, unit_size, mouse_pos());
 		}
 	}
 }
@@ -585,6 +604,7 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 element_draw :: proc (container : Element_container, style : Style, parent_rect : [4]f32) {
 	
 	dest : Destination = container.dest; //Dest is in unit space (0 to 1)
+	dest_rect := get_rect(dest.rect, parent_rect);
 	
 	appear : Appearance = style.default;
 	if act, ok := style.active.?; ok && container.is_active {
@@ -608,7 +628,7 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 					
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
-					draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
+					draw_quad(dest.anchor, dest.self_anchor, dest_rect, parent_rect, a.bg_color);
 					
 				case Patched_appearance:
 					//TODO
@@ -623,9 +643,9 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest_rect, parent_rect, a.bg_color);
 					
-					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					mid_dest : [4]f32 = {0,0, dest_rect.z - a.mid_margin, dest_rect.w - a.mid_margin};
 					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					text_dest := mid_dest - {0,0, a.front_margin, a.front_margin};
@@ -644,9 +664,9 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest_rect, parent_rect, a.bg_color);
 					
-					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					mid_dest : [4]f32 = {0,0, dest_rect.z - a.mid_margin, dest_rect.w - a.mid_margin};
 					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					//TODO draw x
@@ -682,9 +702,9 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest_rect, parent_rect, a.bg_color);
 					
-					text_dest : [4]f32 = {0,0, dest.rect.z - a.front_margin, dest.rect.w - a.front_margin};
+					text_dest : [4]f32 = {0,0, dest_rect.z - a.front_margin, dest_rect.w - a.front_margin};
 					draw_text(e.text, text_dest, new_rect, a.front_color, a);
 					
 				case Patched_appearance:
@@ -700,15 +720,15 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest_rect, parent_rect, a.bg_color);
 					
-					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					mid_dest : [4]f32 = {0,0, dest_rect.z - a.mid_margin, dest_rect.w - a.mid_margin};
 					draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					margin := get_logical_margin(style);
-					offset : f32 = margin/2 + (e.current_val - e.min_val) / (e.max_val - e.min_val) * (dest.rect.z - margin);
+					offset : f32 = margin/2 + (e.current_val - e.min_val) / (e.max_val - e.min_val) * (dest_rect.z - margin);
 					
-					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest.rect.w - a.line_margin}, new_rect, a.front_color);
+					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest_rect.w - a.line_margin}, new_rect, a.front_color);
 					
 				case Patched_appearance:
 
@@ -723,15 +743,15 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest_rect, parent_rect, a.bg_color);
 					
-					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					mid_dest : [4]f32 = {0,0, dest_rect.z - a.mid_margin, dest_rect.w - a.mid_margin};
 					draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					margin := get_logical_margin(style);
-					offset : f32 = margin/2 + f32(e.current_val - e.min_val) / f32(e.max_val - e.min_val) * (dest.rect.z - margin);
+					offset : f32 = margin/2 + f32(e.current_val - e.min_val) / f32(e.max_val - e.min_val) * (dest_rect.z - margin);
 					
-					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest.rect.w - a.line_margin}, new_rect, a.front_color);
+					draw_quad(.center_left, .center_center, {offset, 0, a.line_width, dest_rect.w - a.line_margin}, new_rect, a.front_color);
 					
 				case Patched_appearance:
 
@@ -750,9 +770,9 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
 					
-					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
+					new_rect := draw_quad(dest.anchor, dest.self_anchor, dest_rect, parent_rect, a.bg_color);
 					
-					mid_dest : [4]f32 = {0,0, dest.rect.z - a.mid_margin, dest.rect.w - a.mid_margin};
+					mid_dest : [4]f32 = {0,0, dest_rect.z - a.mid_margin, dest_rect.w - a.mid_margin};
 					new_rect = draw_quad(.center_center, .center_center, mid_dest, new_rect, a.mid_color);
 					
 					if len(e.runes) != 0 {
@@ -788,7 +808,7 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 					
 				case Colored_appearance:
 					render.set_texture(.texture_diffuse, render.texture2D_get_white());
-					parent_rect := draw_quad(dest.anchor, dest.self_anchor, dest.rect, parent_rect, a.bg_color);
+					parent_rect := draw_quad(dest.anchor, dest.self_anchor, dest_rect, parent_rect, a.bg_color);
 					
 					for key in e.sub_elements {
 						e := active_elements[cast(i64)key];
@@ -801,7 +821,7 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 		}
 		case Custom_info: {
 			
-			e.draw_call(e.custom_data, container, style, parent_rect, unit_size);
+			e.draw_call(e.custom_data, container, parent_rect, unit_size, mouse_pos(), style);
 		}
 	}
 }

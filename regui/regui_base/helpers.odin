@@ -30,10 +30,10 @@ get_unit_size :: proc (width, height : f32) -> f32 {
 //self_anchor: which part of the rect is the origin (anchored place)
 //anchor_rect_pixel is a parent rect given in pixels space (0-2000 ish), will redifine what "the screen" is.
 //Unit size is the unit_size (0-2000 ish), see get_unit_size
-get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anchor_point, rect : [4]f32, anchor_rect_pixel : [4]f32, unit_size : f32) -> [4]f32 {
-	
+get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anchor_point, rect : Rect, anchor_rect_pixel : [4]f32, unit_size : f32) -> [4]f32 {
+	rect := get_rect(rect, anchor_rect_pixel);
 	offset : [2]f32;
-
+	
 	switch self_anchor {
 		
 		case .bottom_left:
@@ -65,17 +65,18 @@ get_screen_space_position_rect :: proc(anchor : Anchor_point, self_anchor : Anch
 
 		case .top_right:
 			offset.x = -rect.z
-			offset.y = -rect.w
+			offset.y = -rect.w		
+		
 		case: // default
 	}
-
+	
 	rectangle := [4]f32{
 		(rect.x + offset.x) * unit_size,
 		(rect.y + offset.y) * unit_size,
 		rect.z * unit_size,
 		rect.w * unit_size,
 	}
-
+	
 	rectangle.xy += anchor_rect_pixel.xy;
 
 	switch anchor {
@@ -128,9 +129,6 @@ point_rect_collision :: proc(point: [2]f32, rect: [4]f32) -> bool {
 		   point.y <= rect.y + rect.w;
 }
 */
-
-
-
 
 
 
@@ -265,7 +263,7 @@ draw_text_param :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, s
 	text_bounds := render.text_get_bounds(text, text_size, font);
 	
 	//This is a little hacky but it works.
-	rect = get_screen_space_position_rect(anchor, anchor, {0,0,text_bounds.z, text_bounds.w} / unit_size, rect, unit_size);
+	rect = get_screen_space_position_rect(anchor, auto_cast anchor, [4]f32{0,0,text_bounds.z, text_bounds.w} / unit_size, rect, unit_size);
 	
 	render.pipeline_end();
 	render.text_draw(text, rect.xy - {text_bounds.x, text_bounds.y}, rect.w, bold, italic, color, {color = backdrop_color, offset = backdrop_offset * unit_size}, fonts);
@@ -320,7 +318,8 @@ update_text_base :: proc (e : Base_text_info, is_selected : bool, style : Style,
 	
 	x := mouse_pos().x;
 	
-	dragable_dest : [4]f32 = {0, 0, dest.rect.z - margin, dest.rect.w};
+	r := get_rect(dest.rect, rect);
+	dragable_dest : [4]f32 = {0, 0, r.z - margin, r.w};
 	field_rect := get_screen_space_position_rect(.center_center, .center_center, dragable_dest, rect, unit_size); //to convert to pixel space
 	
 	font : render.Font;

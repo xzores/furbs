@@ -23,7 +23,7 @@ _ :: gl.GLenum;
 
 RENDER_DEBUG	:: #config(RENDER_DEBUG, ODIN_DEBUG);
 RECORD_DEBUG	:: #config(RECORD_DEBUG, false);
-UNBIND_DEBUG	:: #config(UNBIND_DEBUG, true);
+UNBIND_DEBUG	:: #config(UNBIND_DEBUG, false);
 
 /////////// Opengl handles ///////////
 Shader_program_id :: distinct u32;
@@ -2423,6 +2423,10 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 		debug_state.programs[shader_program] = {loc, strings.clone(label)};
 		
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+				bind_shader_program(shader_program);
+				unbind_shader_program();
+			}
 			clabel := fmt.ctprintf("Program %v: %v", shader_program, label);
 			gl.ObjectLabel(.PROGRAM, auto_cast shader_program, auto_cast len(clabel), clabel);
 		}
@@ -2491,6 +2495,10 @@ gen_vertex_arrays :: proc(vaos : []Vao_id, label : string, loc := #caller_locati
 		for vao in vaos {
 			debug_state.vaos[vao] = {loc, strings.clone(label)};;
 			if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+				if cpu_state.gl_version < .opengl_4_5 {
+					bind_vertex_array(vao);
+					unbind_vertex_array();
+				}
 				clabel := fmt.ctprintf("Vertex Array %v: %v", vao, label);
 				gl.ObjectLabel(.VERTEX_ARRAY, auto_cast vao, auto_cast len(clabel), clabel);
 			}
@@ -2513,6 +2521,10 @@ gen_vertex_array :: proc(label : string, loc := #caller_location) -> Vao_id {
 	when RENDER_DEBUG {
 		debug_state.vaos[vao] = {loc, strings.clone(label)};;
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+				bind_vertex_array(vao);
+				unbind_vertex_array();
+			}
 			clabel := fmt.ctprintf("Vertex Array %v: %v", vao, label);
 			gl.ObjectLabel(.VERTEX_ARRAY, auto_cast vao, auto_cast len(clabel), clabel);
 		}
@@ -2704,7 +2716,7 @@ draw_elements_instanced :: proc (vao : Vao_id, primitive : Primitive, #any_int f
 /////////// Buffer stuff ///////////
 
 //TODO should we even use Buffer_type? we keep it, it is easier to remove then add.
-gen_buffers :: proc(_ : Buffer_type, buffers : []Buffer_id, label : string, loc := #caller_location) {
+gen_buffers :: proc(buffer_type : Buffer_type, buffers : []Buffer_id, label : string, loc := #caller_location) {
 
 	if cpu_state.gl_version >= .opengl_4_5 {
 		gl.CreateBuffers(auto_cast len(buffers), cast([^]u32) raw_data(buffers));
@@ -2717,6 +2729,10 @@ gen_buffers :: proc(_ : Buffer_type, buffers : []Buffer_id, label : string, loc 
 		for b in buffers {
 			debug_state.buffers[b] = {loc, strings.clone(label)};;
 			if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+				if cpu_state.gl_version < .opengl_4_5 {
+					bind_buffer(buffer_type, b);
+					unbind_buffer(buffer_type);
+				}	
 				clabel := fmt.ctprintf("Buffer %v: %v", b, label);
 				gl.ObjectLabel(.BUFFER, auto_cast b, auto_cast len(clabel), clabel);
 			}
@@ -2724,7 +2740,7 @@ gen_buffers :: proc(_ : Buffer_type, buffers : []Buffer_id, label : string, loc 
 	}
 }
 
-gen_buffer :: proc(_ : Buffer_type, label : string, loc := #caller_location) -> (buf : Buffer_id) {
+gen_buffer :: proc(buffer_type : Buffer_type, label : string, loc := #caller_location) -> (buf : Buffer_id) {
 	
 	if cpu_state.gl_version >= .opengl_4_5 {
 		gl.CreateBuffers(1, auto_cast &buf);
@@ -2736,6 +2752,10 @@ gen_buffer :: proc(_ : Buffer_type, label : string, loc := #caller_location) -> 
 	when RENDER_DEBUG {
 		debug_state.buffers[buf] = {loc, strings.clone(label)};;
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+				bind_buffer(buffer_type, buf);
+				unbind_buffer(buffer_type);
+			}
 			clabel := fmt.ctprintf("Buffer %v: %v", buf, label);
 			gl.ObjectLabel(.BUFFER, auto_cast buf, auto_cast len(clabel), clabel);
 		}
@@ -3135,7 +3155,7 @@ end_buffer_writes :: proc(using resource : ^Resource, loc := #caller_location) {
 //////////// Render Buffers ////////////
 
 gen_render_buffers :: proc (rbos : []Rbo_id, label : string, loc := #caller_location) {
-
+	
 	// Create renderbuffer objects
 	if cpu_state.gl_version >= .opengl_4_5 {
 		gl.CreateRenderbuffers(auto_cast len(rbos), auto_cast raw_data(rbos));
@@ -3143,11 +3163,15 @@ gen_render_buffers :: proc (rbos : []Rbo_id, label : string, loc := #caller_loca
 	else {
 		gl.GenRenderbuffers(auto_cast len(rbos), auto_cast raw_data(rbos));
 	}
-
+	
 	when RENDER_DEBUG {
 		for r in rbos {
 			debug_state.rbos[r] = {loc, strings.clone(label)};;
 			if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+				if cpu_state.gl_version < .opengl_4_5 {
+					bind_render_buffer(r);
+					unbind_render_buffer();
+				}
 				clabel := fmt.ctprintf("Renderbuffer %v: %v", r, label);
 				gl.ObjectLabel(.RENDERBUFFER, auto_cast r, auto_cast len(clabel), clabel);
 			}
@@ -3170,6 +3194,10 @@ gen_render_buffer :: proc (label : string, loc := #caller_location) -> Rbo_id {
 	when RENDER_DEBUG {
 		debug_state.rbos[buffer] = {loc, strings.clone(label)};;
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+				bind_render_buffer(buffer);
+				unbind_render_buffer();
+			}
 			clabel := fmt.ctprintf("Renderbuffer %v: %v", buffer, label);
 			gl.ObjectLabel(.RENDERBUFFER, auto_cast buffer, auto_cast len(clabel), clabel);
 		}
@@ -3230,8 +3258,12 @@ gen_frame_buffer :: proc (label : string, loc := #caller_location) -> Fbo_id {
 	when RENDER_DEBUG {
 		debug_state.fbos[framebuffer_id] = {loc, strings.clone(label)};;
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+				bind_frame_buffer(framebuffer_id);
+				unbind_frame_buffer();
+			}
 			clabel := fmt.ctprintf("Framebuffer %v: %v", framebuffer_id, label);
-			gl.ObjectLabel(.FRAMEBUFFER, auto_cast framebuffer_id, auto_cast len(clabel), clabel);
+			gl.ObjectLabel(.FRAMEBUFFER, auto_cast framebuffer_id, auto_cast len(clabel), clabel, loc);
 		}
 	}
 	
@@ -3644,6 +3676,10 @@ gen_texture1Ds :: proc (textures : []Tex1d_id, label : string, loc := #caller_lo
 		for t in textures {
 			debug_state.tex1ds[t] = {loc, strings.clone(label)};;
 			if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+				if cpu_state.gl_version < .opengl_4_5 {
+					bind_texture1D(t);
+					unbind_texture1D();
+				}
 				clabel := fmt.ctprintf("Texture1D %v: %v", t, label);
 				gl.ObjectLabel(.TEXTURE, auto_cast t, auto_cast len(clabel), clabel);
 			}
@@ -3665,6 +3701,10 @@ gen_texture1D :: proc (label : string, loc := #caller_location) -> (tex : Tex1d_
 	when RENDER_DEBUG {
 		debug_state.tex1ds[tex] = {loc, strings.clone(label)};;
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+					bind_texture1D(tex);
+					unbind_texture1D();
+				}
 			clabel := fmt.ctprintf("Texture1D %v: %v", tex, label);
 			gl.ObjectLabel(.TEXTURE, auto_cast tex, auto_cast len(clabel), clabel);
 		}
@@ -3890,6 +3930,10 @@ gen_texture2Ds :: proc (textures : []Tex2d_id, label : string, loc := #caller_lo
 		for t in textures {
 			debug_state.tex2ds[t] = {loc, strings.clone(label)};;
 			if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+				if cpu_state.gl_version < .opengl_4_5 {
+					bind_texture2D(t);
+					unbind_texture2D();
+				}
 				clabel := fmt.ctprintf("Texture2D %v: %v", t, label);
 				gl.ObjectLabel(.TEXTURE, auto_cast t, auto_cast len(clabel), clabel);
 			}
@@ -3911,6 +3955,10 @@ gen_texture2D :: proc (label : string, loc := #caller_location) -> (tex : Tex2d_
 	when RENDER_DEBUG {
 		debug_state.tex2ds[tex] = {loc, strings.clone(label)};;
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+				bind_texture2D(tex);
+				unbind_texture2D();
+			}
 			clabel := fmt.ctprintf("Texture2D %v: %v", tex, label);
 			gl.ObjectLabel(.TEXTURE, auto_cast tex, auto_cast len(clabel), clabel);
 		}
@@ -4448,6 +4496,10 @@ gen_texture3Ds :: proc (textures : []Tex3d_id, label : string, loc := #caller_lo
 		for t in textures {
 			debug_state.tex3ds[t] = {loc, strings.clone(label)};;
 			if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+				if cpu_state.gl_version < .opengl_4_5 {
+					bind_texture3D(t);
+					unbind_texture3D();
+				}
 				clabel := fmt.ctprintf("Texture3D %v: %v", t, label);
 				gl.ObjectLabel(.TEXTURE, auto_cast t, auto_cast len(clabel), clabel);
 			}
@@ -4469,6 +4521,10 @@ gen_texture3D :: proc (label : string, loc := #caller_location) -> (tex : Tex3d_
 	when RENDER_DEBUG {
 		debug_state.tex3ds[tex] = {loc, strings.clone(label)};;
 		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+				bind_texture3D(tex);
+				unbind_texture3D();
+			}
 			clabel := fmt.ctprintf("Texture3D %v: %v", tex, label);
 			gl.ObjectLabel(.TEXTURE, auto_cast tex, auto_cast len(clabel), clabel);
 		}

@@ -484,7 +484,7 @@ font_iter_next :: proc (ctx: ^Font_context, iter : ^Font_iter, loc := #caller_lo
 		return {}, {}, true;
 	}
 	
-	assert(glyph in ctx.glyphs, "invalid glyph index");
+	assert(glyph in ctx.glyphs, "invalid glyph index", loc);
 	atlas_handle := ctx.glyphs[glyph];
 	text_coords = atlas_get_coords(ctx.atlas, atlas_handle);
 	

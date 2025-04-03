@@ -35,7 +35,7 @@ draw_quad_instanced :: proc (instances : []Default_instance_data, color : [4]f32
 
 //Draw as quad between two points presented as a line.
 draw_line_2D :: proc (p1 : [2]f32, p2 : [2]f32, width : f32, z : f32 = 0, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
-	draw_quad_mat(line_2D_to_quad_mat(p1, p2, width, z), color);
+	draw_quad_mat(line_2D_to_quad_mat(p1, p2, width, z), color, loc = loc);
 }
 
 //TODO
@@ -49,7 +49,7 @@ draw_char :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc
 
 draw_circle_mat :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_circle);
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_circle, loc = loc);
 }
 
 draw_circle_position :: proc(position : [3]f32, scale : f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {

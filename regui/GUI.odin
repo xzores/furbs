@@ -172,4 +172,8 @@ Element_container 	:: regui_base.Element_container;
 Parent 				:: regui_base.Parent;
 Scene 				:: regui_base.Scene;
 
-Input 				:: regui_base.Input;
+Fill_x 				:: regui_base.Fill_x;
+Fill_y 				:: regui_base.Fill_y;
+Fill 				:: regui_base.Fill;
+Rect 				:: regui_base.Rect;
+get_rect 			:: regui_base.get_rect;

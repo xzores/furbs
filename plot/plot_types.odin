@@ -449,14 +449,14 @@ plot_inner :: proc (p : ^Plot_xy, inner_target_size : [2]i32, rect : [4]f32, x_c
 	unreachable();
 }
 
-update_xy_plot :: proc (plot : Plot_xy, input : regui.Input) {
+update_xy_plot :: proc (plot : Plot_xy, mouse_pos : [2]f32, hover, focus : bool) {
 	
 	// x_view, y_view,
 	
 }
 
 //Renders the plot into the target texture.
-render_xy_plot :: proc (plot : ^Plot_xy, target : render.Frame_buffer, color_theme := light_color_theme) {
+render_xy_plot :: proc (plot : ^Plot_xy, target : render.Frame_buffer, mouse_pos : [2]f32, color_theme := light_color_theme) {
 	target := target;
 	
 	//////////////////////////// Framebuffers and size calculations ////////////////////////////
