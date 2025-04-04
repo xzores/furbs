@@ -34,10 +34,8 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 	}
 
 	target_begin(&state.arrow_fbo, [4]f32{0,0,0,0});
-		pipeline_begin(state.shapes_pipeline);
-			set_camera(overlay_camera);
+		pipeline_begin(state.shapes_pipeline, overlay_camera);
 			set_texture(.texture_diffuse, texture2D_get_white());
-			
 			draw_arrow({0,0,0}, {1,0,0},  [4]f32{0.8, 0.1, 0.1, 1});
 			draw_arrow({0,0,0}, {0,1,0},  [4]f32{0.1, 0.8, 0.1, 1});
 			draw_arrow({0,0,0}, {0,0,1},  [4]f32{0.1, 0.1, 0.8, 1});
@@ -66,8 +64,7 @@ draw_coordinate_overlay :: proc (camera : Camera3D, offset : [2]f32 = {0.05, 0.0
 	};
 	
 	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
-	pipeline_begin(state.overlay_pipeline);
-		set_camera(cam);
+	pipeline_begin(state.overlay_pipeline, cam);
 		set_texture(.texture_diffuse, tex);
 		draw_quad(linalg.matrix4_from_trs_f32([3]f32{(aspect) - offset.x - scale/2, 1.0 - offset.y - scale/2, 0}, 0, {scale,scale,1}));
 	pipeline_end();

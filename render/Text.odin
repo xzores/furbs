@@ -243,8 +243,7 @@ text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : 
 	
 	cam := camera_get_pixel_space(state.current_target);
 
-	pipeline_begin(pipeline);
-	set_camera(cam);
+	pipeline_begin(pipeline, cam);
 	set_texture(.texture_diffuse, state.font_texture);
 	
 	if backdrop.offset != {0,0} {
