@@ -487,8 +487,6 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 	dest_rect := get_rect(container.dest.rect, parent_rect); 
 	rect := get_screen_space_position_rect(container.dest.anchor, container.dest.self_anchor, container.dest.rect, parent_rect, bound_scene.unit_size);
 	
-	fmt.printf("rect : %v\n", rect);
-	
 	container.is_active = false;
 	container.is_hover = false;
 	if container.stay_selected {
@@ -510,7 +508,9 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 	if is_hovered(dest, parent_rect) {
 		container.is_hover = true;
 	}
-		
+	
+	unit_size := bound_scene.unit_size;
+	
 	switch &e in container.element_info {
 		case Rect_info:{
 			//A rect has not logic
@@ -586,16 +586,17 @@ element_update :: proc (container : ^Element_container, style : Style, parent_re
 				e.bg_text				//bg_text : string,
 			}
 			
-			update_text_base(base, container.is_selected, style, dest, rect, bound_scene.unit_size, loc);
+			update_text_base(base, container.is_selected, style, dest, rect, unit_size, loc);
 		}
 		case Panel_info:{
+			
 			for key in e.sub_elements {
 				e := &active_elements[cast(i64)key];
 				element_update(e, style, rect);
 			}
 		}
 		case Custom_info: {
-			e.update_call(e.custom_data, container^, parent_rect, bound_scene.unit_size, mouse_pos());
+			e.update_call(e.custom_data, container^, parent_rect, unit_size, mouse_pos());
 		}
 	}
 }
@@ -801,10 +802,6 @@ element_draw :: proc (container : Element_container, style : Style, parent_rect 
 			}	
 			
 		case Panel_info: {
-			
-			//panel_camera := {};
-			//render.set_camera();
-			
 			switch a in style.default {
 				
 				case Textured_appearance:
