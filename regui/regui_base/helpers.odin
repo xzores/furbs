@@ -267,7 +267,8 @@ draw_text_param :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, s
 	
 	render.pipeline_end();
 	render.text_draw(text, rect.xy - {text_bounds.x, text_bounds.y}, rect.w, bold, italic, color, {color = backdrop_color, offset = backdrop_offset * unit_size}, fonts);
-	render.pipeline_begin(bound_scene.gui_pipeline, render.camera_get_pixel_space(bound_scene.window));
+	render.pipeline_begin(bound_scene.gui_pipeline);
+	render.set_camera(render.camera_get_pixel_space(bound_scene.window));
 }
 
 draw_text_appearance :: proc (text : string, bounds : [4]f32, parent_rect : [4]f32, color : [4]f32, appearance : Appearance, loc := #caller_location) {

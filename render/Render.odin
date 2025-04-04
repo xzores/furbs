@@ -425,7 +425,7 @@ end_frame :: proc(loc := #caller_location) {
 
 Stored_target :: struct {
 	target : Render_target,
-	pipeline : Stored_pipeline,
+	pipeline : Pipeline,
 }
 
 store_target :: proc(loc := #caller_location) -> Stored_target {
@@ -434,7 +434,7 @@ store_target :: proc(loc := #caller_location) -> Stored_target {
 	if state.current_target != {} {
 		target_end(loc);
 	}
-	return { old_target, pipe };
+	return { old_target, pipe};
 }
 
 restore_target :: proc(stored : Stored_target, loc := #caller_location) {
@@ -444,23 +444,18 @@ restore_target :: proc(stored : Stored_target, loc := #caller_location) {
 	}
 }
 
-Stored_pipeline :: struct {
-	pipeline : Pipeline,
-	camera : Camera_matrices,
-}
-
-store_pipeline :: proc(loc := #caller_location) -> Stored_pipeline {
-	old_pipeline, old_cam := state.current_pipeline, state.camera;
+store_pipeline :: proc(loc := #caller_location) -> Pipeline {
+	old_pipeline := state.current_pipeline;
 	if state.current_pipeline != {} {
 		pipeline_end(loc);
 	}
 	
-	return {old_pipeline, old_cam};
+	return old_pipeline;
 }
 
-restore_pipeline :: proc(state : Stored_pipeline, loc := #caller_location) {
-	if state != {} {
-		pipeline_begin(state.pipeline, state.camera, loc);
+restore_pipeline :: proc(pipeline : Pipeline, loc := #caller_location) {
+	if pipeline != {} {
+		pipeline_begin(pipeline, loc);
 	}
 }
 

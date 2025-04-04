@@ -334,7 +334,8 @@ plot_inner :: proc (p : ^Plot_xy, inner_target_size : [2]i32, rect : [4]f32, x_c
 		
 		//Plot the inner plot
 		{
-			render.pipeline_begin(instanced_pipeline, cam_2d);
+			render.pipeline_begin(instanced_pipeline);
+				render.set_camera(cam_2d);
 				render.set_texture(.texture_diffuse, render.texture2D_get_white());
 				
 				grid_line_width := p.grid_desc.line_width * min(width, height);
@@ -558,7 +559,8 @@ render_xy_plot :: proc (plot : ^Plot_xy, target : render.Frame_buffer, mouse_pos
 			
 			draw_pipeline := render.pipeline_make(render.get_default_shader(), depth_test = false);
 			defer render.pipeline_destroy(draw_pipeline);
-			render.pipeline_begin(draw_pipeline, cam_2d);
+			render.pipeline_begin(draw_pipeline);
+				render.set_camera(cam_2d);
 				
 				//it was using direct draw, so draw whatever is in the texture.
 				render.frame_buffer_blit_color_attach_to_texture(&plot.inner_plot_framebuffer, 0, plot.inner_plot_texture);

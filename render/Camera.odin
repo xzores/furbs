@@ -47,6 +47,7 @@ Camera :: union {
 //////////////////////////////////////////////////////////////////////////////////
 
 //Z space is -1 to 1
+@require_results
 camera_get_pixel_space :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
 
 	w, h : f32;
@@ -77,17 +78,20 @@ camera_get_pixel_space :: proc(target : Render_target, loc := #caller_location) 
 
 ///////////////////////////////////////////
 
+@require_results
 camera_forward :: proc(cam : Camera3D) -> [3]f32 {
 	res := linalg.normalize(cam.target - cam.position);
 	return res;
 } 
 
+@require_results
 camera_forward_horizontal :: proc(cam : Camera3D) -> [3]f32 {
 	forward := camera_forward(cam);
 	res := linalg.normalize([3]f32{forward.x, 0, forward.z});
 	return res;
 }
 
+@require_results
 camera_right :: proc(cam : Camera3D) -> [3]f32 {
 	forward := camera_forward(cam);
 	return linalg.normalize(linalg.cross(cam.up, forward));
@@ -137,6 +141,7 @@ camera3D_get_prj_view :: proc(using camera : Camera3D, aspect : f32, loc := #cal
 	return;
 };
 
+@require_results
 camera2D_get_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
 
 	translation_mat := linalg.matrix4_translate(-linalg.Vector3f32{position.x, position.y, 0});
@@ -175,8 +180,9 @@ camera2D_bind :: proc(using camera : Camera2D, loc := #caller_location) {
 	state.inv_view_prj_mat = linalg.inverse(state.view_prj_mat);
 }
 
-@(private)
-camera_bind :: proc (camera : Camera, loc := #caller_location) {
+set_camera :: proc (camera : Camera, loc := #caller_location) {
+	
+	assert(state.bound_shader != {}, "there must be a bound shader.");
 	
 	switch cam in camera {
 		case Camera2D:
@@ -186,5 +192,19 @@ camera_bind :: proc (camera : Camera, loc := #caller_location) {
 		case Camera_matrices:
 			state.camera = cam;
 	}
+
+	set_uniform(state.bound_shader, .prj_mat, state.prj_mat);
+	set_uniform(state.bound_shader, .inv_prj_mat, state.inv_prj_mat);
+	
+	set_uniform(state.bound_shader, .view_mat, state.view_mat);
+	set_uniform(state.bound_shader, .inv_view_mat, state.inv_view_mat);
+
+	set_uniform(state.bound_shader, .view_prj_mat, state.view_prj_mat);
+	set_uniform(state.bound_shader, .inv_view_prj_mat, state.inv_view_prj_mat);
+	
+	//TODO do not set here
+	//set_uniform(state.bound_shader, .time, 		state.time_elapsed);
+	//set_uniform(state.bound_shader, .delta_time, 	state.delta_time);
 }
+
 

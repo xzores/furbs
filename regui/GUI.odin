@@ -82,7 +82,8 @@ end :: proc (state : ^Scene, loc := #caller_location) {
 	assert(render.state.is_begin_frame == true, "regui's begin must be called before render's end_frame", loc);
 	style : Style = state.default_style;
 	
-	render.pipeline_begin(state.gui_pipeline, render.camera_get_pixel_space(state.window), loc = loc);
+	render.pipeline_begin(state.gui_pipeline, loc = loc);
+	render.set_camera(render.camera_get_pixel_space(state.window));
 	
 	//Draw
 	for k in state.owned_elements {

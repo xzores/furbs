@@ -57,13 +57,13 @@ pipeline_destroy :: proc (pipeline : Pipeline, loc := #caller_location) {
 }
 
 //TODO flags: clear_color : [4]f32 = {0,0,0,1}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}
-pipeline_begin :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_location) {
+pipeline_begin :: proc (pipeline : Pipeline, loc := #caller_location) {
 	assert(state.current_pipeline == {}, "There must not be a bound target before calling begin_pipeline (remember to call end_pipeline).", loc);
 	assert(state.current_target != {}, "There must be a bound target before calling begin_pipeline (call begin_target before begin_pipeline).", loc);
 	assert(state.target_pixel_width != 0, "target_pixel_width is 0", loc);
 	assert(state.target_pixel_height != 0, "target_pixel_height is 0", loc);
 	assert(pipeline != {}, "pipeline is nil", loc);
-
+	
 	using gl;
 	
 	{
@@ -81,20 +81,6 @@ pipeline_begin :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 		else {
 			gl.set_depth_clamp(false);
 		}
-		
-		camera_bind(camera);
-
-		set_uniform(pipeline.shader, .prj_mat, state.prj_mat);
-		set_uniform(pipeline.shader, .inv_prj_mat, state.inv_prj_mat);
-		
-		set_uniform(pipeline.shader, .view_mat, state.view_mat);
-		set_uniform(pipeline.shader, .inv_view_mat, state.inv_view_mat);
-
-		set_uniform(pipeline.shader, .view_prj_mat, state.view_prj_mat);
-		set_uniform(pipeline.shader, .inv_view_prj_mat, state.inv_view_prj_mat);
-
-		set_uniform(pipeline.shader, .time, 		state.time_elapsed);
-		set_uniform(pipeline.shader, .delta_time, 	state.delta_time);
 
 		state.current_pipeline = pipeline;
 	}
