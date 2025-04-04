@@ -3658,7 +3658,6 @@ blit_fbo_color_attach :: proc(src, dst : Fbo_id, #any_int src_color_attach, dst_
 		//gl.GetIntegerv(.READ_FRAMEBUFFER_BINDING, &prev_read_buf); // Save current FBO
 		bind_frame_buffer_read(src);
 		bind_frame_buffer_draw(dst);
-		fmt.printf("src : %v, dst : %v\n", src, dst);
 		gl.ReadBuffer(gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)src_color_attach);
 		gl.DrawBuffer(gl.GLenum.COLOR_ATTACHMENT0 + cast(gl.GLenum)dst_color_attach);
 		gl.BlitFramebuffer(src_x, src_y, src_width, src_height, dst_x, dst_y, dst_width, dst_height, .COLOR_BUFFER_BIT, interpolation); 
