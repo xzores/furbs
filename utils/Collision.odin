@@ -43,7 +43,6 @@ test_AABB_against_frustum :: proc(aabb : Bounding_box) -> bool {
 	*/
 }
 
-
 collision_point_rect :: proc(point : [2]f32, rect : [4]f32) -> bool {
 
 	return point.x >= rect.x && point.x <= rect.x + rect.z && point.y >= rect.y && point.y <= rect.y + rect.w
@@ -77,7 +76,6 @@ collision_line_rect :: proc(p1, p2 : [2]f32, rect : [4]f32) -> bool {
 		line_intersect(p1, p2, rect_p3, rect_p4) ||
 		line_intersect(p1, p2, rect_p4, rect_p1);
 }
-
 
 collision_rect_rect :: proc(rect1 : [4]f32, rect2 : [4]f32) -> bool {
 

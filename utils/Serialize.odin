@@ -141,6 +141,7 @@ serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loca
 	return .ok;
 }
 
+@(require_results)
 _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_location) -> Serialization_error { //The header includes itself, and is the size type of Header_size_type
 	using runtime;
 	
@@ -204,6 +205,7 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 }
 
 //One would have to free the memory with free(...) if one does not use a temp allocator.
+@(require_results)
 deserialize_from_bytes :: proc(to_type : typeid, data : []u8, alloc : mem.Allocator, loc := #caller_location) -> (value : any, err : Serialization_error) {
 	using runtime;
 
@@ -225,6 +227,7 @@ deserialize_from_bytes :: proc(to_type : typeid, data : []u8, alloc : mem.Alloca
 	return;
 }
 
+@(require_results)
 _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Header_size_type, value_data : rawptr, alloc : mem.Allocator, loc := #caller_location) -> Serialization_error {
 	using runtime;
 
@@ -287,10 +290,11 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				return .type_not_supported;
 		}
 	}
-
+	
 	return .ok;
 }
 
+@(require_results, private)
 to_type :: proc(data : []u8, $new_type : typeid) -> new_type {
 	
 	if len(data) < size_of(new_type){
@@ -300,8 +304,10 @@ to_type :: proc(data : []u8, $new_type : typeid) -> new_type {
 	data_ptr : ^new_type = transmute(^new_type)&data[0];
 	
 	return data_ptr^;
+
 }
 
+@(private)
 to_type_at :: proc(dst : rawptr, data : []u8, new_type : typeid) {
 	
 	if len(data) < reflect.size_of_typeid(new_type){
@@ -313,6 +319,7 @@ to_type_at :: proc(dst : rawptr, data : []u8, new_type : typeid) {
 }
 
 //Only works for trivial copies.
+@(require_results, private)
 from_type :: proc(field : any, alloc := context.allocator) -> []u8 {
 	
 	assert(is_trivial_copied(field.id));
@@ -325,7 +332,8 @@ from_type :: proc(field : any, alloc := context.allocator) -> []u8 {
 	return data;
 }
 
-append_type_to_data :: proc (field : any, append_to : ^[dynamic]u8) -> rawptr {
+@(private)
+append_type_to_data :: proc (field : any, append_to : ^[dynamic]u8) {
 
 	assert(is_trivial_copied(field.id));
 
@@ -338,6 +346,4 @@ append_type_to_data :: proc (field : any, append_to : ^[dynamic]u8) -> rawptr {
 
 	//Copy the data.
 	mem.copy(dst, field.data, size);
-
-	return dst;
 }

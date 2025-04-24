@@ -56,15 +56,25 @@ load_all_in_dir_as_txt :: proc(directory_path : string, extension : string, incl
 	return;
 } 
 
-load_all_in_dir_as_json :: proc($T : typeid, directory_path : string, extension : string, include_extension : bool = false) -> (res : map[string]T) {
+load_all_in_dir_as_json :: proc($T : typeid, directory_path : string, extension : string, include_extension : bool = false, resave : bool = false, specification := json.DEFAULT_SPECIFICATION, allocator := context.allocator) -> (res : map[string]T, e : os.Error) {
+	
+	context.allocator = allocator;
 	
 	//Open Directory
-	dir, _ := os.open(directory_path);
+	dir, dir_err := os.open(directory_path);
 	defer os.close(dir);
+	
+	if dir_err != nil {
+		return {}, dir_err;
+	}
 	
 	//Get files from directory
 	files_info, err := os.read_dir(dir, -1);
 	defer os.file_info_slice_delete(files_info);
+	
+	if err != nil {
+		return {}, err;
+	}
 
 	full_ex := fmt.tprintf(".%s", extension);
 
@@ -73,7 +83,7 @@ load_all_in_dir_as_json :: proc($T : typeid, directory_path : string, extension 
 	for fi in files_info {
 		
 		if !strings.has_suffix(fi.name, full_ex) {
-			fmt.printf("Skipping %v\n", fi.name);
+			//fmt.printf("Skipping %v, '%v', does not have suffix '%v'\n", fi.name, fi.name, full_ex);
 			continue;
 		}
 
@@ -81,8 +91,8 @@ load_all_in_dir_as_json :: proc($T : typeid, directory_path : string, extension 
 		
 		if ok {
 			loaded_object : T;
-			err := json.unmarshal(data, &loaded_object);
-
+			err := json.unmarshal(data, &loaded_object, specification);
+			
 			fmt.assertf(err == nil, "Could not load %s : %v", extension, fi.name);
 			
 			name : string;
@@ -101,7 +111,7 @@ load_all_in_dir_as_json :: proc($T : typeid, directory_path : string, extension 
 			fmt.printf("Loaded %s : %s\n", extension, fi.name);
 
 			//Re save the files, to correct any ivalid/missing entires.
-			{
+			if resave {
 				data, err := json.marshal(loaded_object, {pretty = true});
 				defer delete(data);
 				
