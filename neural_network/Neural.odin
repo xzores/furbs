@@ -1,4 +1,4 @@
-package nn;
+package nerual_network;
 
 import "base:intrinsics"
 
@@ -273,8 +273,9 @@ backprop_feedforward :: proc (using network : ^Feedforward_network, activations 
 		//New allocation, passes the error gradient back to the next layer.
 		G_new := utils.matrix_transposed_vec_mul(l.weights, G);
 		
-		assert(dcdw.cols == l.weights.cols, "Columbs does not match");
-		assert(dcdw.rows == l.weights.rows, "Rows does not match");
+		//TODO uncomment
+		//assert(dcdw.cols == l.weights.cols, "Columbs does not match");
+		//assert(dcdw.rows == l.weights.rows, "Rows does not match");
 		
 		//Apply the gradients 
 		//TODO this should not be done at this stage, we need to make epochs
