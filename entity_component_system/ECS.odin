@@ -6,6 +6,8 @@ import "core:slice"
 import "base:runtime"
 import "../utils"
 
+System_rawptr_proc :: #type proc (components : []rawptr, origin : Entity_id, msg_data : rawptr);
+
 ECS_DEFAULT_COMP_SIZE :: 32;
 
 Message_id :: distinct int; 	//This is what function call
@@ -36,7 +38,7 @@ System :: struct {
 	//The system can recive messages, these are the incoming messages
 	messages : [dynamic]Message,
 	new_messages : [dynamic]Message,
-	msg_subs : map[Message_id]proc(components : []rawptr, origin : Entity_id, msg_data : rawptr), 
+	msg_subs : map[Message_id]System_rawptr_proc, 
 	
 	//This is requirements, which is checked when applying the component
 	requirements : []Component_id,
@@ -62,6 +64,22 @@ make_ECS :: proc () -> Entity_component_system {
 
 destroy_ECS :: proc (ecs : ^Entity_component_system) {
 	
+	for _, system in ecs.systems {
+		using system;
+		delete(arr_of_comp_data_ptr);
+		utils.dynamic_array_destroy(componet_array);
+		delete(component_owners);
+		delete(arr_of_comp_data_ptr);
+		delete(messages);
+		delete(new_messages);
+		delete(msg_subs);
+		delete(requirements);
+		free(system);
+	}
+	
+	delete(ecs.systems);
+	delete(ecs.entities);
+	
 }
 
 //msg_size in bytes
@@ -71,18 +89,18 @@ register_message_id :: proc (ecs : ^Entity_component_system, name : string, msg_
 }
 
 //Does not take any ownership of the data
-register_system :: proc (ecs : ^Entity_component_system, name : string, size_of_component : int, msg_subs : map[Message_id]proc(components : []rawptr, origin : Entity_id, msg_data : rawptr), requirements : []Component_id) -> Component_id {
+register_system :: proc (ecs : ^Entity_component_system, name : string, size_of_component : int, msg_subs : map[Message_id]System_rawptr_proc, requirements : []Component_id, loc := #caller_location) -> Component_id {
 	
 	ecs.cur_comp_id += 1;
 	
-	system := new(System);
+	system := new(System, loc = loc);
 	system^ = System{
-		utils.dynamic_array_make(size_of_component),
-		make(map[Entity_id]int, ECS_DEFAULT_COMP_SIZE),
-		make([dynamic]rawptr),
-		make([dynamic]Message),
-		make([dynamic]Message),
-		clone_map(msg_subs),
+		utils.dynamic_array_make(size_of_component, loc = loc),
+		make(map[Entity_id]int, ECS_DEFAULT_COMP_SIZE, loc = loc),
+		make([dynamic]rawptr, loc = loc),
+		make([dynamic]Message, loc = loc),
+		make([dynamic]Message, loc = loc),
+		clone_map(msg_subs, loc = loc),
 		slice.clone(requirements),
 	};
 	
@@ -190,8 +208,8 @@ set_message_callback :: proc () {
 */
 
 @(private)
-clone_map :: proc(original : map[$T]$TT) -> map[T]TT {
-    result := make(map[T]TT)
+clone_map :: proc(original : map[$T]$TT, loc := #caller_location) -> map[T]TT {
+    result := make(map[T]TT, loc = loc)
     for key, value in original {
         result[key] = value
     }

@@ -13,9 +13,10 @@ Dynamic_array :: struct {
 	allocator : runtime.Allocator,
 }
 
-dynamic_array_make :: proc(element_size : int, capacity := 8, allocator := context.allocator) -> Dynamic_array {
+@require_results
+dynamic_array_make :: proc(element_size : int, capacity := 8, allocator := context.allocator, loc := #caller_location) -> Dynamic_array {
 	
-	ptr, err := mem.alloc(element_size * capacity, allocator = allocator);
+	ptr, err := mem.alloc(element_size * capacity, allocator = allocator, loc = loc);
 	
 	assert(err == nil, "failed to allocate");
 	
@@ -28,6 +29,11 @@ dynamic_array_make :: proc(element_size : int, capacity := 8, allocator := conte
 	};
 }
 
+dynamic_array_destroy :: proc (arr : Dynamic_array) {
+	free(arr.data, arr.allocator);
+}
+
+@require_results
 dynamic_array_get :: proc(arr : ^Dynamic_array, index : int, loc := #caller_location) -> rawptr {
 	
 	ptr := cast(uintptr)arr.data;
@@ -39,6 +45,7 @@ dynamic_array_get :: proc(arr : ^Dynamic_array, index : int, loc := #caller_loca
 	return cast(rawptr)(ptr + uintptr(index * arr.element_size));
 }
 
+@require_results
 dynamic_array_add_element :: proc (arr : ^Dynamic_array, elem : rawptr) -> (index : int) {
 	
 	if arr.element_cnt >= arr.element_cap {
@@ -58,6 +65,7 @@ dynamic_array_add_element :: proc (arr : ^Dynamic_array, elem : rawptr) -> (inde
 	return arr.element_cnt - 1;
 }
 
+@require_results
 dynamic_array_len :: proc (arr : Dynamic_array) -> (len : int) {
 	return arr.element_cnt;
 }

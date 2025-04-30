@@ -218,9 +218,9 @@ texture2D_load_multi_from_file :: proc(paths : []string, desc : Texture_desc = d
 	defer delete(threads);
 	defer delete(data);
 
-	for to_load, i in paths {
+	for scene_to_load, i in paths {
 		res : ^Load_png_info = &data[i];
-		res.filename = to_load;
+		res.filename = scene_to_load;
 		res.flipped = flipped;
 		res.allocator = context.allocator;
 		threads[i] = thread.create_and_start_with_data(res, run_load_from_disk);

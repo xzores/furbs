@@ -302,6 +302,7 @@ text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f3
 	
 	if new_size, ok := fs.requires_reupload(&font_context); ok {
 		log.logf(.Debug, "reuploading font texture : %v\n", new_size);
+		texture2D_destroy(state.font_texture);
 		state.font_texture = texture2D_make(false, .repeat, .nearest, .R8, new_size.x, new_size.y, .R8, fs.get_bitmap(&font_context), label = "Text texture");
 	}
 	

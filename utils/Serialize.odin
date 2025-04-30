@@ -294,7 +294,7 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 	return .ok;
 }
 
-@(require_results, private)
+@(require_results)
 to_type :: proc(data : []u8, $new_type : typeid) -> new_type {
 	
 	if len(data) < size_of(new_type){

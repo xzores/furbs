@@ -276,7 +276,7 @@ close_server :: proc(using server : ^Server) {
     fmt.printf("All clients disconnected\n");
 }
 
-send_broadcast :: proc (server : ^Server data : any, loc := #caller_location) {
+send_broadcast :: proc (server : ^Server, data : any, loc := #caller_location) {
 	tracy.Zone();
     for _, client  in server.clients {
         send_message(client.socket, server.params, data, loc);
@@ -295,7 +295,7 @@ remove_client :: proc(server : ^Server, client : int) {
 }
 
 //both Server and client shall be locked when calling this.
-disconnect_client_server_size :: proc (using server : ^Server client_id : client_id_type, loc := #caller_location) {
+disconnect_client_server_size :: proc (using server : ^Server, client_id : client_id_type, loc := #caller_location) {
     tracy.Zone();
 
     c, f := server.clients[client_id];

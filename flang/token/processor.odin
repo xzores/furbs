@@ -28,7 +28,7 @@ preproces :: proc (tokens : ^[dynamic]token.Token, filepath : string) -> (new_fi
 		return;
 	}
 	
-	to_load : [dynamic]File_load;
+	scene_to_load : [dynamic]File_load;
 	
 	done := false;
 	cur_tok : int;
@@ -83,7 +83,7 @@ preproces :: proc (tokens : ^[dynamic]token.Token, filepath : string) -> (new_fi
 						fmt.assertf(is_semicolon, "There must be a ';' after the string literal after an #include, found %#v\n", t_next);
 					}
 					
-					append(&to_load, File_load{collection, filename, filepath});
+					append(&scene_to_load, File_load{collection, filename, filepath});
 					append(&tokens_to_remove, cur_tok-3, cur_tok-2, cur_tok-1);
 					
 				case:
@@ -96,5 +96,5 @@ preproces :: proc (tokens : ^[dynamic]token.Token, filepath : string) -> (new_fi
 		ordered_remove(tokens, i);
 	}
 	
-	return to_load[:];
+	return scene_to_load[:];
 }
