@@ -99,9 +99,25 @@ end :: proc (state : ^Scene, loc := #caller_location) {
 /////////////////////////////////////////////////////////////// OTHER ///////////////////////////////////////////////////////////////
 
 //Will remove the element and free the owned data.
-destroy_element :: proc (handle : Element, loc := #caller_location) {
+destroy_element :: proc (state : ^Scene, handle : Element, loc := #caller_location) {
 	assert(cast(i64)handle in regui_base.active_elements, "The handle is not valid", loc);
 	key, container := delete_key(&regui_base.active_elements, cast(i64)handle);
+	
+	delete_from : ^[dynamic]Element;
+	delete_index : int = -1;
+	found := false;
+	for sub_elem, i in state.owned_elements {
+		if sub_elem == handle {
+			delete_from = &state.owned_elements;
+			delete_index = i;
+			found = true;
+		}
+	}
+	
+	assert(found, "TODO this only searches the top gui");
+	
+	unordered_remove(delete_from, delete_index);
+	
 	regui_base.element_cleanup(container);
 }
 

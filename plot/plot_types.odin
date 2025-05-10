@@ -373,11 +373,15 @@ plot_inner :: proc (p : ^Plot_xy, inner_target_size : [2]i32, rect : [4]f32, x_c
 				for trace, it in p.traces {
 					using trace;
 					
+					if len(trace.abscissa) == 0 {
+						continue;
+					}
+					
 					trace_draw_data := make([]render.Default_instance_data, len(trace.abscissa), allocator = context.temp_allocator);
 					color, marker_style := get_trace_info(it);
 					
 					//TODO draw_quad_instanced();
-					assert(len(abscissa) != 0, "The signal is empty");
+					//assert(len(abscissa) != 0, "The signal is empty");
 					fmt.assertf(len(abscissa) == len(ordinate), "The x and y does not have same length. x length is %v, y length is %v", len(abscissa), len(ordinate));
 					
 					_, max_x_val := get_extremes(abscissa);
