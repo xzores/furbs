@@ -1,7 +1,13 @@
 package sand_lang;
 
+import "base:runtime"
+import "base:intrinsics"
+
 import "core:os"
 import "core:log"
+import "core:strings"
+import "core:fmt"
+import "core:reflect"
 
 Sand_type :: enum {
 	invalid,
@@ -88,7 +94,11 @@ Pop_inst :: struct {
 }
 
 Call_inst :: struct {
-	//TODO IDK
+	func : ^Callable_function,
+}
+
+Call_odin_inst :: struct {
+	//IDK	
 }
 
 Instruction :: union {
@@ -101,18 +111,27 @@ Instruction :: union {
 	Binary_inst,
 	Unary_inst,
 	Call_inst,
+	Call_odin_inst,
 	Set_inst,
 }
 
-Function :: struct {
-	arguments : []Variable_entry,
-	local_scope : ^Scope,
-	instructions : []Instruction,
+Function_sand :: struct {
+	local_scope : ^Scope,	
+	call : ^Callable_function, //This is not owned by the function, but by the sand state
+	//instructions : []Instruction,
+	//odin_func : rawptr, //HOw to handle odin function
+}
+
+Function_odin :: proc([]Sand_value) -> Sand_value;
+
+Function :: union {
+	Function_sand,
+	Function_odin,
 }
 
 Import_space :: struct {
 	name : string,
-	functions : map[string]Function,
+	functions : map[string]Function_sand,
 }
 
 Scope :: struct {
@@ -122,9 +141,17 @@ Scope :: struct {
 	structs : map[string]Struct,
 }
 
+Callable_function :: struct {
+	arguments : []Variable_entry,
+	return_type : Sand_type,
+	instructions : []Instruction `fmt:"-"`,
+}
+
 Sand_state :: struct {
 	imports : map[string]Import_space,
+	functions : [dynamic]^Callable_function,
 	global_scope : ^Scope,
+	user_data : rawptr,
 }
 
 Variable :: struct {
@@ -133,13 +160,15 @@ Variable :: struct {
 }
 
 @(require_results)
-init :: proc () -> ^Sand_state {
+init :: proc (user_data : rawptr) -> ^Sand_state {
 	
 	new_state := new(Sand_state);
 	
 	new_state^ = Sand_state {
 		make(map[string]Import_space),
-		nil,
+		make([dynamic]^Callable_function),
+		make_scope(nil),
+		user_data,
 	}
 	
 	//TODO
@@ -181,24 +210,43 @@ add_file_content :: proc (state : ^Sand_state, file_location : string, contents 
 	
 }
 
-call_func :: proc (state : ^Sand_state, func_name : string, args : ..any) -> (ok : bool) {
+expose_func :: proc (state : ^Sand_state, func_name : string, my_proc : Function_odin) {
 	
+	assert(!(func_name in state.global_scope.functions));
+	map_insert(&state.global_scope.functions, strings.clone(func_name), my_proc);
+}
+
+call_func :: proc (state : ^Sand_state, func_name : string, args : ..any) -> (ok : bool) {
 	
 	if !(func_name in state.global_scope.functions) {
 		log.errorf("No function is named %v", func_name);
 		return false;
 	}
 	
-	func := state.global_scope.functions[func_name];
+	_func := state.global_scope.functions[func_name];
 	
-	if len(func.arguments) != len(args) {
-		log.errorf("Mismatch in number of arguments : %v (caller) vs %v (callee)", len(func.arguments), len(args));
+	switch func in _func {
+		case Function_sand: {
+			if len(func.call.arguments) != len(args) {
+				log.errorf("Mismatch in number of arguments : %v (caller) vs %v (callee)", len(func.call.arguments), len(args));
+			}
+			
+			interp_state := make_interp(state.global_scope);
+			defer destroy_interp(interp_state)
+			
+			for arg in args {
+				panic("TODO")
+				//interpret(interp_state, );
+			}
+			
+			interpret(interp_state, func.call);
+		}
+		case Function_odin: {
+			panic("TODO");
+		}
 	}
 	
-	interp_state := make_interp();
-	
-	
-	
+	return ;
 }
 
 destroy :: proc (state : ^Sand_state) {
@@ -212,6 +260,11 @@ destroy :: proc (state : ^Sand_state) {
 		}
 		delete(imp.functions);
 	}
+	
+	for callable in state.functions {
+		Destroy_callable_function(callable);
+	}
+	delete(state.functions);
 	
 	delete(state.imports);
 	

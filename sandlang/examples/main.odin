@@ -18,19 +18,45 @@ import_callback :: proc (to_import : string, sand_state : ^sand.Sand_state, user
 	
 }
 
-entry :: proc () {
+my_print :: proc (args : []sand.Sand_value) -> sand.Sand_value {	
+	//fmt.printf(to_print);
 	
-	lang := sand.init();
-	defer sand.destroy(lang);
+	assert(len(args) != 0);
 	
-	errs := sand.add_file(lang, "sandfiles/test1.sl");
+	first, ok := args[0].(string);
+	assert(ok)
 	
-	for e in errs {
-		//fmt.panicf("Error : %v, got %v", e, );
+	printed : [dynamic]any;
+	defer delete(printed);
+	
+	for a, i in args {
+		if i != 0 {
+			append(&printed, a);
+		}
 	}
 	
+	fmt.printf(first, ..printed[:]);
+	
+	return nil;
+}  
+
+entry :: proc () {
+	
+	ud : Sand_user_data;
+	
+	lang := sand.init(&ud);
+	defer sand.destroy(lang);
+	
+	
+	sand.expose_func(lang, "print", my_print);
+	errs := sand.add_file(lang, "sandfiles/test1.sl");
+	
 	for name, func in lang.global_scope.functions {
-		log.debugf("func %v has instructions : %#v", name, func.instructions);
+		log.infof("global state has func %v", name);
+	}
+	
+	for e in errs {
+		fmt.panicf("Error : %v", e);
 	}
 	
 	sand.call_func(lang, "my_func");

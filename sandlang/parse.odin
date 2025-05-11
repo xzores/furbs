@@ -59,6 +59,9 @@ Binary_operator_kind :: enum {
 	less_than,	// e.g., a < b
 	greater_eq,   // e.g., a >= b
 	less_eq,	  // e.g., a <= b
+	
+	//A fake opeartor
+	comma,
 }
 
 Binary_operator :: struct {
@@ -88,6 +91,7 @@ Expression :: union {
 	Int_literal,
 	Boolean_literal,
 	String_litereal,
+	Variable_exp,
 }
 
 Variable_exp :: struct {
@@ -105,7 +109,7 @@ Import_statement :: struct {
 @(private)
 parse :: proc (file_location : string, state : ^Sand_state, tokens : []Token) -> []Error {
 	
-	parse_res := parse_scope(file_location, state, tokens, nil);
+	parse_res := parse_scope(file_location, state, tokens, state.global_scope);
 	defer destroy_errors(parse_res.errors);
 	defer destroy_import_statements(parse_res.imports);
 	
@@ -121,8 +125,20 @@ parse :: proc (file_location : string, state : ^Sand_state, tokens : []Token) ->
 		err[0] = Error{"You may not have runable code in the global state", 1, 0, 0}
 		return err;
 	}
+
+/*
+	for name, func in parse_res.scope.functions {
+		state.global_scope.functions[name] = func;
+	}
+	delete(parse_res.scope.functions);
 	
-	state.global_scope = parse_res.scope;
+	for name, stct in parse_res.scope.structs {
+		state.global_scope.structs[name] = stct;
+	}
+	delete(parse_res.scope.structs);
+*/
+
+	assert(parse_res.scope.parent == nil)
 	
 	return clone_errors(parse_res.errors);
 }
@@ -136,7 +152,7 @@ Parse_result :: struct {
 }
 
 @(private, require_results)
-parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Token, parent_scope : ^Scope, loc := #caller_location) -> (Parse_result) {
+parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Token, scope : ^Scope, loc := #caller_location) -> (Parse_result) {
 	
 	Parser :: struct {
 		filename : string,
@@ -157,7 +173,7 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 		-1,
 		false,
 		{},
-		make_scope(parent_scope),
+		scope,
 		make([dynamic]Instruction),
 		make([dynamic]Import_statement),
 		make([dynamic]Error),
@@ -234,6 +250,85 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 		next_token(p); // move forward
 	}
 	
+	instructize_exp :: proc (p : ^Parser, emit_exp : ^Expression, loc := #caller_location) {
+		assert(emit_exp != nil, "emit_exp is nil", loc)
+		
+		switch exp in emit_exp {
+			case Assignment: {
+				
+				//Go though rhs and calculate the result, place it in reg0
+				instructize_exp(p, exp.rhs);
+				
+				emit_instruction(p, Store_inst{
+					strings.clone(exp.lhs),
+					0,
+				});
+			}
+			case Binary_operator: {
+			
+				instructize_exp(p, exp.left);
+				emit_instruction(p, Push_inst{}); //temp storage
+				
+				assert(exp.right != nil, )
+				instructize_exp(p, exp.right);
+				emit_instruction(p, Move_inst{
+					2,
+				});
+				
+				emit_instruction(p, Pop_inst{1}); //temp storage
+				
+				emit_instruction(p, Binary_inst {
+					exp.op,
+				});
+			}
+			case Unary_operator: {
+				
+				instructize_exp(p, exp.operand);
+				emit_instruction(p, Move_inst{
+					1,
+				});
+			
+				emit_instruction(p, Unary_inst{
+					exp.op,
+				})
+			}
+			case Boolean_literal: {
+				emit_instruction(p, Set_inst{
+					exp.value,
+					0,
+				})
+			}
+			case Float_literal: {
+				emit_instruction(p, Set_inst{
+					exp.value,
+					0,
+				})
+			}
+			case Int_literal: {
+				emit_instruction(p, Set_inst{
+					exp.value,
+					0,
+				})
+			}
+			case String_litereal: {
+				emit_instruction(p, Set_inst{
+					strings.clone(cast(string)exp),
+					0,
+				})
+			}
+			case Call: {
+				panic("TODO");
+			}
+			case Variable_exp: {
+				emit_instruction(p, Load_inst{
+					strings.clone(exp.variable_name),
+					0,
+				})
+			}
+		}
+		
+	}
+	
 	is_done :: proc (p : ^Parser) -> bool {
 		return p.is_done;
 	}
@@ -251,8 +346,6 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 			case "int":
 				res = ._int;
 		}
-		
-		fmt.printf("res : %v\n", res);
 		
 		if res == nil {
 			fmt.panicf("TODO check structs, got %v", type_name);
@@ -319,8 +412,6 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 			}
 		}
 		
-		fmt.printf("members : %v\n", members);
-		
 		if what == .colon {
 			emit_error(p, "there is a missing ':' in struct definition");
 		}
@@ -332,9 +423,9 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 		return members[:];
 	}
 	
-	parse_expression :: proc (p : ^Parser, exp_tokens : []Token) -> ^Expression {
+	parse_expression :: proc (p : ^Parser, exp_tokens : []Token, loc := #caller_location) -> ^Expression {
 		
-		log.debugf("parse_expression got : %v", exp_tokens);
+		//log.debugf("parse_expression got : %v", exp_tokens);
 		
 		Exp_parser :: struct {
 				
@@ -442,14 +533,15 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 		} 
 		
 		for tok in exp_tokens {
-			fmt.printf("e : %#v, exp_tokens : %v\n", e, exp_tokens);
+			//fmt.printf("e : %#v, exp_tokens : %v\n", e, exp_tokens);
 			
 			switch t in tok.value {
 				
-				case Delimiter, End_of_file, Semicolon, Identifier: {
+				case Delimiter, End_of_file, Semicolon: {
 					emit_error(p, "Unexpected token %v in expression", t);
 					return {};
 				}
+				
 				case f64: {
 					if e.lhs != nil {
 						emit_error(p, "cannot resolve expression, there seems to be missing an operator");
@@ -471,6 +563,19 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 					exp^ = Int_literal{t};
 					
 					e.lhs = exp
+					next_token(&e);
+				}
+				case Identifier: {
+					if e.lhs != nil {
+						emit_error(p, "cannot resolve expression, there seems to be missing an operator");
+						return {};
+					}
+					
+					exp := new(Expression);
+					exp^ = Variable_exp{strings.clone(cast(string)t, loc = loc)};
+					
+					e.lhs = exp
+					
 					next_token(&e);
 				}
 				case String_litereal: {
@@ -530,7 +635,7 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 		
 		switch t in p.t.value {
 			case Delimiter: {
-				emit_error(&p, "Invalid placement of delimiter litereal")	
+				emit_error(&p, "Invalid placement of delimiter")
 			}
 			case f64: {
 				emit_error(&p, "Invalid placement of f64 litereal")	
@@ -627,6 +732,91 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 					}
 					case Delimiter: {
 						//this could be a function call, or assignment to an array
+						
+						switch v1 {
+							case .bracket_begin, .bracket_end, .comma, .sqaure_end, .paren_end: {
+								emit_error(&p, "Unexpected delimiter : %v", v1)
+							}
+							case .paren_begin: {
+								//it is a function call
+								
+								//consume the ( and find the corrisponding )
+								next_token(&p);
+								begin_args := p.current_token;
+								
+								paren_cnt := 1;
+								//Find the corrisponding }
+								for paren_cnt != 0 {
+									
+									if p.t.value == Delimiter.paren_begin {
+										paren_cnt += 1;
+									}
+									else if p.t.value == Delimiter.paren_end {
+										paren_cnt -= 1;
+									}
+									else if _, ok := p.t.value.(End_of_file); ok {
+										emit_error(&p, "found end of file, expected ')'");
+										break;
+									}
+									
+									//fmt.printf("Token : %v\n", p.t);
+									next_token(&p);
+								}
+								end_args := p.current_token-1;
+								
+								args := make([dynamic]^Expression);
+								defer {
+									for a in args {
+										destroy_expression(a);
+									}
+									delete(args);
+								}
+								
+								if begin_args != end_args {
+									exp := parse_expression(&p, p.tokens[begin_args:end_args]);
+									
+									//Go though and extract the array from bwteen ","
+									if bo, ok := exp.(Binary_operator); bo.op == .comma {
+										panic("TODO handle multiple arguments in function call");
+									}
+									
+									append(&args, exp);			
+								}
+								
+								expect(&p, Semicolon{});
+								
+								for e in args[:] {
+									instructize_exp(&p, e);
+									
+									//The expressions result in place in reg0, we push this to the stack so that we can later call with what is on the stack.
+									emit_instruction(&p, Push_inst{});
+								}
+								
+								//find func
+								func, ok := find_func(p.scope, cast(string)t);
+								
+								if ok {
+									switch f in func {
+										case Function_sand:
+											emit_instruction(&p, Call_inst{
+												f.call,
+											});
+										
+										case Function_odin:
+											panic("TODO");
+									}
+								}
+								else {
+									emit_error(&p, "No such function '%v', scope : %#v", t, p.scope.parent);
+									break;
+								}
+								
+							}
+							case .sqaure_begin: {
+								//this is assignment to array
+								panic("TODO");
+							}
+						}
 						
 					}
 					case Operator: {
@@ -743,10 +933,9 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 							}
 						}
 					}
-					
 				}
 				
-				log.debugf("skipping over %v", p.t)
+				//log.debugf("skipping over %v", p.t)
 				next_token(&p);
 				
 				emit_exp : ^Expression;
@@ -814,7 +1003,7 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 						}
 						end_body := p.current_token-1;
 						
-						log.debugf("Found struct scope : %#v", p.tokens[begin_body:end_body]);
+						//log.debugf("Found struct scope : %#v", p.tokens[begin_body:end_body]);
 						
 						struct_members := parse_variable_list(&p, p.tokens[begin_body:end_body]);
 						
@@ -845,14 +1034,32 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 								break;
 							}
 							
-							fmt.printf("Token : %v\n", p.t);
+							//fmt.printf("Token : %v\n", p.t);
 							next_token(&p);
 						}
 						end_args := p.current_token-1;
 						
 						arguments := parse_variable_list(&p, p.tokens[begin_args:end_args]);
 						
-						log.debugf("function arguments : %v", arguments);
+						return_type : Sand_type = nil;
+						
+						if op, ok := p.t.value.(Operator); ok {
+							if op == .return_arrow {
+								//Parse the return value
+								next_token(&p);
+								
+								if iden, ok := p.t.value.(Identifier); ok {
+									
+									return_type = resolve_type(&p, cast(string)iden);
+									next_token(&p);
+								}
+								else {
+									emit_error(&p, "Expected identifier after ->");
+									break;
+								}
+							}
+							//dont to anything, just expect a bracket
+						}
 						
 						//parse function body
 						expect(&p, Delimiter.bracket_begin);
@@ -875,16 +1082,38 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 								break;
 							}
 							
-							fmt.printf("Token : %v\n", p.t);
+							//fmt.printf("Token : %v\n", p.t);
 							next_token(&p);
 						}
 						end_body := p.current_token-1;
 						
-						log.debugf("Found function body : %#v", p.tokens[begin_body:end_body]);
+						//log.debugf("Found function body : %#v", p.tokens[begin_body:end_body]);
+						
+						instructions : [dynamic]Instruction;
+						
+						for arg in arguments {
+							append(&instructions, Declare_inst{
+								strings.clone(arg.name),
+								-1,
+								arg.type,
+							});
+							append(&instructions, Pop_inst{
+								0
+							});
+							append(&instructions, Store_inst{
+								strings.clone(arg.name),
+								0,
+							});
+						}
 						
 						res := parse_scope(file_location, state, p.tokens[begin_body:end_body], p.scope);
 						defer destroy_errors(res.errors);
 						defer destroy_import_statements(res.imports);
+						defer delete(res.instructions);
+						
+						for inst in res.instructions {
+							append(&instructions, inst);
+						}
 						
 						if len(res.imports) != 0 {
 							emit_error(&p, "function %v contains import statements, these are only allowed in the global state", t);
@@ -898,87 +1127,23 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 							append(&p.errors, err);
 						}
 						
-						func := Function {
+						new_callable := new(Callable_function);
+						
+						new_callable^ = Callable_function{
 							arguments,
+							return_type,
+							instructions[:],
+						}
+						
+						append(&state.functions, new_callable)
+						
+						func := Function_sand {
 							res.scope,
-							res.instructions,
+							new_callable,
 						}
 						
 						emit_function(&p, strings.clone(cast(string)w.proc_name), func);
 					}
-				}
-				
-				instructize_exp :: proc (p : ^Parser, emit_exp : ^Expression, loc := #caller_location) {
-					assert(emit_exp != nil, "emit_exp is nil", loc)
-					
-					switch exp in emit_exp {
-						case Assignment: {
-							
-							//Go though rhs and calculate the result, place it in reg0
-							instructize_exp(p, exp.rhs);
-							
-							emit_instruction(p, Store_inst{
-								strings.clone(exp.lhs),
-								0,
-							});
-						}
-						case Binary_operator: {
-						
-							instructize_exp(p, exp.left);
-							emit_instruction(p, Push_inst{}); //temp storage
-							
-							assert(exp.right != nil, )
-							instructize_exp(p, exp.right);
-							emit_instruction(p, Move_inst{
-								2,
-							});
-							
-							emit_instruction(p, Pop_inst{1}); //temp storage
-							
-							emit_instruction(p, Binary_inst {
-								exp.op,
-							});
-						}
-						case Unary_operator: {
-							
-							instructize_exp(p, exp.operand);
-							emit_instruction(p, Move_inst{
-								1,
-							});
-						
-							emit_instruction(p, Unary_inst{
-								exp.op,
-							})
-						}
-						case Boolean_literal: {
-							emit_instruction(p, Set_inst{
-								exp.value,
-								0,
-							})
-						}
-						case Float_literal: {
-							emit_instruction(p, Set_inst{
-								exp.value,
-								0,
-							})
-						}
-						case Int_literal: {
-							emit_instruction(p, Set_inst{
-								exp.value,
-								0,
-							})
-						}
-						case String_litereal: {
-							emit_instruction(p, Set_inst{
-								strings.clone(cast(string)exp),
-								0,
-							})
-						}
-						case Call: {
-							panic("TODO");
-						}
-					}
-					
 				}
 				
 				//there are 3 registers, assign register (reg0), and then two rhs registers reg1 and reg2
@@ -987,8 +1152,7 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 					
 					//now walk the tree and do the instrucitons
 					instructize_exp(&p, emit_exp);
-				}
-				
+				}	
 			}
 			case int: {
 				emit_error(&p, "Invalid placement of int litereal")	
@@ -1060,7 +1224,15 @@ make_scope :: proc (parent : ^Scope) -> ^Scope {
 @(private)
 destroy_function :: proc (func : Function, loc := #caller_location) {
 	
-	destroy_scope(func.local_scope);
+	switch f in func {
+		case Function_sand:
+			destroy_scope(f.local_scope);
+		case Function_odin:
+			//nothing
+	}
+}
+
+Destroy_callable_function :: proc (func : ^Callable_function) {
 	
 	for arg in func.arguments {
 		delete(arg.name);
@@ -1074,7 +1246,9 @@ destroy_function :: proc (func : Function, loc := #caller_location) {
 			case Declare_inst:
 				delete(v.name);
 			case Call_inst:
-				panic("TODO");
+				//not owed by call_inst.
+			case Call_odin_inst:
+				//Not owned???
 			case Load_inst:
 				delete(v.variable_name);
 			case Store_inst:
@@ -1084,11 +1258,14 @@ destroy_function :: proc (func : Function, loc := #caller_location) {
 			
 		}
 	}
+	
 	delete(func.instructions);
+	free(func);
 }
 
 @(private)
 destroy_scope :: proc (to_destroy : ^Scope, loc := #caller_location) {
+	
 	assert(to_destroy != nil, "scope is nil");
 	
 	for n, f in to_destroy.functions {
@@ -1136,6 +1313,8 @@ destroy_expression :: proc (to_destroy : ^Expression) {
 			panic("TODO")
 		case String_litereal:
 			delete(cast(string)val);
+		case Variable_exp:
+			delete(cast(string)val.variable_name);
 		case Unary_operator:
 			destroy_expression(val.operand);
 	}
@@ -1148,6 +1327,19 @@ destroy_sand_value :: proc (to_destroy : Sand_value) {
 	
 }
 
+@(private)
+find_func :: proc (scope : ^Scope, func_name : string) -> (f : Function, ok : bool) {
+	
+	if func_name in scope.functions {
+		return scope.functions[func_name], true;
+	}
+	
+	if scope.parent != nil {
+		return find_func(scope.parent, func_name);
+	}
+	
+	return {}, false;
+}
 
 keywords : map[Identifier]struct{} = {
 	"import" = {},

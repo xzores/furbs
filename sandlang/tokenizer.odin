@@ -690,7 +690,7 @@ parse_int :: proc(s : string) -> (val : int, ok : bool) {
 		val64, ok := strconv.parse_int(s);
 		return int(val64), ok;
 	}
-
+	
 	num_str := s[:suffix_start];
 	suffix := s[suffix_start:];
 
