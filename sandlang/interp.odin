@@ -529,9 +529,20 @@ interpret :: proc (interp : ^Interp_state, func : ^Callable_function, loc := #ca
 				}
 			}
 			case Call_odin_inst:{
-				panic("TODO");
+						
+				l := len(interp.stack)
+				res := inst.odin_func(interp.stack[l-inst.num_of_args:l]);
+				
+				for i in 0..<inst.num_of_args {
+					pop(&interp.stack);	
+				}
+				
+				if inst.handle_ret_val {
+					interp.regs[0] = res;
+				}
+				
 			}
-			case Set_inst:{
+			case Set_inst: {
 				interp.regs[inst.target_reg] = inst.val;
 			}
 		}

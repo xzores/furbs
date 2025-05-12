@@ -98,7 +98,9 @@ Call_inst :: struct {
 }
 
 Call_odin_inst :: struct {
-	//IDK	
+	odin_func : Function_odin,
+	num_of_args : int,
+	handle_ret_val : bool,
 }
 
 Instruction :: union {

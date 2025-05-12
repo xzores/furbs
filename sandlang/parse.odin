@@ -471,7 +471,7 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 		is_binary_operator :: proc (operator : Operator) -> bool {
 			
 			#partial switch operator {
-				case .and, .add, .equality, .divide, .greater_or_equal, .greater_than, .less_or_equal, .less_than, .minus, .modulo, .multiply, .non_equal, .or, .power:
+				case .and, .add, .equality, .divide, .greater_or_equal, .greater_than, .less_or_equal, .less_than, .minus, .modulo, .multiply, .non_equal, .or, .power, .comma:
 					return true;
 				case:
 					return false;
@@ -524,7 +524,10 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 				
 				case .power:
 					return .power;
-					
+				
+				case .comma:
+					return .comma;
+				
 				case:
 					panic("TODO");
 			}
@@ -594,6 +597,7 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 				case Operator: {
 					
 					if is_binary_operator(t) {
+						
 						//it is a binary operator						
 						
 						if e.lhs == nil {
@@ -602,12 +606,14 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 						}
 						
 						lhs := e.lhs;
-						rhs := parse_expression(p, e.tokens[e.current_token+2:]); //parse the rest.
+						rhs := parse_expression(p, e.tokens[e.current_token+2:], ); //parse the rest.
 						assert(rhs != nil)
+						
+						bin_op := as_binary_operator(t);
 						
 						exp := new(Expression);
 						exp^ = Binary_operator {
-							as_binary_operator(t),
+							bin_op,
 							lhs,	  // The expression being operated on
 							rhs,	  // The expression being operated on
 						};
@@ -696,7 +702,7 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 							panic("TODO");
 					}
 					
-					continue;	
+					continue;
 				}
 				
 				next_token(&p);
@@ -774,13 +780,22 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 								
 								if begin_args != end_args {
 									exp := parse_expression(&p, p.tokens[begin_args:end_args]);
+									emit : ^Expression = exp;
 									
-									//Go though and extract the array from bwteen ","
-									if bo, ok := exp.(Binary_operator); bo.op == .comma {
-										panic("TODO handle multiple arguments in function call");
+									for true {
+										if op, ok := emit.(Binary_operator); ok && op.op == .comma {
+											//break up
+											append(&args, op.left);
+											to_delete := emit;
+											emit = op.right;
+											free(to_delete);
+										}
+										else {
+											break;
+										}
 									}
 									
-									append(&args, exp);			
+									append(&args, emit);			
 								}
 								
 								expect(&p, Semicolon{});
@@ -803,7 +818,11 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 											});
 										
 										case Function_odin:
-											panic("TODO");
+											emit_instruction(&p, Call_odin_inst{
+												f,
+												len(args),
+												false,
+											})
 									}
 								}
 								else {
@@ -1106,7 +1125,8 @@ parse_scope :: proc (file_location : string, state : ^Sand_state, tokens : []Tok
 							});
 						}
 						
-						res := parse_scope(file_location, state, p.tokens[begin_body:end_body], p.scope);
+						sub_scope := make_scope(p.scope)
+						res := parse_scope(file_location, state, p.tokens[begin_body:end_body], sub_scope);
 						defer destroy_errors(res.errors);
 						defer destroy_import_statements(res.imports);
 						defer delete(res.instructions);
@@ -1346,3 +1366,21 @@ keywords : map[Identifier]struct{} = {
 	"for" = {},
 	"if" = {},	
 };
+
+pres : map[Binary_operator_kind]int = {
+    .comma         = 1,  // ,
+    .or            = 2,  // ||
+    .and           = 3,  // &&
+    .equals        = 4,  // ==
+    .not_equals    = 4,  // !=
+    .greater_than  = 5,  // >
+    .less_than     = 5,  // <
+    .greater_eq    = 5,  // >=
+    .less_eq       = 5,  // <=
+    .add           = 6,  // +
+    .subtract      = 6,  // -
+    .multiply      = 7,  // *
+    .divide        = 7,  // /
+    .modulo        = 7,  // %
+    .power         = 8,  // ^    (usually right-associative)
+}

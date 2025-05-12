@@ -19,23 +19,22 @@ import_callback :: proc (to_import : string, sand_state : ^sand.Sand_state, user
 }
 
 my_print :: proc (args : []sand.Sand_value) -> sand.Sand_value {	
-	//fmt.printf(to_print);
 	
 	assert(len(args) != 0);
 	
 	first, ok := args[0].(string);
 	assert(ok)
 	
-	printed : [dynamic]any;
+	printed := make([]any, len(args)-1);
 	defer delete(printed);
 	
-	for a, i in args {
+	for &a, i in args {
 		if i != 0 {
-			append(&printed, a);
+			printed[i-1] = a;
 		}
 	}
 	
-	fmt.printf(first, ..printed[:]);
+	fmt.printfln(first, ..printed[:]);
 	
 	return nil;
 }  

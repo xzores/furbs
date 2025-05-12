@@ -26,11 +26,10 @@ my_func :: proc () {
 		call_this_res : f64 = a + 3 * 2;
 	}
 	
-	res : f64 = 10 * 20 + 5;
+	res : f64 = 10 + 20 * 5;
 	call_this(res);
 	
-	print("Hello world %v is %v");
-	//print("Hello world %v is %v", "res", res);
+	print("Hello world %v is %v", "res", res);
 	
 	//b : f64 = my_func_with_args_and_return(2);
 	//c : f64 = res + b;
