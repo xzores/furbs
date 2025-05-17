@@ -319,6 +319,8 @@ input_begin :: proc(loc := #caller_location) {
 	for queue.len(state.button_input_events) != 0 {
 		event := queue.pop_front(&state.button_input_events);
 		
+		append(&state.mouse_input_buffer, event);
+		
 		switch event.action {
 			case .press:
 				state.button_pressed[event.button] = true;
@@ -333,6 +335,8 @@ input_begin :: proc(loc := #caller_location) {
 
 	for queue.len(state.key_input_events) != 0 {
 		event := queue.pop_front(&state.key_input_events);
+		
+		append(&state.key_input_buffer, event);
 		
 		switch event.action {
 			case .press:
@@ -355,10 +359,13 @@ input_end :: proc(loc := #caller_location) {
 	defer sync.unlock(&input_events_mutex);
 	
 	state.scroll_delta = [2]f32{0,0};
-
+	
+	clear(&state.key_input_buffer);
+	clear(&state.mouse_input_buffer);
+	
 	for queue.len(state.button_release_input_events) != 0 {
 		event := queue.pop_front(&state.button_release_input_events);
-
+		
 		if event.action == .release {
 			state.button_down[event.button] = false;
 		}
@@ -366,7 +373,7 @@ input_end :: proc(loc := #caller_location) {
 			panic("Only release buttons in state.button_release_input_events");
 		}
 	}
-
+	
 	for queue.len(state.key_release_input_events) != 0 {
 		event := queue.pop_front(&state.key_release_input_events);
 
@@ -402,7 +409,13 @@ input_end :: proc(loc := #caller_location) {
 
 }
 
+key_events :: proc () -> []Key_input_event {
+	return state.key_input_buffer[:];
+}
 
+mouse_events :: proc () -> []Mouse_input_event {
+	return state.mouse_input_buffer[:];
+}
 
 
 //TODO is_cursor_on_screen
