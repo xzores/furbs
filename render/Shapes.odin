@@ -101,6 +101,33 @@ draw_arrow :: proc(position : [3]f32, direction : [3]f32, color : [4]f32 = {1,1,
 	mesh_draw_single(&state.shapes, mat, color, state.shape_arrow);
 }
 
+draw_right_triangle :: proc (model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_right_triangle);
+}
+
+draw_equilateral_triangle :: proc (model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_equilateral_triangle);
+}
+
+draw_triangle :: proc (a, b, c : [3]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+	_ensure_shapes_loaded();
+	
+	u := b - a;
+	v := c - a;
+	
+	model_matrix : matrix[4,4]f32;
+	
+	model_matrix[0] = {u.x, u.y, u.z, 0};
+	model_matrix[1] = {v.x, v.y, v.z, 0};
+	model_matrix[2] = {0, 0, 0, 0};
+	model_matrix[3] = {a.x, a.y, a.z, 1};
+	
+	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_right_triangle);
+}
 
 ////////////////////////////////////////// PRIVATE //////////////////////////////////////////
 
@@ -139,6 +166,12 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 			arrv, arri := generate_arrow({1,0,0}, 0.65, 0.35, 0.15, 0.35, 10, use_index_buffer);
 			state.shape_arrow = [2]int{i, i + indices_len(arri)}; i += indices_len(arri);
 			
+			rtriv, rtrii := generate_triangle({0,0,0}, {1,0,0}, {0,1,0}, use_index_buffer);
+			state.shape_right_triangle = [2]int{i, i + indices_len(rtrii)}; i += indices_len(rtrii);
+			
+			eqtriv, eqtrii := generate_triangle({0,math.sqrt_f32(3)/6,0}, {-1/2, -math.sqrt_f32(3)/6, 0}, {1/2, -math.sqrt_f32(3)/6, 0}, use_index_buffer);
+			state.shape_equilateral_triangle = [2]int{i, i + indices_len(eqtrii)}; i += indices_len(eqtrii);
+			
 			defer {
 				delete(cubev); indices_delete(cubei);
 				delete(cirv); indices_delete(ciri);
@@ -147,6 +180,8 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 				delete(sv); indices_delete(si);
 				delete(conv); indices_delete(coni);
 				delete(arrv); indices_delete(arri);
+				delete(rtriv); indices_delete(rtrii);
+				delete(eqtriv); indices_delete(eqtrii);
 			};
 			
 			D :: Mesh_combine_data(Default_vertex);
@@ -157,7 +192,9 @@ _ensure_shapes_loaded :: proc (loc := #caller_location) {
 				D{1, cyv, cyi}, 
 				D{1, sv, si},
 				D{1, conv, coni},
-				D{1, arrv, arri}
+				D{1, arrv, arri},
+				D{1, rtriv, rtrii},
+				D{1, eqtriv, eqtrii},
 			});
 			
 			assert(vertex_data != nil);
@@ -185,5 +222,9 @@ shapes_destroy :: proc() {
 		state.shape_sphere		= {};
 		state.shape_cone		= {};
 		state.shape_arrow		= {};
+		state.shape_right_triangle = {};
+		state.shape_equilateral_triangle = {};
 	}
 }
+
+

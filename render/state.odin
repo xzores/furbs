@@ -29,7 +29,6 @@ is_init :: proc () -> bool {
 	return state.is_init;
 }
 
-@(private)
 Camera_matrices :: struct {
 	prj_mat 		: matrix[4,4]f32,
 	inv_prj_mat 	: matrix[4,4]f32,
@@ -93,6 +92,8 @@ State :: struct {
 	shape_sphere : [2]int,
 	shape_cone : [2]int,
 	shape_arrow : [2]int,
+	shape_right_triangle : [2]int,
+	shape_equilateral_triangle : [2]int,
 	
 	//Extra stuff
 	fps_measurement : f32,

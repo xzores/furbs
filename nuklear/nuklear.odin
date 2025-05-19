@@ -6,7 +6,7 @@ import "core:strings"
 import "core:fmt"
 
 when ODIN_OS == .Darwin  {
-	foreign import nuklear "libnuklear_64.dylib"
+	foreign import nuklear "libnuklear_64.a"
 } else when ODIN_OS == .Windows {
 	when ODIN_DEBUG {
 		foreign import nuklear "libnuklear_64d.lib"
@@ -15,9 +15,32 @@ when ODIN_OS == .Darwin  {
 		foreign import nuklear "libnuklear_64.lib"
 	}
 } else when ODIN_OS == .Linux {
-	foreign import nuklear "libnuklear_64.so"
+	foreign import nuklear "libnuklear_64.a"
 }
 
+////////////////// THE library is compiled with the following falgs //////////////////
+//NK_INCLUDE_FIXED_TYPES          | If defined it will include header `<stdint.h>` for fixed sized types otherwise nuklear tries to select the correct type. If that fails it will throw a compiler error and you have to select the correct types yourself.
+//NK_INCLUDE_STANDARD_BOOL        | If defined it will include header `<stdbool.h>` for nk_bool otherwise nuklear defines nk_bool as int.
+//NK_INCLUDE_COMMAND_USERDATA     | Defining this adds a userdata pointer into each command. Can be useful for example if you want to provide custom shaders depending on the used widget. Can be combined with the style structures.
+//NK_BUTTON_TRIGGER_ON_RELEASE    | Different platforms require button clicks occurring either on buttons being pressed (up to down) or released (down to up). By default this library will react on buttons being pressed, but if you define this it will only trigger if a button is released.
+
+/**
+ * \brief Sets the currently passed userdata passed down into each draw command.
+ *
+ * \details
+ * ```c
+ * void nk_set_user_data(struct nk_context *ctx, nk_handle data);
+ * ```
+ *
+ * \param[in] ctx Must point to a previously initialized `nk_context` struct
+ * \param[in] data  Handle with either pointer or index to be passed into every draw commands
+ */
+
+//because of NK_INCLUDE_COMMAND_USERDATA
+@(default_calling_convention="c", link_prefix="nk_")
+foreign nuklear {
+	set_user_data :: proc(ctx : ^Context, handle : Handle) ---;
+}
 
 /* =============================================================================
 *
@@ -431,7 +454,7 @@ foreign nuklear {
 *
 * ============================================================================= */
 
-nk_text_align :: enum u32 {
+Text_align :: enum u32 {
 	NK_TEXT_ALIGN_LEFT		= 0x01,
 	NK_TEXT_ALIGN_CENTERED	= 0x02,
 	NK_TEXT_ALIGN_RIGHT		= 0x04,
@@ -440,10 +463,10 @@ nk_text_align :: enum u32 {
 	NK_TEXT_ALIGN_BOTTOM	= 0x20,
 }
 
-nk_text_alignment :: enum u32 {
-	NK_TEXT_LEFT		= cast(u32)nk_text_align.NK_TEXT_ALIGN_MIDDLE | cast(u32)nk_text_align.NK_TEXT_ALIGN_LEFT,
-	NK_TEXT_CENTERED	= cast(u32)nk_text_align.NK_TEXT_ALIGN_MIDDLE | cast(u32)nk_text_align.NK_TEXT_ALIGN_CENTERED,
-	NK_TEXT_RIGHT		= cast(u32)nk_text_align.NK_TEXT_ALIGN_MIDDLE | cast(u32)nk_text_align.NK_TEXT_ALIGN_RIGHT,
+Text_alignment :: enum u32 {
+	TEXT_LEFT		= cast(u32)Text_align.NK_TEXT_ALIGN_MIDDLE | cast(u32)Text_align.NK_TEXT_ALIGN_LEFT,
+	TEXT_CENTERED	= cast(u32)Text_align.NK_TEXT_ALIGN_MIDDLE | cast(u32)Text_align.NK_TEXT_ALIGN_CENTERED,
+	TEXT_RIGHT		= cast(u32)Text_align.NK_TEXT_ALIGN_MIDDLE | cast(u32)Text_align.NK_TEXT_ALIGN_RIGHT,
 }
 
 @(default_calling_convention="c", link_prefix="nk_")
@@ -452,7 +475,7 @@ foreign nuklear {
 	text_colored			:: proc(ctx: ^Context, str: cstring, len: c.int, flags: nk_flags, color: Color) ---;
 	text_wrap				:: proc(ctx: ^Context, str: cstring, len: c.int) ---;
 	text_wrap_colored		:: proc(ctx: ^Context, str: cstring, len: c.int, color: Color) ---;
-	label					:: proc(ctx: ^Context, str: cstring, align: nk_flags) ---;
+	label					:: proc(ctx: ^Context, str: cstring, align: Text_alignment) ---;
 	label_colored			:: proc(ctx: ^Context, str: cstring, align: nk_flags, color: Color) ---;
 	label_wrap				:: proc(ctx: ^Context, str: cstring) ---;
 	label_colored_wrap		:: proc(ctx: ^Context, str: cstring, color: Color) ---;
@@ -788,51 +811,51 @@ foreign nuklear {
 *
 * ============================================================================= */
 
-NK_WIDGET_DISABLED_FACTOR :: 0.5
+WIDGET_DISABLED_FACTOR :: 0.5
 
 Style_colors :: enum u32 {
-	NK_COLOR_TEXT,
-	NK_COLOR_WINDOW,
-	NK_COLOR_HEADER,
-	NK_COLOR_BORDER,
-	NK_COLOR_BUTTON,
-	NK_COLOR_BUTTON_HOVER,
-	NK_COLOR_BUTTON_ACTIVE,
-	NK_COLOR_TOGGLE,
-	NK_COLOR_TOGGLE_HOVER,
-	NK_COLOR_TOGGLE_CURSOR,
-	NK_COLOR_SELECT,
-	NK_COLOR_SELECT_ACTIVE,
-	NK_COLOR_SLIDER,
-	NK_COLOR_SLIDER_CURSOR,
-	NK_COLOR_SLIDER_CURSOR_HOVER,
-	NK_COLOR_SLIDER_CURSOR_ACTIVE,
-	NK_COLOR_PROPERTY,
-	NK_COLOR_EDIT,
-	NK_COLOR_EDIT_CURSOR,
-	NK_COLOR_COMBO,
-	NK_COLOR_CHART,
-	NK_COLOR_CHART_COLOR,
-	NK_COLOR_CHART_COLOR_HIGHLIGHT,
-	NK_COLOR_SCROLLBAR,
-	NK_COLOR_SCROLLBAR_CURSOR,
-	NK_COLOR_SCROLLBAR_CURSOR_HOVER,
-	NK_COLOR_SCROLLBAR_CURSOR_ACTIVE,
-	NK_COLOR_TAB_HEADER,
-	NK_COLOR_KNOB,
-	NK_COLOR_KNOB_CURSOR,
-	NK_COLOR_KNOB_CURSOR_HOVER,
-	NK_COLOR_KNOB_CURSOR_ACTIVE,
+	COLOR_TEXT,
+	COLOR_WINDOW,
+	COLOR_HEADER,
+	COLOR_BORDER,
+	COLOR_BUTTON,
+	COLOR_BUTTON_HOVER,
+	COLOR_BUTTON_ACTIVE,
+	COLOR_TOGGLE,
+	COLOR_TOGGLE_HOVER,
+	COLOR_TOGGLE_CURSOR,
+	COLOR_SELECT,
+	COLOR_SELECT_ACTIVE,
+	COLOR_SLIDER,
+	COLOR_SLIDER_CURSOR,
+	COLOR_SLIDER_CURSOR_HOVER,
+	COLOR_SLIDER_CURSOR_ACTIVE,
+	COLOR_PROPERTY,
+	COLOR_EDIT,
+	COLOR_EDIT_CURSOR,
+	COLOR_COMBO,
+	COLOR_CHART,
+	COLOR_CHART_COLOR,
+	COLOR_CHART_COLOR_HIGHLIGHT,
+	COLOR_SCROLLBAR,
+	COLOR_SCROLLBAR_CURSOR,
+	COLOR_SCROLLBAR_CURSOR_HOVER,
+	COLOR_SCROLLBAR_CURSOR_ACTIVE,
+	COLOR_TAB_HEADER,
+	COLOR_KNOB,
+	COLOR_KNOB_CURSOR,
+	COLOR_KNOB_CURSOR_HOVER,
+	COLOR_KNOB_CURSOR_ACTIVE,
 };
 
 Style_cursor :: enum u32 {
-	NK_CURSOR_ARROW,
-	NK_CURSOR_TEXT,
-	NK_CURSOR_MOVE,
-	NK_CURSOR_RESIZE_VERTICAL,
-	NK_CURSOR_RESIZE_HORIZONTAL,
-	NK_CURSOR_RESIZE_TOP_LEFT_DOWN_RIGHT,
-	NK_CURSOR_RESIZE_TOP_RIGHT_DOWN_LEFT,
+	CURSOR_ARROW,
+	CURSOR_TEXT,
+	CURSOR_MOVE,
+	CURSOR_RESIZE_VERTICAL,
+	CURSOR_RESIZE_HORIZONTAL,
+	CURSOR_RESIZE_TOP_LEFT_DOWN_RIGHT,
+	CURSOR_RESIZE_TOP_RIGHT_DOWN_LEFT,
 };
 
 Color :: [4]u8;
@@ -1533,8 +1556,6 @@ foreign nuklear {
 }
 
 
-
-
 /**===============================================================
 *
 *                      TEXT EDITOR
@@ -1657,8 +1678,7 @@ nk_command_type :: enum u32 {
 nk_command :: struct {
 	typ: nk_command_type,
 	next: nk_size,
-	// If you use NK_INCLUDE_COMMAND_USERDATA, add:
-	// userdata: Handle,
+	userdata: Handle, //because of NK_INCLUDE_COMMAND_USERDATA
 }
 
 nk_command_scissor :: struct {
@@ -1875,6 +1895,7 @@ nk_mouse_button :: struct {
 nk_mouse :: struct {
 	buttons:    [NK_BUTTON_MAX]nk_mouse_button,
 	pos:        Vec2,
+	down_pos: 	Vec2, //Because of NK_BUTTON_TRIGGER_ON_RELEASE
 	prev:       Vec2,
 	delta:      Vec2,
 	scroll_delta: Vec2,
@@ -1972,7 +1993,7 @@ Style_button :: struct {
 	text_normal:     Color,
 	text_hover:      Color,
 	text_active:     Color,
-	text_alignment:  nk_flags,
+	text_alignment:  Text_alignment,
 	color_factor_text: f32,
 
 	// properties
@@ -2005,7 +2026,7 @@ Style_toggle :: struct {
 	text_hover:      Color,
 	text_active:     Color,
 	text_background: Color,
-	text_alignment:  nk_flags,
+	text_alignment:  Text_alignment,
 
 	// properties
 	padding:       Vec2,
@@ -2087,7 +2108,7 @@ nk_style_slider :: struct {
 	disabled_factor: f32,
 
 	// optional buttons
-	show_buttons: c.int,
+	show_buttons: b32,
 	inc_button:   Style_button,
 	dec_button:   Style_button,
 	inc_symbol:   Symbol_type,
@@ -2183,7 +2204,7 @@ nk_style_scrollbar :: struct {
 	disabled_factor: f32,
 
 	// optional buttons
-	show_buttons:    c.int,
+	show_buttons:    b32,
 	inc_button:      Style_button,
 	dec_button:      Style_button,
 	inc_symbol:      Symbol_type,
@@ -2338,8 +2359,8 @@ nk_style_tab :: struct {
 }
 
 nk_style_header_align :: enum u32 {
-	NK_HEADER_LEFT,
-	NK_HEADER_RIGHT,
+	HEADER_LEFT,
+	HEADER_RIGHT,
 }
 
 nk_style_window_header :: struct {
@@ -2780,6 +2801,8 @@ Context :: struct {
 	stacks:        Configuration_stacks,
 	delta_time_seconds: f32,
 
+    userdata : Handle,
+	
 	// single shared text editor instance
 	text_edit:     Text_edit,
 	overlay:       Command_buffer,
@@ -2796,14 +2819,14 @@ Context :: struct {
 	seq:           u32,
 }
 
-INT8 :: c.char;
-UINT8 :: c.uchar;
-INT16 :: c.short;
-UINT16 :: c.ushort;
-INT32 :: c.int;
-UINT32 :: c.uint;
-SIZE_TYPE :: c.size_t;
-POINTER_TYPE :: rawptr;
+INT8 :: c.int8_t;
+UINT8 :: c.uint8_t;
+INT16 :: c.int16_t;
+UINT16 :: c.uint16_t;
+INT32 :: c.int32_t;
+UINT32 :: c.uint32_t;
+SIZE_TYPE :: c.uintptr_t;
+POINTER_TYPE :: c.uintptr_t;
 BOOL :: c.bool;
 
 nk_uchar 	:: UINT8;
@@ -2830,23 +2853,23 @@ NK_FLASE_TRUE :: enum u32 {
 };
 
 Symbol_type :: enum u32 {
-	NK_SYMBOL_NONE,
-	NK_SYMBOL_X,
-	NK_SYMBOL_UNDERSCORE,
-	NK_SYMBOL_CIRCLE_SOLID,
-	NK_SYMBOL_CIRCLE_OUTLINE,
-	NK_SYMBOL_RECT_SOLID,
-	NK_SYMBOL_RECT_OUTLINE,
-	NK_SYMBOL_TRIANGLE_UP,
-	NK_SYMBOL_TRIANGLE_DOWN,
-	NK_SYMBOL_TRIANGLE_LEFT,
-	NK_SYMBOL_TRIANGLE_RIGHT,
-	NK_SYMBOL_PLUS,
-	NK_SYMBOL_MINUS,
-	NK_SYMBOL_TRIANGLE_UP_OUTLINE,
-	NK_SYMBOL_TRIANGLE_DOWN_OUTLINE,
-	NK_SYMBOL_TRIANGLE_LEFT_OUTLINE,
-	NK_SYMBOL_TRIANGLE_RIGHT_OUTLINE,
+	SYMBOL_NONE,
+	SYMBOL_X,
+	SYMBOL_UNDERSCORE,
+	SYMBOL_CIRCLE_SOLID,
+	SYMBOL_CIRCLE_OUTLINE,
+	SYMBOL_RECT_SOLID,
+	SYMBOL_RECT_OUTLINE,
+	SYMBOL_TRIANGLE_UP,
+	SYMBOL_TRIANGLE_DOWN,
+	SYMBOL_TRIANGLE_LEFT,
+	SYMBOL_TRIANGLE_RIGHT,
+	SYMBOL_PLUS,
+	SYMBOL_MINUS,
+	SYMBOL_TRIANGLE_UP_OUTLINE,
+	SYMBOL_TRIANGLE_DOWN_OUTLINE,
+	SYMBOL_TRIANGLE_LEFT_OUTLINE,
+	SYMBOL_TRIANGLE_RIGHT_OUTLINE,
 };
 
 Collapse_states :: enum u32 {

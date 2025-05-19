@@ -28,7 +28,7 @@ entry :: proc () {
 	
 	////////////////////
 	
-	s_gui := gui.init();
+	s_gui := gui.init(window, font_size = 0.04);
 	defer gui.destroy(s_gui);
 	
 	checkbox_state : bool = false;
@@ -46,15 +46,18 @@ entry :: proc () {
 				gui.begin(s_gui);
 					
 					// Window with title and basic widgets
-					if gui.window_begin(s_gui, "Demo Window", rect = gui.Rect{100, 100, 400, 400}, flags = {.window_movable, .window_scaleable, .window_border}, title = "my window") {
+					if gui.window_begin(s_gui, "Demo Window", {0, 0, 0.5, 0.5}, flags = {.window_movable, .window_scaleable, .window_border, .window_minimizeable}, title = "my window") {
+						
+						gui.layout_row_dynamic(s_gui, 0.02, 2);
+						gui.label(s_gui, "Hello, Nuklear!", .TEXT_RIGHT);
+						gui.checkbox_label(s_gui, "Enable feature y", &checkbox_state);
+						
+						//if gui.button_label(s_gui, "Button") {
+						//	gui.label(s_gui, "Button pressed!", .left);
+						//}
+						
 						/*
-						gui.layout_row_dynamic(s_gui, 30, 1);
-						gui.label(s_gui, "Hello, Nuklear!", .left);
-
 						gui.layout_row_dynamic(s_gui, 30, 2);
-						if gui.button_label(s_gui, "Button") {
-							gui.label(s_gui, "Button pressed!", .left);
-						}
 
 						gui.checkbox_label(s_gui, "Enable feature", &checkbox_state);
 
@@ -79,8 +82,8 @@ entry :: proc () {
 						}
 
 						*/
-						gui.window_end(s_gui);
 					}
+					gui.window_end(s_gui);
 					
 				gui.end(s_gui);
 				
@@ -90,8 +93,6 @@ entry :: proc () {
 		render.end_frame();
 		mem.free_all(context.temp_allocator);
 	}
-	
-	
 	
 }
 
