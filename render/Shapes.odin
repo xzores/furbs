@@ -113,7 +113,7 @@ draw_equilateral_triangle :: proc (model_matrix : matrix[4,4]f32, color : [4]f32
 	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_equilateral_triangle);
 }
 
-draw_triangle :: proc (a, b, c : [3]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
+draw_triangle_3D :: proc (a, b, c : [3]f32, color : [4]f32 = {1,1,1,1}, loc := #caller_location) {
 	_ensure_shapes_loaded();
 	
 	u := b - a;
@@ -128,6 +128,12 @@ draw_triangle :: proc (a, b, c : [3]f32, color : [4]f32 = {1,1,1,1}, loc := #cal
 	
 	mesh_draw_single(&state.shapes, model_matrix, color, state.shape_right_triangle);
 }
+
+draw_triangle_2D :: proc (a, b, c : [2]f32, color : [4]f32 = {1,1,1,1}, z : f32 = 0, loc := #caller_location) {	
+	draw_triangle_3D({a.x, a.y, z}, {b.x, b.y, z}, {c.x, c.y, z}, color, loc);
+}
+
+draw_triangle :: proc {draw_triangle_3D, draw_triangle_2D};
 
 ////////////////////////////////////////// PRIVATE //////////////////////////////////////////
 

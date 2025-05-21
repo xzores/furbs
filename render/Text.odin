@@ -155,6 +155,30 @@ text_get_lowest_point :: proc(text : string, size : f32, font : Font = state.def
 }
 
 @(require_results)
+text_get_ascender :: proc(font : Font, size : f32, use_EM := false) -> f32 {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(use_EM, size);
+	
+	return fs.get_ascent(&state.font_context);
+}
+
+@(require_results)
+text_get_descender :: proc(font : Font, size : f32, use_EM := false) -> f32 {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(use_EM, size);
+	
+	return fs.get_descent(&state.font_context);
+}
+
+@(require_results)
 text_get_max_height :: proc(font : Font, size : f32, use_EM := false) -> f32 {
 	using state;
 	
@@ -165,7 +189,6 @@ text_get_max_height :: proc(font : Font, size : f32, use_EM := false) -> f32 {
 	
 	return fs.get_max_height(&state.font_context);
 }
-
 
 @(require_results)
 text_get_size_from_max_height :: proc(font : Font, max_height : f32) -> f32 {
