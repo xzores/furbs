@@ -351,7 +351,7 @@ text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f3
 	for q, coords in fs.font_iter_next(&font_context, &iter) {
 		
 		rot_mat := linalg.matrix2_rotate_f32(rotation / 180 * math.PI);
-		pos := rot_mat * q.xy; 
+		pos := rot_mat * q.xy;
 		
 		if flip_y {
 			append(&instance_data, Default_instance_data {

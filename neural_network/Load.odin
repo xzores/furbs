@@ -246,6 +246,7 @@ shape_with_length.tofile(sys.stdout.buffer)
 `
 
 inference_model :: proc (model_path : string, tokens : []int) -> []u8 {
+	log.debugf("inferencing model : %v", model_path);
 	
 	stdout := run_python_code(inference_model_python_code, model_path, model_path, tokens);
 	

@@ -50,10 +50,29 @@ entry :: proc () {
 						
 						//gui.layout_row_dynamic(s_gui, 0.02, 2);
 						//gui.label(s_gui, "Hello, Nuklear!", .TEXT_RIGHT);
-					gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .scrollbar, .collapsable, .movable}, gui.Dest{.mid, .mid, 0, 0}, "", .top);
+					
+					bar_loc : gui.Top_bar_location = .top;
+					
+					if checkbox_state {
+						bar_loc = .bottom
+					}
+						
+					if gui.begin_window(s_gui, {0.5, 0.5}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0, 0}, "MThis is my window", false, .bottom) {
 						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
 						gui.checkbox(s_gui, &checkbox_state, label = "Something one");
-					gui.end(s_gui);
+						
+						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "MThis is my window", false, .top) {
+							gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
+							gui.checkbox(s_gui, &checkbox_state, label = "Something one");
+						}
+						gui.end_window(s_gui);
+					}
+					gui.end_window(s_gui);
+					
+					if gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "Window 2", false, .bottom) {
+						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Text thing");
+					}
+					gui.end_window(s_gui);
 					
 					//gui.begin_window(s_gui, {0.2, 0.2}, {.movable}, gui.Dest{.mid, .top, 0, 0}, "", .top);
 						gui.checkbox(s_gui, &checkbox_state, label = "Something 2");

@@ -29,6 +29,8 @@ State :: struct {
 	odin_allocator : mem.Allocator,
 	logger : log.Logger,
 	
+	cursors : [lm.Cursor_type]render.Cursor_handle,
+	
 	using ctx : ^lm.State,
 }
 
@@ -73,6 +75,19 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 		default_font,
 		context.allocator,
 		context.logger,
+		{
+			.normal 			= render.get_os_cursor(.arrow),
+			.text_edit 			= render.get_os_cursor(.Ibeam),
+			.crosshair 			= render.get_os_cursor(.crosshair),
+			.draging 			= render.get_os_cursor(.resize_all),
+			.clickable 			= render.get_os_cursor(.pointing_hand),
+			.scale_horizontal 	= render.get_os_cursor(.resize_east_west),
+			.scale_verical 		= render.get_os_cursor(.resize_north_south),
+			.scale_NWSE 		= render.get_os_cursor(.resize_NWSE),
+			.scale_NESW 		= render.get_os_cursor(.resize_NESW),
+			.scale_all 			= render.get_os_cursor(.resize_all),
+			.not_allowed 		= render.get_os_cursor(.not_allowed),
+		},
 		lm.init(s, lm_font_width, lm_font_height),
 	};
 	
@@ -86,11 +101,12 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 			text_size = 0.03,
 			size = {0.03, 0.03},
 		},
-		window = lm.Window_style{
-			line_thickness = 0.003,
-			text_padding = 0.003,
-			text_size = 0.03,
-			size = {0.03, 0.03},
+		window = lm.Window_style{	
+			0.005,			//	line_thickness : f32,
+			0.03,			//	top_bar_size : f32,
+			0.01,			//	title_padding : f32,
+			0.025,			//	title_size : f32,
+			{0.03, 0.03},	//	size : [2]f32,
 		}
 	});
 	
@@ -103,13 +119,17 @@ destroy :: proc(s : ^State) {
 	render.pipeline_destroy(s.pipeline);
 	render.shader_destroy(s.shader);
 	
+	for cursor in s.cursors {
+		render.destroy_cursor(cursor);
+	}
+	
 	lm.destroy(s.ctx);
 	free(s);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-begin :: proc(s : ^State) {
+begin :: proc(s : ^State, user_id := 0, dont_touch := #caller_location) {
 	
 	unit_size := cast(f32)math.min(s.window.width, s.window.height);
 	
@@ -124,7 +144,7 @@ begin :: proc(s : ^State) {
 		lm.mouse_event(s, false);
 	}
 	
-	lm.begin(s, cast(f32)s.window.width / unit_size, cast(f32)s.window.height / unit_size);
+	lm.begin(s, cast(f32)s.window.width / unit_size, cast(f32)s.window.height / unit_size, user_id, dont_touch);
 	
 }
 
@@ -154,15 +174,58 @@ end :: proc(s : ^State) {
 				render.set_texture(.texture_diffuse, render.texture2D_get_white());
 				
 				switch c.rect_type {
-					case .checkbox_background, .window_background:
+						
+					case .checkbox_background:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						
+						switch c.state {
+							case .cold:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.15, 0.15, 0.15, 1});
+							case .hot:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.25, 0.25, 0.25, 1});
+							case .active:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.45, 0.45, 0.45, 1});
+						}
+						
+					case .window_background:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.15, 0.15, 0.15, 1});
-						
+				
 					case .window_top_bar:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
-						render.draw_quad_rect(c.rect * unit_size, 0, {0.6, 0.25, 0.25, 1});
+						switch c.state {
+							case .cold:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.6, 0.25, 0.25, 1});
+							case .hot:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.7, 0.4, 0.4, 1});
+							case .active:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.4, 0.4, 1});
+						}
+					
+					case .scrollbar_background:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						switch c.state {
+							case .cold:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.5, 0.5, 0.5, 0.3});
+							case .hot, .active:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.6, 0.6, 0.6, 0.3});
+						}
+						
+					case .scrollbar_front:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						switch c.state {
+							case .cold:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.5, 0.5, 0.5, 0.4});
+							case .hot:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.9, 0.9, 0.4});
+							case .active:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.9, 0.9, 1});
+						}
 						
 					case .checkbox_border, .window_border:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, false);
@@ -175,16 +238,43 @@ end :: proc(s : ^State) {
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.6, 0.25, 0.25, 1});
 						
-					case .window_collapse_button:
+					case .window_collapse_button_up, .window_collapse_button_down, .window_collapse_button_left, .window_collapse_button_right:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
 						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.line_thickness * unit_size);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)c.roundness * unit_size);
 						
-						a := c.rect.xy;
-						b := c.rect.xy + {c.rect.z, 0};
-						c := c.rect.xy + {c.rect.z / 2, c.rect.w};
+						a, b, d : [2]f32;
 						
-						render.draw_triangle(a * unit_size, b * unit_size, c * unit_size, {0.3,0.7,0.4,1});
+						#partial switch c.rect_type {
+							case .window_collapse_button_up: 
+								a = c.rect.xy;
+								b = c.rect.xy + {c.rect.z, 0};
+								d = c.rect.xy + {c.rect.z / 2, c.rect.w};
+							
+							case .window_collapse_button_down:			
+								a = c.rect.xy + {0, c.rect.w};
+								b = c.rect.xy + {c.rect.z, c.rect.w};
+								d = c.rect.xy + {c.rect.z / 2, 0};
+							
+							case .window_collapse_button_right:			
+								a = c.rect.xy;
+								b = c.rect.xy + {0, c.rect.w};
+								d = c.rect.xy + {c.rect.z, c.rect.w / 2};
+								
+							case .window_collapse_button_left:			
+								a = c.rect.xy + {c.rect.z, 0};
+								b = c.rect.xy + {c.rect.z, c.rect.w};
+								d = c.rect.xy + {0, c.rect.w / 2};
+						}
+						
+						switch c.state {
+							case .cold:
+								render.draw_triangle(a * unit_size, b * unit_size, d * unit_size, {0.6, 0.6, 0.6, 1});
+							case .hot:
+								render.draw_triangle(a * unit_size, b * unit_size, d * unit_size, {0.7, 0.7, 0.7, 1});
+							case .active:
+								render.draw_triangle(a * unit_size, b * unit_size, d * unit_size, {0.9, 0.9, 0.9, 1});
+						}
 				}
 			}
 			case lm.Cmd_scissor: {
@@ -192,10 +282,10 @@ end :: proc(s : ^State) {
 				render.set_scissor_test(r.x, r.y, r.z, r.w);
 			}
 			case lm.Cmd_text: {
-				render.text_draw(c.val, c.position * unit_size, c.size * unit_size, false, false, {1,1,1,1});
+				render.text_draw(c.val, c.position * unit_size, c.size * unit_size, false, false, {1,1,1,1}, rotation = c.rotation);
 			}
 			case lm.Cmd_swap_cursor: {
-				panic("TODO");
+				render.window_set_cursor_icon(s.window, s.cursors[c.type]);
 			}
 		}
 	}

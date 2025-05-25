@@ -1,5 +1,6 @@
 package nerual_network;
 
+/*
 import "core:math/rand"
 import "core:container/queue"
 import pq "core:container/priority_queue"
@@ -70,7 +71,7 @@ make_free_net :: proc (input_size : int, output_size : int, start_neurons : int)
 	for n, i in fr.neurons {
 		for other, j in fr.neurons {
 			if i != j  {
-				connect_free_net_neurons();			
+				//connect_free_net_neurons();			
 			}
 		}
 	}
@@ -89,3 +90,5 @@ make_free_net_neuron :: proc (fr : ^Free_net, type : Neuron_type) -> int {
 connect_free_net_neurons :: proc (fr : ^Free_net, a, b : int) {
 	
 }
+*/
+

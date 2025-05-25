@@ -160,8 +160,6 @@ Window :: struct {
 
 	resize_behavior : Resize_behavior,
 	width, height : i32,
-	
-	cursor : glfw.CursorHandle, //optional
 
 	//To handle the gl stategl_states
 	gl_states : gl.GL_states_comb,
@@ -275,10 +273,6 @@ window_destroy :: proc (window : ^Window, loc := #caller_location) {
 		panic("the window you are trying to destroy is not in active windows.")
 	}
 	unordered_remove(&state.active_windows, index);
-	
-	if window.cursor != nil {
-		glfw.DestroyCursor(window.cursor);
-	}
 
 	glfw.DestroyWindow(window.glfw_window);
 	gl.destroy_state(window.gl_states);
@@ -515,25 +509,6 @@ window_set_mouse_mode :: proc "contextless" (window : ^Window, mouse_mode : Mous
 	}
 }
 
-//The image data is 32-bit, little-endian, non-premultiplied RGBA, i.e. eight bits per channel. The pixels are arranged canonically as sequential rows, starting from the top-left corner.
-//Cleanup happens when window closes or cursor is replaced.
-window_set_cursor_icon :: proc (window : ^Window, #any_int width, height : i32, cursor : []u8, loc := #caller_location) {
-	
-	fmt.assertf(len(cursor) == auto_cast(width * height * 4), "Size does not match array data. Data length : %v, expected : %v\n", len(cursor), width * height * 4, loc = loc)
-
-	if window.cursor != nil {
-		glfw.DestroyCursor(window.cursor);
-	}
-
-	image : glfw.Image;
-	image.width = width;
-	image.height = height;
-	image.pixels = raw_data(cursor);
-	
-	window.cursor = glfw.CreateCursor(&image, 0, 0); //TODO this is leaked, i belive.
-	glfw.SetCursor(window.glfw_window, window.cursor);
-}
-
 window_set_cursor_position :: proc "contextless" (window : ^Window, width, height : f64) {
 	glfw.SetCursorPos(window.glfw_window, width, height);
 }
@@ -541,6 +516,48 @@ window_set_cursor_position :: proc "contextless" (window : ^Window, width, heigh
 //Unlike mouse_pos, this will return the mouse position relative to a window.
 window_get_cursor_position :: proc "contextless" (window : ^Window) -> (w, h : f64) {
 	return glfw.GetCursorPos(window.glfw_window);
+}
+
+/////////////////// Cursor stuff ///////////////////
+
+Cursor_type :: enum {
+	arrow				= 0x00036001, //normal
+	Ibeam         		= 0x00036002, //Text edit
+	crosshair     		= 0x00036003,
+	pointing_hand 		= 0x00036004,
+	resize_east_west    = 0x00036005,
+	resize_north_south  = 0x00036006,
+	resize_NWSE   		= 0x00036007,
+	resize_NESW   		= 0x00036008,
+	resize_all    		= 0x00036009,
+	not_allowed   		= 0x0003600A,
+}
+
+Cursor_handle :: glfw.CursorHandle;
+
+get_os_cursor :: proc (type : Cursor_type) -> Cursor_handle {
+	return glfw.CreateStandardCursor(auto_cast type);
+}
+
+make_cursor :: proc (#any_int width, height : i32, cursor : []u8, hot_point : [2]i32 = {0,0}, loc := #caller_location) -> Cursor_handle {	
+	fmt.assertf(len(cursor) == auto_cast(width * height * 4), "Size does not match array data. Data length : %v, expected : %v\n", len(cursor), width * height * 4, loc = loc)
+	
+	image : glfw.Image;
+	image.width = width;
+	image.height = height;
+	image.pixels = raw_data(cursor);
+	
+	return glfw.CreateCursor(&image, hot_point.x, hot_point.y);
+}
+
+destroy_cursor :: proc (cursor : Cursor_handle) {
+	glfw.DestroyCursor(cursor);	
+}
+
+//The image data is 32-bit, little-endian, non-premultiplied RGBA, i.e. eight bits per channel. The pixels are arranged canonically as sequential rows, starting from the top-left corner.
+//Cleanup happens when window closes or cursor is replaced.
+window_set_cursor_icon :: proc (window : ^Window, cursor : Cursor_handle, loc := #caller_location) {
+	glfw.SetCursor(window.glfw_window, cursor);
 }
 
 /////////////////// Monitor stuff ///////////////////
@@ -586,13 +603,13 @@ monitor_destroy_infos :: proc ([]Monitor_info) {
 
 }
 
-
 /////////////////// OS stuff ///////////////////
 
 
 //handle os error pop-up messages
 
 //Do os explorerer pop-up
+
 
 
 
