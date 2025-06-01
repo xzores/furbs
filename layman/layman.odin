@@ -177,14 +177,13 @@ Unique_look_up :: struct {
 	user_id : int,
 }
 
-Node_sub :: union{^Node, Command};
-
 Node :: struct {
 	uid : Unique_id,
-	subs : [dynamic]Node_sub,
+	sub_nodes : [dynamic]^Node,
 	parent : ^Node,
 	
 	refound : bool,
+	commands : [dynamic]Command,
 }
 
 State :: struct {
@@ -275,7 +274,22 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 }
 
 destroy :: proc(s : ^State) {
-
+	
+	for uid, node in s.uid_to_node {
+		free(node);
+		delete(node.commands);
+		delete(node.sub_nodes);
+	}
+	
+	delete(s.style_stack);
+	delete(s.panel_stack);
+	delete(s.scissor_stack);
+	delete(s.uid_to_node);
+	delete(s.priorities);
+	delete(s.originations);
+	delete(s.statefull_elements); 
+	
+	free(s);
 }
 
 begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0, dont_touch := #caller_location) {
@@ -351,10 +365,10 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 		promote :: proc (s : ^State, to_promote : ^Node) {
 			assert(to_promote.parent != nil, "parent is nil? are you promoting root?");
 			
-			i, found := slice.linear_search(to_promote.parent.subs[:], to_promote);
+			i, found := slice.linear_search(to_promote.parent.sub_nodes[:], to_promote);
 			fmt.assertf(found, "the subnode to promote was not found subnode : %p, parent : %#v", to_promote, to_promote.parent);
-			ordered_remove(&to_promote.parent.subs, i);
-			append(&to_promote.parent.subs, to_promote);
+			ordered_remove(&to_promote.parent.sub_nodes, i);
+			append(&to_promote.parent.sub_nodes, to_promote);
 			
 			if to_promote.parent.parent != nil {
 				promote(s, to_promote.parent);
@@ -376,19 +390,17 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 		assert(node != nil, "node is nil");
 		
 		if node.refound == true {
-			for sub in node.subs {
-				switch val in sub {
-					case ^Node:
-						depth_first_assign_priority(s, val, commands);
-					case Command:
-						append(commands, val);
-				}
-			}
+			append(commands, ..node.commands[:]);
 		} else {
 			fmt.printf("did not refind %v", node);
-			i, found := slice.linear_search(node.parent.subs[:], node);
-			ordered_remove(&node.parent.subs, i);
+			i, found := slice.linear_search(node.parent.sub_nodes[:], node);
+			ordered_remove(&node.parent.sub_nodes, i);
 			return;
+		}
+		clear(&node.commands);
+		
+		for sub in node.sub_nodes {
+			depth_first_assign_priority(s, sub, commands);
 		}
 	}
 	
@@ -1161,7 +1173,7 @@ bring_window_to_back :: proc () {
 //////////////////////////////////////// PRIVATE ////////////////////////////////////////
 
 append_command :: proc (s : ^State, cmd : Command) {
-	append(&s.current_node.subs, cmd);
+	append(&s.current_node.commands, cmd);
 }
 
 set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
@@ -1182,9 +1194,9 @@ push_element :: proc (s : ^State, uid : Unique_id) {
 			s.root = node;
 		}
 		else {
-			i, found := slice.linear_search(s.current_node.subs[:], node);
+			i, found := slice.linear_search(s.current_node.sub_nodes[:], node);
 			if !found {
-				append(&s.current_node.subs, node);
+				append(&s.current_node.sub_nodes, node);
 			}
 			
 			node.refound = true;
@@ -1205,7 +1217,7 @@ push_element :: proc (s : ^State, uid : Unique_id) {
 			new := new_node(uid, s.current_node);
 			new.refound = true;
 			new.parent = s.current_node;
-			append(&s.current_node.subs, new);
+			append(&s.current_node.sub_nodes, new);
 			s.uid_to_node[uid] = new;
 			s.current_node = new;
 		}
@@ -1378,9 +1390,10 @@ new_node :: proc (uid : Unique_id, parent : ^Node) -> ^Node {
 	
 	n^ = {
 		uid,
-		make([dynamic]Node_sub),
+		make([dynamic]^Node),
 		parent,
 		true,
+		make([dynamic]Command),
 	};
 	
 	return n;
