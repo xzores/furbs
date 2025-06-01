@@ -56,12 +56,12 @@ entry :: proc () {
 					if checkbox_state {
 						bar_loc = .bottom
 					}
-						
-					if gui.begin_window(s_gui, {0.5, 0.5}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0, 0}, "MThis is my window", false, .bottom) {
+					
+					if gui.begin_window(s_gui, {0.5, 0.5}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0, 0}, "Hello world", false, .bottom) {
 						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
 						gui.checkbox(s_gui, &checkbox_state, label = "Something one");
 						
-						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "MThis is my window", false, .top) {
+						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "", false, .top) {
 							gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
 							gui.checkbox(s_gui, &checkbox_state, label = "Something one");
 						}
@@ -69,14 +69,14 @@ entry :: proc () {
 					}
 					gui.end_window(s_gui);
 					
-					if gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "Window 2", false, .bottom) {
+					if gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0.7, 0.3}, "", false, .bottom) {
 						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Text thing");
 					}
 					gui.end_window(s_gui);
 					
 					//gui.begin_window(s_gui, {0.2, 0.2}, {.movable}, gui.Dest{.mid, .top, 0, 0}, "", .top);
-						gui.checkbox(s_gui, &checkbox_state, label = "Something 2");
-						gui.checkbox(s_gui, &checkbox_state, label = "Something 3");
+						//gui.checkbox(s_gui, &checkbox_state, label = "Something 2");
+						//gui.checkbox(s_gui, &checkbox_state, label = "Something 3");
 					//gui.end(s_gui);
 						//if gui.button_label(s_gui, "Button") {
 						//	gui.label(s_gui, "Button pressed!", .left);

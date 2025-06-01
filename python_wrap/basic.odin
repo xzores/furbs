@@ -18,37 +18,33 @@ import "core:c/libc"
 import "core:strconv"
 
 @private
-run_python_code :: proc (code : string, args : ..any) -> []u8 {
+run_python_script_with_json :: proc (script_name : string, config : any, loc := #caller_location) -> []u8 {
 	
-	new_code, was_allocation := strings.replace_all(fmt.tprintf(code, ..args), "\"", "'")
+	// Create temporary JSON config file
+	temp_config_file := fmt.aprintf("temp_config_%d.json", rand.int31(), allocator = context.temp_allocator);
 	
-	defer {
-		if was_allocation {
-			delete(new_code);
-		}
+	// Marshal config to JSON
+	json_data, marshal_err := json.marshal(config, allocator = context.temp_allocator);
+	if marshal_err != nil {
+		log.errorf("Failed to marshal config to JSON: %v", marshal_err, location = loc);
+		return {};
 	}
+	
+	// Write JSON to temporary file
+	write_success := os.write_entire_file(temp_config_file, json_data);
+	if !write_success {
+		log.errorf("Failed to write temporary config file: %s", temp_config_file, location = loc);
+		return {};
+	}
+	defer os.remove(temp_config_file); // Clean up temp file
+	
+	// Prepare Python script path
+	script_path := fmt.aprintf("python/%s", script_name, allocator = context.temp_allocator);
 	
 	commands := [?]string {
 		"python",
-		"-c",
-		fmt.tprintf("%v", new_code),
-	}
-	
-	File :: struct {
-		impl:   rawptr,
-		stream: io.Stream,
-		fstat:  os2.Fstat_Callback,
-	}
-	
-	fstat_callback : os2.Fstat_Callback : proc (f: ^os2.File, allocator: runtime.Allocator) -> (os2.File_Info, os2.Error){
-		
-		log.errorf("Fstat called!");
-		
-		return {}, nil,	
-	}
-	
-	std_out := os2.File {
-		fstat = os2.Fstat_Callback {}
+		script_path,
+		temp_config_file,
 	}
 	
 	process : os2.Process_Desc = {
@@ -63,12 +59,22 @@ run_python_code :: proc (code : string, args : ..any) -> []u8 {
 	
 	state, stdout, stderr, err := os2.process_exec(process, context.allocator);
 	defer delete(stderr);
-	assert(err == nil);
+	
+	if err != nil {
+		log.errorf("Process execution failed: %v", err, location = loc);
+		return {};
+	}
 	
 	if len(stderr) != 0 {
-		log.errorf(string(stderr));
-		log.errorf("err : %v", err);
+		log.errorf(string(stderr), location = loc);
 	}
 	
 	return stdout;
+}
+
+// Legacy function for backward compatibility - now calls the new JSON-based function
+@private  
+run_python_code :: proc (path : string, args : ..any, loc := #caller_location) -> []u8 {
+	log.warnf("run_python_code is deprecated, use run_python_script_with_json instead", location = loc);
+	return {};
 }

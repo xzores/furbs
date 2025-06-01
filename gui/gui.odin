@@ -145,7 +145,6 @@ begin :: proc(s : ^State, user_id := 0, dont_touch := #caller_location) {
 	}
 	
 	lm.begin(s, cast(f32)s.window.width / unit_size, cast(f32)s.window.height / unit_size, user_id, dont_touch);
-	
 }
 
 end :: proc(s : ^State) {
@@ -168,7 +167,7 @@ end :: proc(s : ^State) {
 	*/
 	
 	for _cmd in cmds {
-		switch c in _cmd.cmd {			
+		switch c in _cmd {			
 			case lm.Cmd_rect: {
 				
 				render.set_texture(.texture_diffuse, render.texture2D_get_white());
@@ -226,7 +225,7 @@ end :: proc(s : ^State) {
 							case .active:
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.9, 0.9, 1});
 						}
-						
+					
 					case .checkbox_border, .window_border:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, false);
 						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.line_thickness * unit_size);
@@ -278,8 +277,13 @@ end :: proc(s : ^State) {
 				}
 			}
 			case lm.Cmd_scissor: {
-				r := c * unit_size;
-				render.set_scissor_test(r.x, r.y, r.z, r.w);
+				if c.enable {
+					r := c.area * unit_size;
+					render.set_scissor_test(r.x, r.y, r.z, r.w);
+				}
+				else {
+					render.disable_scissor_test();
+				}
 			}
 			case lm.Cmd_text: {
 				render.text_draw(c.val, c.position * unit_size, c.size * unit_size, false, false, {1,1,1,1}, rotation = c.rotation);

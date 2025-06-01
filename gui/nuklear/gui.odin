@@ -10,9 +10,9 @@ import _c "core:c"
 import "core:fmt"
 import "core:strings"
 
-import nk "../nuklear"
+import nk "../../nuklear"
 
-import "../render"
+import "../../render"
 
 virtual_screen_size : f32 : 8192;
 
@@ -156,7 +156,7 @@ init :: proc (window : ^render.Window, font := render.get_default_fonts().normal
 	};
 	
 	style_from_table(&s.ctx, color_table);
-		
+	
 	return s;
 }
 
@@ -219,8 +219,7 @@ begin :: proc (state : ^State, loc := #caller_location) {
 end :: proc (state : ^State) {
 	height : f32 = auto_cast state.window.height;
 	ratio := height / virtual_screen_size;
-	aspect := cast(f32)state.window.width / height;
-	
+	aspect :=  cast(f32)state.window.width / height;
 	
 	if state.gui_framebuffer.height != state.window.height || state.gui_framebuffer.width != state.window.width {
 		//destroy the old and remake with new size
@@ -234,7 +233,8 @@ end :: proc (state : ^State) {
 		render.target_begin(&state.gui_framebuffer);
 		defer render.target_end();
 		
-		state.cam = render.camera_get_pixel_space(virtual_screen_size, virtual_screen_size * aspect);
+		fmt.printf("w, h : %v %v", virtual_screen_size * aspect, virtual_screen_size);
+		state.cam = render.camera_get_pixel_space(virtual_screen_size * aspect, virtual_screen_size);
 		render.pipeline_begin(state.pipeline, state.cam);
 		defer render.pipeline_end();
 		

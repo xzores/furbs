@@ -3,9 +3,9 @@ package gui_exmaple;
 import "core:mem"
 
 import gui ".."
-import "../../render"
+import "../../../render"
 import "core:fmt"
-import "../../utils"
+import "../../../utils"
 
 entry :: proc () {
 	
@@ -80,7 +80,6 @@ entry :: proc () {
 							gui.label(s_gui, "Inside tree node", .left);
 							gui.tree_pop(s_gui);
 						}
-
 						*/
 					}
 					gui.window_end(s_gui);
@@ -117,7 +116,6 @@ main :: proc () {
 	when ODIN_DEBUG {
 		context.assertion_failure_proc = utils.init_stack_trace();
 		defer utils.destroy_stack_trace();
-		
 		
 		utils.init_tracking_allocators();
 		

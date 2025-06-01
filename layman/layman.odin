@@ -76,7 +76,10 @@ Display_state :: enum {
 
 ///////////////////////////////////////////////////////////////////////////////////////
 
-Cmd_scissor :: distinct [4]f32; //
+Cmd_scissor :: struct{
+	area : [4]f32,
+	enable : bool,
+}; //
 
 Cmd_rect :: struct {
 	rect : [4]f32,
@@ -174,10 +177,14 @@ Unique_look_up :: struct {
 	user_id : int,
 }
 
+Node_sub :: union{^Node, Command};
+
 Node :: struct {
 	uid : Unique_id,
-	sub_nodes : [dynamic]^Node,
+	subs : [dynamic]Node_sub,
 	parent : ^Node,
+	
+	refound : bool,
 }
 
 State :: struct {
@@ -192,20 +199,20 @@ State :: struct {
 	style_stack : [dynamic]Style,
 	panel_stack : [dynamic]Panel,
 	scissor_stack : [dynamic]Cmd_scissor,
-	commands : [dynamic]Ordered_command,
 	
 	hot : Unique_id,
 	active : Unique_id,
 	next_hot : Unique_id,
 	next_active : Unique_id,
-	to_promote : Unique_id, //Almost the same as to next_active, but this one has 
+	to_promote : ^Node, //Almost the same as to next_active, but this one has 
+	
+	highest_priority : u32,
+	prio_cnt : u32,
 	
 	root : ^Node,
 	current_node : ^Node,
-	
-	upper_priorities : map[Unique_id]u16,
-	lower_priotity_cnt : u16,
-	highest_priority : u32,
+	uid_to_node : map[Unique_id]^Node,
+	priorities : map[^Node]u16, //last priorties used to control which one is next_active and next_hot
 	
 	mouse_pos : [2]f32,
 	mouse_delta : [2]f32,
@@ -216,8 +223,6 @@ State :: struct {
 	
 	originations : map[Unique_look_up]int, //resets every frame
 	statefull_elements : map[Unique_id]Element_state,
-	
-	//z_val : i16,	
 }
 
 Window_state :: struct {
@@ -246,17 +251,17 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 		make([dynamic]Style),
 		make([dynamic]Panel),
 		make([dynamic]Cmd_scissor),
-		make([dynamic]Ordered_command),
 		{},
 		{},
 		{},
 		{},
 		{},
-		nil,
-		nil,
-		make(map[Unique_id]u16),
 		0,
 		0,
+		nil,
+		nil,
+		make(map[Unique_id]^Node),
+		make(map[^Node]u16),
 		{-1,-1},
 		{0,0},
 		.up,
@@ -270,20 +275,23 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 }
 
 destroy :: proc(s : ^State) {
-	
+
 }
 
 begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0, dont_touch := #caller_location) {
-	
 	uid := Unique_id {
 		dont_touch,
 		0,
+		0, //For elements with many interactive components
 		0,
-		user_id,
 	}
 	
 	push_element(s, uid);
-	clear(&s.commands);
+	
+	for uid, node in s.uid_to_node {
+		node.refound = false;
+	}
+	s.root.refound = true;
 	
 	s.hot = s.next_hot;
 	s.active = s.next_active;
@@ -293,9 +301,10 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 	s.next_hot = {};
 	s.next_active = {};
 	
-	s.next_cursor = .normal;
-	s.lower_priotity_cnt = 0;
 	s.highest_priority = 0;
+	s.prio_cnt = 0;
+	
+	s.next_cursor = .normal;
 	
 	panel := Panel{
 		{0,0},
@@ -313,9 +322,9 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 	push_panel(s, panel);
 }
 
-end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Ordered_command {
+end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 	assert(len(s.panel_stack) == 1, "did you call end to many times?", loc);
-		
+	
 	if s.mouse_state == .pressed {
 		s.mouse_state = .down;
 	}
@@ -327,86 +336,68 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Ordered_c
 		i = 0;
 	}
 	
-	p := pop_panel(s);
-	
 	///after the hot and active stuff has been found
-	
 	if s.current_cursor != s.next_cursor {
 		append_command(s, Cmd_swap_cursor{s.next_cursor, 0});
 	}
 	s.current_cursor = s.next_cursor;
 	
+	p := pop_panel(s);
+	pop_element(s);
+	
 	//Promote the to_promote element to the end of its parents sub_nodes
-	node := s.root
 	if s.to_promote != {} {
 		
-		handle_promote :: proc (s : ^State, node : ^Node) -> bool {
+		promote :: proc (s : ^State, to_promote : ^Node) {
+			assert(to_promote.parent != nil, "parent is nil? are you promoting root?");
 			
-			if node.uid == s.to_promote {
-				i, ok := slice.linear_search(node.parent.sub_nodes[:], node);
-				assert(ok);
-				
-				ordered_remove(&node.parent.sub_nodes, i);
-				append(&node.parent.sub_nodes, node);
-				fmt.printf("premoted node : %v\n", node);
-				
-				return true; //found
+			i, found := slice.linear_search(to_promote.parent.subs[:], to_promote);
+			fmt.assertf(found, "the subnode to promote was not found subnode : %p, parent : %#v", to_promote, to_promote.parent);
+			ordered_remove(&to_promote.parent.subs, i);
+			append(&to_promote.parent.subs, to_promote);
+			
+			if to_promote.parent.parent != nil {
+				promote(s, to_promote.parent);
 			}
-			
-			for sub in node.sub_nodes {
-				if handle_promote(s, sub) {
-					return true;
-				}
-			}
-			
-			return false;
 		}
 		
-		assert(handle_promote(s, node))
+		promote(s, s.to_promote);
+		
 		s.to_promote = {};
 	}
 	
-	//Do a breath first search on the nodes and assign an ever increasing priority to each one, in the order they are visted.
-	nodes_q : queue.Queue(^Node);
-	queue.init(&nodes_q);
-	defer queue.destroy(&nodes_q);
-	queue.append(&nodes_q, s.root);
-	priority : u16 = 0;
+	//Recalculate all the priorities
+	clear(&s.priorities);
 	
-	for queue.len(nodes_q) > 0 {
-		node := queue.pop_front(&nodes_q);
+	// Do a depth first search on the nodes and assign an ever increasing priority to each one, in the order they are visited.
+	commands := make([dynamic]Command, context.temp_allocator);
+	
+	depth_first_assign_priority :: proc(s : ^State, node: ^Node, commands : ^[dynamic]Command) {
 		assert(node != nil, "node is nil");
 		
-		s.upper_priorities[node.uid] = priority;
-		priority += 1;
-		
-		for sub in node.sub_nodes {
-			queue.append(&nodes_q, sub)
+		if node.refound == true {
+			for sub in node.subs {
+				switch val in sub {
+					case ^Node:
+						depth_first_assign_priority(s, val, commands);
+					case Command:
+						append(commands, val);
+				}
+			}
+		} else {
+			fmt.printf("did not refind %v", node);
+			i, found := slice.linear_search(node.parent.subs[:], node);
+			ordered_remove(&node.parent.subs, i);
+			return;
 		}
 	}
 	
-	cnt : u32 = 0;
+	depth_first_assign_priority(s, s.root, &commands);
 	
-	for &e in s.commands[:] {
-	
-		upper := s.upper_priorities[e.node.uid];
-		prio := cast(u32)(upper << 16) + cnt;
-		
-		e.ordering = prio;
-		cnt += 1;
-	}
-	
-	//fmt.printf("s.upper_priorities : %#v\n\n", s.upper_priorities);
-	
-	slice.sort_by(s.commands[:], proc(a, b : Ordered_command) -> bool {
-		return a.ordering < b.ordering;
-	});
-	
-	pop_element(s);
 	s.current_node = nil;
 	s.root = nil;
 	
-	return s.commands[:];
+	return commands[:];
 }
 
 push_style :: proc (s : ^State, style : Style) {
@@ -437,11 +428,11 @@ push_scissor :: proc(s : ^State, scissor : Cmd_scissor) {
 	//make sure the scissor stays inside the current one
 	//scissor_stack is x, y, width, height
 	if len(s.scissor_stack) >= 1 {
-		r := s.scissor_stack[len(s.scissor_stack)-1];
-		scissor.x = math.clamp(scissor.x, r.x, r.x + r.z);
-		scissor.y = math.clamp(scissor.y, r.y, r.y + r.w);
-		scissor.z = math.min(scissor.z, r.x + r.z - scissor.x);
-		scissor.w = math.min(scissor.w, r.y + r.w - scissor.y);
+		r := s.scissor_stack[len(s.scissor_stack)-1].area;
+		scissor.area.x = math.clamp(scissor.area.x, r.x, r.x + r.z);
+		scissor.area.y = math.clamp(scissor.area.y, r.y, r.y + r.w);
+		scissor.area.z = math.min(scissor.area.z, r.x + r.z - scissor.area.x);
+		scissor.area.w = math.min(scissor.area.w, r.y + r.w - scissor.area.y);
 	}
 	
 	append(&s.scissor_stack, scissor);
@@ -456,23 +447,25 @@ pop_scissor :: proc(s : ^State) {
 	}
 }
 
-push_panel :: proc (s : ^State, panel : Panel) {
-	if panel.use_scissor {
-		r := Cmd_scissor{panel.position.x, panel.position.y, panel.size.x, panel.size.y};
-		append(&s.scissor_stack, r);
-		append_command(s, r);
-	}
+push_panel :: proc (s : ^State, panel : Panel, enable_scissor := true) {
 	
 	append(&s.panel_stack, panel)
+	
+	if panel.use_scissor {
+		r := Cmd_scissor{{panel.position.x, panel.position.y, panel.size.x, panel.size.y}, enable_scissor};
+		push_scissor(s, r);
+	}
 }
 
 pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
-	panel := pop(&s.panel_stack, loc);
+	
+	panel := s.panel_stack[len(s.panel_stack) - 1]
 	
 	if panel.use_scissor {
 		pop_scissor(s);
 	}
-	
+	pop(&s.panel_stack, loc);
+		
 	return panel;
 }
 
@@ -540,21 +533,21 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 		if s.mouse_state == .pressed {
 			try_set_active(s, uid);
 		}
-		if s.active == uid && s.mouse_state == .down {
+		if current_active(s) == uid && s.mouse_state == .down {
 			try_set_active(s, uid);
 		}
-		if s.active == uid && s.mouse_state == .released {
+		if current_active(s) == uid && s.mouse_state == .released {
 			value^ = !value^;
 		}
 	}
 	
 	checkbox_state : Display_state = .cold;
 	
-	if s.hot == uid {
+	if current_hot(s) == uid {
 		checkbox_state = .hot;
 		set_mouse_cursor(s, .clickable);
 	}
-	if s.active == uid {
+	if current_active(s) == uid {
 		checkbox_state = .active;
 		set_mouse_cursor(s, .clickable);
 	}
@@ -736,222 +729,206 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 	
 	top_bar_placement : [4]f32;
 	
-	switch top_bar_loc {
-		case .top:
-			top_bar_placement.xy = placement.xy + {0, placement.w};
-			top_bar_placement.zw = {placement.z, top_bar_occupie.y};
-		case .bottom:
-			top_bar_placement.xy = placement.xy - {0, top_bar_occupie.y};
-			top_bar_placement.zw = {placement.z, top_bar_occupie.y};
-		case .right:
-			top_bar_placement.xy = placement.xy + {placement.z, 0};
-			top_bar_placement.zw = {top_bar_occupie.x, placement.w};
-		case .left:
-			top_bar_placement.xy = placement.xy - {top_bar_occupie.x, 0};
-			top_bar_placement.zw = {top_bar_occupie.x, placement.w};
-	}
-	
-	top_uid := Unique_id {
-		dont_touch,
-		call_cnt,
-		1,
-		user_id,
-	}
-	
-	if top_bar_occupie != {} {
-		top_bar_state : Display_state = .cold;
-		
-		if s.hot == top_uid {
-			top_bar_state = .hot;
-		}
-		if s.active == top_uid {
-			top_bar_state = .active;
-		}
-		
-		append_command(s, Cmd_rect{top_bar_placement, .window_top_bar, -1, top_bar_state});
-	}
-	
-	if .movable in flags {
-		if utils.collision_point_rect(s.mouse_pos, top_bar_placement) {
-			try_set_hot(s, top_uid);
-			if s.mouse_state == .pressed {
-				try_set_active(s, top_uid);
-			}
-		}
-		if s.mouse_state == .down && s.active == top_uid {
-			try_set_active(s, top_uid);
-		}
-	}
-	
-	if s.hot == top_uid {
-		set_mouse_cursor(s, .clickable);
-	}
-	
-	if s.active == top_uid {
-		w_state.drag_by_mouse = top_bar_placement.xy - s.mouse_pos;
-		set_mouse_cursor(s, .draging);
-	}
-	else {
-		w_state.drag_by_mouse = nil;
-	}
-	
-	if drag, ok := w_state.drag_by_mouse.([2]f32); ok {
-		w_state.placement.xy += s.mouse_delta;
-	}
-	
-	if .collapsable in flags {
-		collapse_dest : Dest;
-		switch top_bar_loc {
-			case .top, .bottom:
-				collapse_dest = {.right, .mid, gstyle.out_padding / 2, 0};
-			case .left, .right:
-				collapse_dest = {.mid, .top, 0, gstyle.out_padding / 2};
-		}	
-		collapse_placement := place_in_parent(s, top_bar_placement.xy, top_bar_placement.zw, collapse_dest, [2]f32{style.top_bar_size, style.top_bar_size} - gstyle.out_padding);
-		
-		collapse_uid := Unique_id {
+	//top bar
+	{		
+		top_uid := Unique_id {
 			dont_touch,
 			call_cnt,
-			2,
+			1,
 			user_id,
 		}
 		
-		collapse_button_state : Display_state = .cold;
-		
-		if s.hot == collapse_uid {
-			collapse_button_state = .hot;
-		}
-		if s.active == collapse_uid {
-			collapse_button_state = .active;
-		}
-		
-		collapse_dir : Rect_type = .window_collapse_button_down;
-		
 		switch top_bar_loc {
 			case .top:
-				if w_state.collapsed {
-					collapse_dir = .window_collapse_button_down
-				}
-				else {
-					collapse_dir = .window_collapse_button_up
-				}
+				top_bar_placement.xy = placement.xy + {0, placement.w};
+				top_bar_placement.zw = {placement.z, top_bar_occupie.y};
 			case .bottom:
-				if w_state.collapsed {
-					collapse_dir = .window_collapse_button_up
-				}
-				else {
-					collapse_dir = .window_collapse_button_down
-				}
-			case .left:
-				if w_state.collapsed {
-					collapse_dir = .window_collapse_button_right
-				}
-				else {
-					collapse_dir = .window_collapse_button_left
-				}
+				top_bar_placement.xy = placement.xy - {0, top_bar_occupie.y};
+				top_bar_placement.zw = {placement.z, top_bar_occupie.y};
 			case .right:
-				if w_state.collapsed {
-					collapse_dir = .window_collapse_button_left
-				}
-				else {
-					collapse_dir = .window_collapse_button_right
-				}
-		}
-		
-		append_command(s, Cmd_rect{collapse_placement, collapse_dir, -1, collapse_button_state});
-		
-		if utils.collision_point_rect(s.mouse_pos, collapse_placement) {
-			try_set_hot(s, collapse_uid);
-			if s.mouse_state == .pressed {
-				try_set_active(s, collapse_uid);
-			}
-			else if s.mouse_state == .down && s.active == collapse_uid {
-				try_set_active(s, collapse_uid);
-			}
-			else if s.mouse_state == .released  && s.active == collapse_uid {
-				w_state.collapsed = !w_state.collapsed; 
-			}
-		}
-		
-		if s.hot == collapse_uid {
-			set_mouse_cursor(s, .clickable);
-		}
-	}
-	
-	if title != "" && !(.no_top_bar in flags) {
-		width := s.font_width(s.user_data, style.title_size, title);
-		asc, des := s.font_height(s.user_data, style.title_size);
-		
-		dest : Dest;
-		rotation : f32 = 0;
-		title_size : [2]f32;
-		
-		switch top_bar_loc {
-			case .top:
-				if center_title {
-					dest = Dest{.mid, .mid, 0, 0}
-				}
-				else {
-					dest = Dest{.left, .mid, style.title_padding, 0}
-				}
-				title_size = {width, asc + des}
-			case .bottom:
-				if center_title {
-					dest = Dest{.mid, .mid, 0, 0}
-				}
-				else {
-					dest = Dest{.left, .mid, style.title_padding, 0}
-				}
-				title_size = {width, asc + des}
+				top_bar_placement.xy = placement.xy + {placement.z, 0};
+				top_bar_placement.zw = {top_bar_occupie.x, placement.w};
 			case .left:
-				if center_title {
-					dest = Dest{.mid, .mid, 0, 0}
-					rotation = 90;
-				}
-				else {
-					dest = Dest{.right, .bottom, des, style.title_padding}
-					rotation = 90;
-				}
-				title_size = {asc + des, width}
-			case .right:
-				if center_title {
-					dest = Dest{.mid, .mid, 0, 0}
-					rotation = 90;
-				}
-				else {
-					dest = Dest{.right, .bottom, des, style.title_padding}
-					rotation = 90;
-				}
-				title_size = {asc + des, width}
+				top_bar_placement.xy = placement.xy - {top_bar_occupie.x, 0};
+				top_bar_placement.zw = {top_bar_occupie.x, placement.w};
 		}
 		
-		title_rect := place_in_parent(s, top_bar_placement.xy, top_bar_placement.zw, dest, title_size);
-		title_scissor : Cmd_scissor = auto_cast top_bar_placement;
-		title_scissor.zw -= top_bar_occupie.yx;
-		push_scissor(s, title_scissor);
-		append_command(s, Cmd_text{title_rect.xy, strings.clone(title, context.temp_allocator), style.title_size, rotation, .title_text});
-		pop_scissor(s);
-	}	
+		if top_bar_occupie != {} {
+			top_bar_state : Display_state = .cold;
+			
+			if current_hot(s) == top_uid {
+				top_bar_state = .hot;
+			}
+			if current_active(s) == top_uid {
+				top_bar_state = .active;
+			}
+			
+			append_command(s, Cmd_rect{top_bar_placement, .window_top_bar, -1, top_bar_state});
+		}
+		
+		if .movable in flags {
+			if utils.collision_point_rect(s.mouse_pos, top_bar_placement) {
+				try_set_hot(s, top_uid);
+				if s.mouse_state == .pressed {
+					try_set_active(s, top_uid);
+				}
+			}
+			if s.mouse_state == .down && current_active(s) == top_uid {
+				try_set_active(s, top_uid);
+			}
+			if current_hot(s) == top_uid {
+				set_mouse_cursor(s, .clickable);
+			}
+			
+			if current_active(s) == top_uid {
+				w_state.drag_by_mouse = top_bar_placement.xy - s.mouse_pos;
+				set_mouse_cursor(s, .draging);
+			}
+			else {
+				w_state.drag_by_mouse = nil;
+			}
+		
+			if drag, ok := w_state.drag_by_mouse.([2]f32); ok {
+				w_state.placement.xy += s.mouse_delta;
+			}
+		}
 	
-	if !w_state.collapsed {
-		if !(.no_background in flags) {
-			append_command(s, Cmd_rect{placement, .window_background, -1, .cold});
+		//Collapse button
+		if .collapsable in flags {
+			collapse_uid := Unique_id {
+				dont_touch,
+				call_cnt,
+				2,
+				user_id,
+			}
+			
+			collapse_dest : Dest;
+			switch top_bar_loc {
+				case .top, .bottom:
+					collapse_dest = {.right, .mid, gstyle.out_padding / 2, 0};
+				case .left, .right:
+					collapse_dest = {.mid, .top, 0, gstyle.out_padding / 2};
+			}	
+			collapse_placement := place_in_parent(s, top_bar_placement.xy, top_bar_placement.zw, collapse_dest, [2]f32{style.top_bar_size, style.top_bar_size} - gstyle.out_padding);
+			
+			collapse_button_state : Display_state = .cold;
+			
+			if current_hot(s) == collapse_uid {
+				collapse_button_state = .hot;
+			}
+			if current_active(s) == collapse_uid {
+				collapse_button_state = .active;
+			}
+			
+			collapse_dir : Rect_type = .window_collapse_button_down;
+			
+			switch top_bar_loc {
+				case .top:
+					if w_state.collapsed {
+						collapse_dir = .window_collapse_button_down
+					}
+					else {
+						collapse_dir = .window_collapse_button_up
+					}
+				case .bottom:
+					if w_state.collapsed {
+						collapse_dir = .window_collapse_button_up
+					}
+					else {
+						collapse_dir = .window_collapse_button_down
+					}
+				case .left:
+					if w_state.collapsed {
+						collapse_dir = .window_collapse_button_right
+					}
+					else {
+						collapse_dir = .window_collapse_button_left
+					}
+				case .right:
+					if w_state.collapsed {
+						collapse_dir = .window_collapse_button_left
+					}
+					else {
+						collapse_dir = .window_collapse_button_right
+					}
+			}
+			
+			append_command(s, Cmd_rect{collapse_placement, collapse_dir, -1, collapse_button_state});
+			
+			if utils.collision_point_rect(s.mouse_pos, collapse_placement) {
+				try_set_hot(s, collapse_uid);
+				if s.mouse_state == .pressed {
+					try_set_active(s, collapse_uid);
+				}
+				else if s.mouse_state == .down && current_active(s) == collapse_uid {
+					try_set_active(s, collapse_uid);
+				}
+				else if s.mouse_state == .released  && current_active(s) == collapse_uid {
+					w_state.collapsed = !w_state.collapsed; 
+				}
+			}
+			
+			if current_hot(s) == collapse_uid {
+				set_mouse_cursor(s, .clickable);
+			}
+			
 		}
-		if !(.no_border in flags) {
-			append_command(s, Cmd_rect{placement, .window_border, style.line_thickness, .cold}); 
-		}
-		push_panel(s, Panel {
-			placement.xy + style.line_thickness,
-			placement.zw - 2 * style.line_thickness,
+		
+		if title != "" && !(.no_top_bar in flags) {
+			width := s.font_width(s.user_data, style.title_size, title);
+			asc, des := s.font_height(s.user_data, style.title_size);
 			
-			hor_behavior,
-			ver_behavior,
-			append_hor,	//Should we append new elements vertically or horizontally
+			dest : Dest;
+			rotation : f32 = 0;
+			title_size : [2]f32;
 			
-			!(.allow_overflow in flags),
+			switch top_bar_loc {
+				case .top:
+					if center_title {
+						dest = Dest{.mid, .mid, 0, 0}
+					}
+					else {
+						dest = Dest{.left, .mid, style.title_padding, 0}
+					}
+					title_size = {width, asc + des}
+				case .bottom:
+					if center_title {
+						dest = Dest{.mid, .mid, 0, 0}
+					}
+					else {
+						dest = Dest{.left, .mid, style.title_padding, 0}
+					}
+					title_size = {width, asc + des}
+				case .left:
+					if center_title {
+						dest = Dest{.mid, .mid, 0, 0}
+						rotation = 90;
+					}
+					else {
+						dest = Dest{.right, .bottom, des, style.title_padding}
+						rotation = 90;
+					}
+					title_size = {asc + des, width}
+				case .right:
+					if center_title {
+						dest = Dest{.mid, .mid, 0, 0}
+						rotation = 90;
+					}
+					else {
+						dest = Dest{.right, .bottom, des, style.title_padding}
+						rotation = 90;
+					}
+					title_size = {asc + des, width}
+			}
 			
-			0, //At what offset should new element be added
-		});
+			title_rect := place_in_parent(s, top_bar_placement.xy, top_bar_placement.zw, dest, title_size);
+			title_scissor : Cmd_scissor = {auto_cast top_bar_placement, true};
+			title_scissor.area.zw -= top_bar_occupie.yx;
+			push_scissor(s, title_scissor);
+			append_command(s, Cmd_text{title_rect.xy, strings.clone(title, context.temp_allocator), style.title_size, rotation, .title_text});
+			pop_scissor(s);
+		}	
+		
 	}
 	
 	if .scaleable in flags {
@@ -975,15 +952,15 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 					try_set_active(s, drag_uid);
 				}
 			}
-			if s.mouse_state == .down && s.active == drag_uid {
+			if s.mouse_state == .down && current_active(s) == drag_uid {
 				try_set_active(s, drag_uid);
 			}
 			
-			if s.hot == drag_uid {
+			if current_hot(s) == drag_uid {
 				set_mouse_cursor(s, .scale_verical);
 			}
 			
-			if s.active == drag_uid {
+			if current_active(s) == drag_uid {
 				delta := s.mouse_pos.y - (r.y + r.w);
 				resize.y += delta;
 			}
@@ -1005,15 +982,15 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 					try_set_active(s, drag_uid);
 				}
 			}
-			if s.mouse_state == .down && s.active == drag_uid {
+			if s.mouse_state == .down && current_active(s) == drag_uid {
 				try_set_active(s, drag_uid);
 			}
 			
-			if s.hot == drag_uid {
+			if current_hot(s) == drag_uid {
 				set_mouse_cursor(s, .scale_horizontal);
 			}
 			
-			if s.active == drag_uid {
+			if current_active(s) == drag_uid {
 				delta := s.mouse_pos.x - r.x;
 				move.x += delta;
 				resize.x -= delta;
@@ -1036,15 +1013,15 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 					try_set_active(s, drag_uid);
 				}
 			}
-			if s.mouse_state == .down && s.active == drag_uid {
+			if s.mouse_state == .down && current_active(s) == drag_uid {
 				try_set_active(s, drag_uid);
 			}
 			
-			if s.hot == drag_uid {
+			if current_hot(s) == drag_uid {
 				set_mouse_cursor(s, .scale_horizontal);
 			}
 			
-			if s.active == drag_uid {
+			if current_active(s) == drag_uid {
 				delta := s.mouse_pos.x - (r.x + r.z);
 				resize.x += delta;
 			}
@@ -1066,15 +1043,15 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 					try_set_active(s, drag_uid);
 				}
 			}
-			if s.mouse_state == .down && s.active == drag_uid {
+			if s.mouse_state == .down && current_active(s) == drag_uid {
 				try_set_active(s, drag_uid);
 			}
 			
-			if s.hot == drag_uid {
+			if current_hot(s) == drag_uid {
 				set_mouse_cursor(s, .scale_verical);
 			}
 			
-			if s.active == drag_uid {
+			if current_active(s) == drag_uid {
 				delta := s.mouse_pos.y - r.y;
 				move.y += delta;
 				resize.y -= delta;
@@ -1109,6 +1086,27 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		//w_state.
 	}
 	
+	if !w_state.collapsed {
+		if !(.no_background in flags) {
+			append_command(s, Cmd_rect{placement, .window_background, -1, .cold});
+		}
+		if !(.no_border in flags) {
+			append_command(s, Cmd_rect{placement, .window_border, style.line_thickness, .cold}); 
+		}
+		push_panel(s, Panel {
+			placement.xy + style.line_thickness,
+			placement.zw - 2 * style.line_thickness,
+			
+			hor_behavior,
+			ver_behavior,
+			append_hor,	//Should we append new elements vertically or horizontally
+			
+			!(.allow_overflow in flags),
+			
+			0, //At what offset should new element be added
+		});
+	}
+	
 	save_state(s, uid, w_state);
 	
 	return !w_state.collapsed;
@@ -1124,23 +1122,24 @@ end_window :: proc (s : ^State) {
 	That said, i would like the window to automagicly size it fit the elements if no window size is given, this cannot be done if  the panel is not refered to by a uid.
 	So either the windows store that information, or the panel is linked to the window somehow.
 	*/
-	e := pop_element(s);
 	
 	w_state : Window_state;
 	
 	{
-		_w := get_state(s, e)
+		_w := get_state(s, s.current_node.uid)
 		if __w, ok := _w.(Window_state); ok {
 			w_state = __w;
 		}
 		else {
-			panic("Not a window");
+			fmt.panicf("%v is not a window", _w);
 		}
 	}
 	
 	if !w_state.collapsed {
 		pop_panel(s);
 	}
+	
+	pop_element(s);
 }
 
 expand_window :: proc () {
@@ -1161,9 +1160,8 @@ bring_window_to_back :: proc () {
 
 //////////////////////////////////////// PRIVATE ////////////////////////////////////////
 
-append_command :: proc (s : ^State, cmd_type : Command) {
-	
-	append(&s.commands, Ordered_command{s.current_node, 0, cmd_type});
+append_command :: proc (s : ^State, cmd : Command) {
+	append(&s.current_node.subs, cmd);
 }
 
 set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
@@ -1172,37 +1170,56 @@ set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
 
 push_element :: proc (s : ^State, uid : Unique_id) {
 	
-	//walk up the stack, and increase their uid if this has a higher one
-	new := new_node(uid, s.current_node);
-	if s.current_node != nil {
-		// Insert `new` into sub_nodes in sorted order by s.upper_priorities[uid]
-		inserted := false;
-		for other_node, i in s.current_node.sub_nodes {
-			if s.upper_priorities[uid] < s.upper_priorities[other_node.uid] {
-				append(&s.current_node.sub_nodes, nil);
-				for j := len(s.current_node.sub_nodes)-1; j > i; j -= 1 {
-					s.current_node.sub_nodes[j] = s.current_node.sub_nodes[j-1];
-				}
-				s.current_node.sub_nodes[i] = new;
-				inserted = true;
-				break;
+	//fmt.printf("pushing : %v\n", uid);
+	
+	assert(uid != {});
+	if uid in s.uid_to_node {
+		//Mark node as being found this frame, (so it has been decalred same as last frame)
+		node := s.uid_to_node[uid];
+		fmt.assertf(node != s.current_node, "You are pushing the same node twice %v", uid);
+		
+		if s.current_node == nil {
+			s.root = node;
+		}
+		else {
+			i, found := slice.linear_search(s.current_node.subs[:], node);
+			if !found {
+				append(&s.current_node.subs, node);
 			}
-			panic("TODO this does not work, we need to verify that the uid is correct and is inserted sorted");
+			
+			node.refound = true;
+			node.parent = s.current_node;
 		}
-		if !inserted {
-			append(&s.current_node.sub_nodes, new);
-		}
+		s.current_node = node;
 	}
 	else {
-		s.root = new;
+		//make the root node
+		if s.current_node == nil {
+			new := new_node(uid, s.current_node);
+			new.refound = true;
+			s.root = new;
+			s.current_node = new;
+			s.uid_to_node[uid] = new;
+		}
+		else {
+			new := new_node(uid, s.current_node);
+			new.refound = true;
+			new.parent = s.current_node;
+			append(&s.current_node.subs, new);
+			s.uid_to_node[uid] = new;
+			s.current_node = new;
+		}
 	}
-	s.current_node = new;
+	
+	
 }
 
 pop_element :: proc (s : ^State) -> Unique_id {
 	
 	popped := s.current_node;
 	s.current_node = s.current_node.parent;
+	
+	//fmt.printf("popping : %v\n", popped.uid);
 	
 	return popped.uid;
 }
@@ -1211,7 +1228,7 @@ try_set_hot :: proc (s : ^State, uid : Unique_id) {
 	//if you where active last frame always win the hot
 	//otherwise if uid is the same except for the sub_priority, then the highest sub_priority wins
 	
-	cur_prio := next_priority(s);
+	cur_prio := get_next_priority(s);
 	
 	if s.active == uid {
 		s.next_hot = uid;
@@ -1227,16 +1244,17 @@ try_set_hot :: proc (s : ^State, uid : Unique_id) {
 	s.highest_priority = cur_prio;
 }
 
+//tries to set the currently pushed element to active
 try_set_active :: proc (s : ^State, uid : Unique_id) {
 	//if you where active last frame always win the active
 	//otherwise if uid is the same except for the sub_priority, then the highest sub_priority wins
 	
-	cur_prio := next_priority(s);
+	cur_prio := get_next_priority(s);
 	
 	//If it wins, increase its priority
 	if s.active == uid {
 		s.next_active = uid;
-		s.to_promote = s.current_node.uid;
+		s.to_promote = s.current_node;
 		s.highest_priority = max(u32);
 		return;
 	}
@@ -1246,19 +1264,19 @@ try_set_active :: proc (s : ^State, uid : Unique_id) {
 	}
 	
 	s.next_active = uid;
-	s.to_promote = s.current_node.uid;
+	s.to_promote = s.current_node;
 	s.highest_priority = cur_prio;
-	
-	fmt.printf("set to active : %v\n", uid);
 }
 
-next_priority :: proc (s : ^State) -> u32 {
+get_next_priority :: proc (s : ^State) -> u32 {
 	
-	upper_bits := s.upper_priorities[s.current_node.uid];
-	s.lower_priotity_cnt += 1;
-	priority := cast(u32)(upper_bits << 16) + cast(u32)s.lower_priotity_cnt;
+	cur_prio : u16 = 0;
+	if s.current_node in s.priorities {
+		cur_prio = s.priorities[s.current_node];	
+	}
+	s.prio_cnt += 1;
 	
-	return priority;
+	return (cast(u32)cur_prio << 16) + s.prio_cnt;
 }
 
 get_style :: proc (s : ^State) -> Style {
@@ -1288,6 +1306,14 @@ get_out_padding :: proc (s : ^State) -> f32 {
 @(require_results)
 get_current_size :: proc (s : ^State) -> f32 {
 	return 0.05;
+}
+
+current_hot :: proc (s : ^State) -> Unique_id {
+	return s.hot;
+}
+
+current_active :: proc (s : ^State) -> Unique_id {
+	return s.active;
 }
 
 @(require_results)
@@ -1352,20 +1378,11 @@ new_node :: proc (uid : Unique_id, parent : ^Node) -> ^Node {
 	
 	n^ = {
 		uid,
-		make([dynamic]^Node),
+		make([dynamic]Node_sub),
 		parent,
+		true,
 	};
 	
 	return n;
 }
-
-@private
-destroy_node :: proc (node : ^Node) {
-	
-	for n in node.sub_nodes {
-		destroy_node(n);
-	}
-}
-
-
 

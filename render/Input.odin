@@ -305,7 +305,7 @@ input_begin :: proc(loc := #caller_location) {
 	//This is for getting the delta mouse position, this is because the delta is window independent. 
 	mx, my := glfw.GetCursorPos(state.owner_context);
 	new_mouse_pos := [2]f32{auto_cast mx, auto_cast -my};
-	state.mouse_delta = new_mouse_pos - state.old_mouse_pos;
+	state.mouse_delta = new_mouse_pos - state.old_mouse_pos; //This is one frame delayed i belive as we are using the delta from last to this frame, not this to next as it is unknown 
 	state.old_mouse_pos = new_mouse_pos;
 	
 	for queue.len(state.char_input_buffer) != 0 {
