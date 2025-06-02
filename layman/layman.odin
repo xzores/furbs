@@ -183,7 +183,6 @@ Node :: struct {
 	parent : ^Node,
 	
 	refound : bool,
-	commands : [dynamic]Command,
 }
 
 State :: struct {
@@ -198,6 +197,7 @@ State :: struct {
 	style_stack : [dynamic]Style,
 	panel_stack : [dynamic]Panel,
 	scissor_stack : [dynamic]Cmd_scissor,
+	commands : [dynamic]Ordered_command,
 	
 	hot : Unique_id,
 	active : Unique_id,
@@ -250,6 +250,7 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 		make([dynamic]Style),
 		make([dynamic]Panel),
 		make([dynamic]Cmd_scissor),
+		make([dynamic]Ordered_command),
 		{},
 		{},
 		{},
@@ -277,13 +278,13 @@ destroy :: proc(s : ^State) {
 	
 	for uid, node in s.uid_to_node {
 		free(node);
-		delete(node.commands);
 		delete(node.sub_nodes);
 	}
 	
 	delete(s.style_stack);
 	delete(s.panel_stack);
 	delete(s.scissor_stack);
+	delete(s.commands);
 	delete(s.uid_to_node);
 	delete(s.priorities);
 	delete(s.originations);
@@ -299,8 +300,30 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		0, //For elements with many interactive components
 		0,
 	}
+
+	panel := Panel{
+		{0,0},
+		{screen_width, screen_height},
+		
+		.left,
+		.top,
+		false,
+		
+		true,
+		
+		0
+	};
 	
-	push_element(s, uid);
+	push_panel(s, panel, uid, Unique_id {
+		dont_touch,
+		0,
+		1, //For elements with many interactive components
+		0,
+	});
+	
+	s.root = s.current_node;
+	
+	clear(&s.commands);
 	
 	for uid, node in s.uid_to_node {
 		node.refound = false;
@@ -320,23 +343,9 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 	
 	s.next_cursor = .normal;
 	
-	panel := Panel{
-		{0,0},
-		{screen_width, screen_height},
-		
-		.left,
-		.top,
-		false,
-		
-		true,
-		
-		0
-	};
-	
-	push_panel(s, panel);
 }
 
-end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
+end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Ordered_command {
 	assert(len(s.panel_stack) == 1, "did you call end to many times?", loc);
 	
 	if s.mouse_state == .pressed {
@@ -357,7 +366,6 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 	s.current_cursor = s.next_cursor;
 	
 	p := pop_panel(s);
-	pop_element(s);
 	
 	//Promote the to_promote element to the end of its parents sub_nodes
 	if s.to_promote != {} {
@@ -384,32 +392,50 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 	clear(&s.priorities);
 	
 	// Do a depth first search on the nodes and assign an ever increasing priority to each one, in the order they are visited.
-	commands := make([dynamic]Command, context.temp_allocator);
+	priority : u16;
 	
-	depth_first_assign_priority :: proc(s : ^State, node: ^Node, commands : ^[dynamic]Command) {
+	depth_first_assign_priority :: proc(s : ^State, node: ^Node, priority : ^u16) {
 		assert(node != nil, "node is nil");
 		
 		if node.refound == true {
-			append(commands, ..node.commands[:]);
+			s.priorities[node] = priority^;
+			priority^ += 1;
 		} else {
-			fmt.printf("did not refind %v", node);
 			i, found := slice.linear_search(node.parent.sub_nodes[:], node);
 			ordered_remove(&node.parent.sub_nodes, i);
 			return;
 		}
-		clear(&node.commands);
 		
 		for sub in node.sub_nodes {
-			depth_first_assign_priority(s, sub, commands);
+			depth_first_assign_priority(s, sub, priority);
 		}
 	}
 	
-	depth_first_assign_priority(s, s.root, &commands);
+	depth_first_assign_priority(s, s.root, &priority);
+	
+	cnt : u32 = 0;
+	for &e in s.commands[:] {
+		
+		upper := s.priorities[e.node];
+		prio : u32 = cast(u32)(upper) << 16 + cnt;
+		
+		e.ordering = prio;
+		cnt += 1;
+	}
+	
+	//fmt.printf("s.upper_priorities : %#v\n\n", s.upper_priorities);
+	slice.sort_by(s.commands[:], proc(a, b : Ordered_command) -> bool {
+		return a.ordering < b.ordering;
+	});
 	
 	s.current_node = nil;
 	s.root = nil;
 	
-	return commands[:];
+	for c in s.commands {
+		fmt.printf("top_prio : %v, bot_prio : %v, cmd : %v\n", c.ordering>>16, cast(u16)c.ordering, c.cmd);
+	}
+	
+	return s.commands[:];
 }
 
 push_style :: proc (s : ^State, style : Style) {
@@ -459,13 +485,15 @@ pop_scissor :: proc(s : ^State) {
 	}
 }
 
-push_panel :: proc (s : ^State, panel : Panel, enable_scissor := true) {
+push_panel :: proc (s : ^State, panel : Panel, panel_uid : Unique_id, scissor_uid : Unique_id, enable_scissor := true, loc := #caller_location) {
 	
+	push_element(s, panel_uid, loc = loc);
 	append(&s.panel_stack, panel)
 	
 	if panel.use_scissor {
 		r := Cmd_scissor{{panel.position.x, panel.position.y, panel.size.x, panel.size.y}, enable_scissor};
 		push_scissor(s, r);
+		push_element(s, scissor_uid);
 	}
 }
 
@@ -475,9 +503,11 @@ pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
 	
 	if panel.use_scissor {
 		pop_scissor(s);
+		pop_element(s);
 	}
 	pop(&s.panel_stack, loc);
-		
+	pop_element(s);
+	
 	return panel;
 }
 
@@ -1105,19 +1135,32 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		if !(.no_border in flags) {
 			append_command(s, Cmd_rect{placement, .window_border, style.line_thickness, .cold}); 
 		}
-		push_panel(s, Panel {
-			placement.xy + style.line_thickness,
-			placement.zw - 2 * style.line_thickness,
-			
-			hor_behavior,
-			ver_behavior,
-			append_hor,	//Should we append new elements vertically or horizontally
-			
-			!(.allow_overflow in flags),
-			
-			0, //At what offset should new element be added
-		});
 	}
+	
+	push_panel(s, Panel {
+		placement.xy + style.line_thickness,
+		placement.zw - 2 * style.line_thickness,
+		
+		hor_behavior,
+		ver_behavior,
+		append_hor,	//Should we append new elements vertically or horizontally
+		
+		!(.allow_overflow in flags),
+		
+		0, //At what offset should new element be added
+	}, 
+	Unique_id {
+		dont_touch,
+		call_cnt,
+		1000,
+		user_id,
+	}, 
+	Unique_id {
+		dont_touch,
+		call_cnt,
+		1001,
+		user_id,
+	});
 	
 	save_state(s, uid, w_state);
 	
@@ -1137,6 +1180,8 @@ end_window :: proc (s : ^State) {
 	
 	w_state : Window_state;
 	
+	pop_panel(s);
+	
 	{
 		_w := get_state(s, s.current_node.uid)
 		if __w, ok := _w.(Window_state); ok {
@@ -1145,10 +1190,6 @@ end_window :: proc (s : ^State) {
 		else {
 			fmt.panicf("%v is not a window", _w);
 		}
-	}
-	
-	if !w_state.collapsed {
-		pop_panel(s);
 	}
 	
 	pop_element(s);
@@ -1173,14 +1214,14 @@ bring_window_to_back :: proc () {
 //////////////////////////////////////// PRIVATE ////////////////////////////////////////
 
 append_command :: proc (s : ^State, cmd : Command) {
-	append(&s.current_node.commands, cmd);
+	append(&s.commands, Ordered_command{s.current_node, 0, cmd});
 }
 
 set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
 	s.next_cursor = cursor_type;
 }
 
-push_element :: proc (s : ^State, uid : Unique_id) {
+push_element :: proc (s : ^State, uid : Unique_id, loc := #caller_location) {
 	
 	//fmt.printf("pushing : %v\n", uid);
 	
@@ -1188,7 +1229,7 @@ push_element :: proc (s : ^State, uid : Unique_id) {
 	if uid in s.uid_to_node {
 		//Mark node as being found this frame, (so it has been decalred same as last frame)
 		node := s.uid_to_node[uid];
-		fmt.assertf(node != s.current_node, "You are pushing the same node twice %v", uid);
+		fmt.assertf(node != s.current_node, "You are pushing the same node twice %v", uid, loc = loc);
 		
 		if s.current_node == nil {
 			s.root = node;
@@ -1393,7 +1434,6 @@ new_node :: proc (uid : Unique_id, parent : ^Node) -> ^Node {
 		make([dynamic]^Node),
 		parent,
 		true,
-		make([dynamic]Command),
 	};
 	
 	return n;
