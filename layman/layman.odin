@@ -112,6 +112,7 @@ Ordered_command :: struct {
 	node : ^Node,
 	ordering : u32,
 	cmd : Command,
+	append_back : bool,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -205,6 +206,8 @@ State :: struct {
 	next_active : Unique_id,
 	to_promote : ^Node, //Almost the same as to next_active, but this one has 
 	
+	append_command_back : bool,
+	
 	highest_priority : u32,
 	prio_cnt : u32,
 	
@@ -256,6 +259,7 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 		{},
 		{},
 		{},
+		false,
 		0,
 		0,
 		nil,
@@ -300,28 +304,8 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		0, //For elements with many interactive components
 		0,
 	}
-
-	panel := Panel{
-		{0,0},
-		{screen_width, screen_height},
-		
-		.left,
-		.top,
-		false,
-		
-		true,
-		
-		0
-	};
 	
-	push_panel(s, panel, uid, Unique_id {
-		dont_touch,
-		0,
-		1, //For elements with many interactive components
-		0,
-	});
-	
-	s.root = s.current_node;
+	push_element(s, uid);
 	
 	clear(&s.commands);
 	
@@ -342,6 +326,32 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 	s.prio_cnt = 0;
 	
 	s.next_cursor = .normal;
+	
+	panel := Panel{
+		{0,0},
+		{screen_width, screen_height},
+		
+		.left,
+		.top,
+		false,
+		
+		true,
+		
+		0
+	};
+	
+	push_panel(s, panel, Unique_id {
+		dont_touch,
+		0,
+		1000, //For elements with many interactive components
+		0,
+	},
+	Unique_id {
+		dont_touch,
+		0,
+		1001, //For elements with many interactive components
+		0,
+	});
 	
 }
 
@@ -401,6 +411,7 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Ordered_c
 			s.priorities[node] = priority^;
 			priority^ += 1;
 		} else {
+			fmt.printf("did not refind\n");
 			i, found := slice.linear_search(node.parent.sub_nodes[:], node);
 			ordered_remove(&node.parent.sub_nodes, i);
 			return;
@@ -416,12 +427,18 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Ordered_c
 	cnt : u32 = 0;
 	for &e in s.commands[:] {
 		
-		upper := s.priorities[e.node];
-		prio : u32 = cast(u32)(upper) << 16 + cnt;
+		upper := cast(u32)s.priorities[e.node];
+		
+		prio : u32 = (upper << 17) + (cast(u32)e.append_back << 16) + cnt;
 		
 		e.ordering = prio;
 		cnt += 1;
 	}
+	
+	for c in s.commands {
+		fmt.printf("top_prio : %v, bot_prio : %v, cmd : %v\n", c.ordering>>16, cast(u16)c.ordering, c.cmd);
+	}
+	fmt.printf("\n\n");
 	
 	//fmt.printf("s.upper_priorities : %#v\n\n", s.upper_priorities);
 	slice.sort_by(s.commands[:], proc(a, b : Ordered_command) -> bool {
@@ -434,6 +451,7 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Ordered_c
 	for c in s.commands {
 		fmt.printf("top_prio : %v, bot_prio : %v, cmd : %v\n", c.ordering>>16, cast(u16)c.ordering, c.cmd);
 	}
+	fmt.printf("\n\n");
 	
 	return s.commands[:];
 }
@@ -460,7 +478,7 @@ mouse_event :: proc (s : ^State, pressed : bool) {
 	}
 }
 
-push_scissor :: proc(s : ^State, scissor : Cmd_scissor) {
+push_scissor :: proc(s : ^State, scissor : Cmd_scissor, scissor_uid : Unique_id) {
 	scissor := scissor;
 	
 	//make sure the scissor stays inside the current one
@@ -475,9 +493,12 @@ push_scissor :: proc(s : ^State, scissor : Cmd_scissor) {
 	
 	append(&s.scissor_stack, scissor);
 	append_command(s, scissor);
+	push_element(s, scissor_uid);
+	
 }
 
 pop_scissor :: proc(s : ^State) {
+	pop_element(s);
 	pop(&s.scissor_stack);
 	if len(s.scissor_stack) >= 1 {
 		r := s.scissor_stack[len(s.scissor_stack)-1];
@@ -485,15 +506,14 @@ pop_scissor :: proc(s : ^State) {
 	}
 }
 
-push_panel :: proc (s : ^State, panel : Panel, panel_uid : Unique_id, scissor_uid : Unique_id, enable_scissor := true, loc := #caller_location) {
+push_panel :: proc (s : ^State, panel : Panel, panel_uid, scissor_uid : Unique_id, enable_scissor := true, loc := #caller_location) {
 	
-	push_element(s, panel_uid, loc = loc);
+	push_element(s, panel_uid);
 	append(&s.panel_stack, panel)
 	
 	if panel.use_scissor {
 		r := Cmd_scissor{{panel.position.x, panel.position.y, panel.size.x, panel.size.y}, enable_scissor};
-		push_scissor(s, r);
-		push_element(s, scissor_uid);
+		push_scissor(s, r, scissor_uid);
 	}
 }
 
@@ -503,7 +523,6 @@ pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
 	
 	if panel.use_scissor {
 		pop_scissor(s);
-		pop_element(s);
 	}
 	pop(&s.panel_stack, loc);
 	pop_element(s);
@@ -966,9 +985,41 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			title_rect := place_in_parent(s, top_bar_placement.xy, top_bar_placement.zw, dest, title_size);
 			title_scissor : Cmd_scissor = {auto_cast top_bar_placement, true};
 			title_scissor.area.zw -= top_bar_occupie.yx;
-			push_scissor(s, title_scissor);
+			/*
+			push_scissor(s, title_scissor, Unique_id {
+				dont_touch,
+				call_cnt,
+				2021,
+				user_id,
+			});
+			*/
+			push_panel(s, Panel{
+				placement.xy + style.line_thickness,
+				placement.zw - 2 * style.line_thickness,
+				
+				hor_behavior,
+				ver_behavior,
+				append_hor,	//Should we append new elements vertically or horizontally
+				
+				!(.allow_overflow in flags),
+				
+				0, //At what offset should new element be added
+			},
+			Unique_id {
+				
+				call_cnt : int,
+				sub_priotity : int, //For elements with many interactive components
+				user_id : int,
+			},
+			Unique_id{
+				src : runtime.Source_Code_Location,
+				call_cnt : int,
+				sub_priotity : int, //For elements with many interactive components
+				user_id : int,
+			},
+			);
 			append_command(s, Cmd_text{title_rect.xy, strings.clone(title, context.temp_allocator), style.title_size, rotation, .title_text});
-			pop_scissor(s);
+			//pop_scissor(s);
 		}	
 		
 	}
@@ -1148,19 +1199,20 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		!(.allow_overflow in flags),
 		
 		0, //At what offset should new element be added
-	}, 
+	},
 	Unique_id {
 		dont_touch,
 		call_cnt,
 		1000,
 		user_id,
-	}, 
+	},
 	Unique_id {
 		dont_touch,
 		call_cnt,
 		1001,
 		user_id,
-	});
+	},
+	);
 	
 	save_state(s, uid, w_state);
 	
@@ -1214,7 +1266,7 @@ bring_window_to_back :: proc () {
 //////////////////////////////////////// PRIVATE ////////////////////////////////////////
 
 append_command :: proc (s : ^State, cmd : Command) {
-	append(&s.commands, Ordered_command{s.current_node, 0, cmd});
+	append(&s.commands, Ordered_command{s.current_node, 0, cmd, s.append_command_back});
 }
 
 set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
@@ -1223,7 +1275,7 @@ set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
 
 push_element :: proc (s : ^State, uid : Unique_id, loc := #caller_location) {
 	
-	//fmt.printf("pushing : %v\n", uid);
+	s.append_command_back = false;
 	
 	assert(uid != {});
 	if uid in s.uid_to_node {
@@ -1272,7 +1324,7 @@ pop_element :: proc (s : ^State) -> Unique_id {
 	popped := s.current_node;
 	s.current_node = s.current_node.parent;
 	
-	//fmt.printf("popping : %v\n", popped.uid);
+	s.append_command_back = true;
 	
 	return popped.uid;
 }
@@ -1438,4 +1490,3 @@ new_node :: proc (uid : Unique_id, parent : ^Node) -> ^Node {
 	
 	return n;
 }
-

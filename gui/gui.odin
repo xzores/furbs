@@ -167,7 +167,7 @@ end :: proc(s : ^State) {
 	*/
 	
 	for _cmd in cmds {
-		switch c in _cmd {			
+		switch c in _cmd.cmd {			
 			case lm.Cmd_rect: {
 				
 				render.set_texture(.texture_diffuse, render.texture2D_get_white());

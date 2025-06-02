@@ -61,7 +61,7 @@ entry :: proc () {
 						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
 						gui.checkbox(s_gui, &checkbox_state, label = "Something one");
 						
-						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "", false, .top) {
+						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "Small", false, .top) {
 							gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
 							gui.checkbox(s_gui, &checkbox_state, label = "Something one");
 						}
