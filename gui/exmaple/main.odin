@@ -61,23 +61,37 @@ entry :: proc () {
 						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
 						gui.checkbox(s_gui, &checkbox_state, label = "Something one");
 						
-						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "Small", false, .top) {
-							gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
-							gui.checkbox(s_gui, &checkbox_state, label = "Something one");
+						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "", false, .top) {
+							gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature x");
+							gui.checkbox(s_gui, &checkbox_state, label = "Something two");
+						}
+						gui.end_window(s_gui);
+						
+						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.right, .top, 0, 0.1}, "", false, .top) {
+							//
+						}
+						gui.end_window(s_gui);
+						
+						if gui.button(s_gui, label = "MyButton") {
+							fmt.printf("Button clicked\n");
+						}
+					}
+					gui.end_window(s_gui);
+					
+					if checkbox_state {
+						if gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0.7, 0.3}, "asfga", false, .bottom) {
+							gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Text thing");
 						}
 						gui.end_window(s_gui);
 					}
+					
+					gui.begin_window(s_gui, {0.2, 0.2}, {.movable}, gui.Dest{.mid, .top, 0, 0}, "", false, .top);
+						gui.checkbox(s_gui, &checkbox_state, label = "Something 2");
+						gui.checkbox(s_gui, &checkbox_state, label = "Something 3");
 					gui.end_window(s_gui);
 					
-					if gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0.7, 0.3}, "", false, .bottom) {
-						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Text thing");
-					}
-					gui.end_window(s_gui);
+					gui.checkbox(s_gui, &checkbox_state, label = "Something 4");
 					
-					//gui.begin_window(s_gui, {0.2, 0.2}, {.movable}, gui.Dest{.mid, .top, 0, 0}, "", .top);
-						//gui.checkbox(s_gui, &checkbox_state, label = "Something 2");
-						//gui.checkbox(s_gui, &checkbox_state, label = "Something 3");
-					//gui.end(s_gui);
 						//if gui.button_label(s_gui, "Button") {
 						//	gui.label(s_gui, "Button pressed!", .left);
 						//}

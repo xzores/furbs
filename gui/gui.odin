@@ -95,6 +95,15 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 		font = auto_cast default_font,
 		in_padding = 0.005,
 		out_padding = 0.01,
+		button = lm.Button_style{
+			0.003, // line_thickness
+			0.003, // text_padding
+			0.03, // text_size
+			false, // text_shrink_to_fit
+			.mid, // text_hor
+			.mid, // text_ver
+			{0.12, 0.04}, // size
+		},
 		checkbox = lm.Checkbox_style{
 			line_thickness = 0.003,
 			text_padding = 0.003,
@@ -166,14 +175,27 @@ end :: proc(s : ^State) {
 		text_color = {0.95, 0.95, 0.95, 1},
 	*/
 	
-	for _cmd in cmds {
-		switch c in _cmd.cmd {			
+	for cmd in cmds {
+		switch c in cmd {			
 			case lm.Cmd_rect: {
 				
 				render.set_texture(.texture_diffuse, render.texture2D_get_white());
 				
 				switch c.rect_type {
+					
+					case .button_background:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						
+						switch c.state {
+							case .cold:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.15, 0.15, 0.15, 1});
+							case .hot:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.25, 0.25, 0.25, 1});
+							case .active:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.45, 0.45, 0.45, 1});
+						}
+					
 					case .checkbox_background:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
@@ -226,7 +248,7 @@ end :: proc(s : ^State) {
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.9, 0.9, 1});
 						}
 					
-					case .checkbox_border, .window_border:
+					case .checkbox_border, .window_border, .button_border:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, false);
 						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.line_thickness * unit_size);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
@@ -305,6 +327,7 @@ Hor_placement :: lm.Hor_placement;
 Dest :: lm.Dest;
 Top_bar_location :: lm.Top_bar_location;
 
+button :: lm.button;
 checkbox :: lm.checkbox;
 begin_window :: lm.begin_window;
 end_window :: lm.end_window;
