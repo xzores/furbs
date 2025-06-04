@@ -45,7 +45,7 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 		context.allocator = user_data.odin_allocator;
 		context.logger = user_data.logger;
 		
-		return render.text_get_dimensions(str, size, user_data.font).x;
+		return render.text_get_bounds(str, size, user_data.font).z;
 	}
 	
 	lm_font_height : lm.Text_height_f : proc (user_data : rawptr, size : f32) -> (ascender : f32, decender : f32){
@@ -116,6 +116,12 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 			0.01,			//	title_padding : f32,
 			0.025,			//	title_size : f32,
 			{0.03, 0.03},	//	size : [2]f32,
+		},
+		scroll = lm.Scroll_style{
+			0.01,	//bar_thickness
+			0.015,	//bar_thickness
+			{0.01, 0.01},	//padding
+			0.035,				//length_padding
 		}
 	});
 	
@@ -146,6 +152,9 @@ begin :: proc(s : ^State, user_id := 0, dont_touch := #caller_location) {
 	md := render.mouse_delta() / unit_size;
 	lm.set_mouse_pos(s, mp.x, mp.y, md.x, md.y);
 	
+	sd := render.scroll_delta() * 0.03;
+	lm.set_scroll(s, sd.x, sd.y, false);
+	
 	if render.is_button_pressed(.left) {
 		lm.mouse_event(s, true);
 	}
@@ -172,7 +181,7 @@ end :: proc(s : ^State) {
 		front_color = {0.6, 0.25, 0.25, 1},
 		border_color = {0.25, 0.25, 0.25, 1},
 		bg_color = {0.15, 0.15, 0.15, 1},
-		text_color = {0.95, 0.95, 0.95, 1},
+		text_color = {0.9, 0.9, 0.9, 1},
 	*/
 	
 	for cmd in cmds {
@@ -183,6 +192,10 @@ end :: proc(s : ^State) {
 				
 				switch c.rect_type {
 					
+					case .debug_rect:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						render.draw_quad_rect(c.rect * unit_size, 0, {0.75, 0.15, 0.15, 0.3});
+						
 					case .button_background:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
@@ -231,9 +244,9 @@ end :: proc(s : ^State) {
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						switch c.state {
 							case .cold:
-								render.draw_quad_rect(c.rect * unit_size, 0, {0.5, 0.5, 0.5, 0.3});
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.7, 0.7, 0.7, 0.2});
 							case .hot, .active:
-								render.draw_quad_rect(c.rect * unit_size, 0, {0.6, 0.6, 0.6, 0.3});
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.8, 0.8, 0.8, 0.4});
 						}
 						
 					case .scrollbar_front:
@@ -241,9 +254,9 @@ end :: proc(s : ^State) {
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						switch c.state {
 							case .cold:
-								render.draw_quad_rect(c.rect * unit_size, 0, {0.5, 0.5, 0.5, 0.4});
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.5, 0.5, 0.5, 1});
 							case .hot:
-								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.9, 0.9, 0.4});
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.9, 0.9, 1});
 							case .active:
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.9, 0.9, 1});
 						}
@@ -326,6 +339,8 @@ Ver_placement :: lm.Ver_placement;
 Hor_placement :: lm.Hor_placement;
 Dest :: lm.Dest;
 Top_bar_location :: lm.Top_bar_location;
+
+spacer :: lm.spacer;
 
 button :: lm.button;
 checkbox :: lm.checkbox;

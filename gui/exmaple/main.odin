@@ -1,6 +1,8 @@
 package gui_exmaple;
 
 import "core:mem"
+import "core:math"
+import "core:time"
 
 import gui ".."
 import "../../render"
@@ -57,38 +59,44 @@ entry :: proc () {
 						bar_loc = .bottom
 					}
 					
-					if gui.begin_window(s_gui, {0.5, 0.5}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0, 0}, "Hello world", false, .bottom) {
+					if gui.begin_window(s_gui, {0.5, 0.5}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0, 0}, "Hello world", .bottom) {
 						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
 						gui.checkbox(s_gui, &checkbox_state, label = "Something one");
 						
-						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "", false, .top) {
-							gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature x");
+						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable, .center_title, .append_horizontally}, gui.Dest{.mid, .mid, 0, 0}, "1234", .top) {
+							gui.checkbox(s_gui, &checkbox_state, label = "Enable feature x");
+							gui.spacer(s_gui, 0.02);
 							gui.checkbox(s_gui, &checkbox_state, label = "Something two");
-						}
-						gui.end_window(s_gui);
-						
-						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.right, .top, 0, 0.1}, "", false, .top) {
-							//
 						}
 						gui.end_window(s_gui);
 						
 						if gui.button(s_gui, label = "MyButton") {
 							fmt.printf("Button clicked\n");
 						}
+						
+						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.right, .top, 0, 0.1}, "", .top) {
+							//
+						}
+						gui.end_window(s_gui);
+					}
+					gui.end_window(s_gui);
+					
+					if gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0.55, 0.3}, "asfga", .left) {
+						gui.checkbox(s_gui, &checkbox_state, label = "very very very very very very very very very long");
+						for i in 0..<100 {
+							gui.checkbox(s_gui, &checkbox_state, label = fmt.tprintf("Text thing %v", i));
+							gui.button(s_gui, label = fmt.tprintf("Text thing %v", i));
+						}
 					}
 					gui.end_window(s_gui);
 					
 					if checkbox_state {
-						if gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0.7, 0.3}, "asfga", false, .bottom) {
-							gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Text thing");
-						}
+						gui.begin_window(s_gui, {0.2, 0.2}, {}, gui.Dest{.mid, .top, math.sin(render.elapsed_time() / 2) / 4, 0}, "", .top);
+							gui.checkbox(s_gui, &checkbox_state, label = "Something 2");
+							gui.checkbox(s_gui, &checkbox_state, label = "Something 3");
 						gui.end_window(s_gui);
+						
 					}
-					
-					gui.begin_window(s_gui, {0.2, 0.2}, {.movable}, gui.Dest{.mid, .top, 0, 0}, "", false, .top);
-						gui.checkbox(s_gui, &checkbox_state, label = "Something 2");
-						gui.checkbox(s_gui, &checkbox_state, label = "Something 3");
-					gui.end_window(s_gui);
 					
 					gui.checkbox(s_gui, &checkbox_state, label = "Something 4");
 					
@@ -135,12 +143,6 @@ entry :: proc () {
 	}
 	
 }
-
-
-
-
-
-
 
 
 

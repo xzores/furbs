@@ -27,6 +27,8 @@ The library is made so that a window or panel does not need a size, if no size i
 
 Rect_type :: enum {
 	
+	debug_rect,
+	
 	button_background,
 	button_border,
 	
@@ -120,15 +122,17 @@ Panel :: struct {
 	//uid : Unique_id,
 	
 	position : [2]f32,
-	size : [2]f32,
+	size : [2]f32, //the view size
+	scroll_ofset : [2]f32,	//if offset of the view
 	
 	hor_behavior : Hor_placement,
 	ver_behavior : Ver_placement,
 	append_hor : bool,	//Should we append new elements vertically or horizontally
 	
-	use_scissor : bool,
+	use_scissor : bool, 
 	
 	current_offset : f32, //At what offset should new element be added
+	virtual_size : [2]f32, //the size which there exists items/elements
 }
 
 Button_style :: struct {
@@ -158,6 +162,13 @@ Window_style :: struct {
 	size : [2]f32,
 }
 
+Scroll_style :: struct {
+	bar_bg_thickness : f32,
+	bar_front_thickness : f32,
+	padding : [2]f32,
+	length_padding : f32,
+}
+
 Font :: distinct int;
 
 Style :: struct {
@@ -168,6 +179,7 @@ Style :: struct {
 	button : Button_style,
 	checkbox : Checkbox_style,
 	window : Window_style,
+	scroll : Scroll_style,
 }
 
 Key_state :: enum {
@@ -192,7 +204,8 @@ Unique_look_up :: struct {
 Insert_subnode :: struct {};
 
 Sub_command :: union {
-	Insert_subnode, //
+	Insert_subnode, //sortable reference
+	^Node,	//inlined, unsortable
 	Command,
 }
 
@@ -234,6 +247,8 @@ State :: struct {
 	
 	mouse_pos : [2]f32,
 	mouse_delta : [2]f32,
+	scroll_delta : [2]f32,
+	is_input_trackpad : bool,
 	mouse_state : Key_state,
 	
 	current_cursor : Cursor_type,
@@ -241,12 +256,6 @@ State :: struct {
 	
 	originations : map[Unique_look_up]int, //resets every frame
 	statefull_elements : map[Unique_id]Element_state,
-}
-
-Window_state :: struct {
-	placement : [4]f32,
-	drag_by_mouse : Maybe([2]f32), //relavtive to mouse position 
-	collapsed : bool,
 }
 
 Element_state :: union {
@@ -282,6 +291,8 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 		make(map[^Node]u16),
 		{-1,-1},
 		{0,0},
+		{},
+		false,
 		.up,
 		.normal,
 		.normal,
@@ -319,11 +330,12 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		0,
 	}
 	
-	push_node(s, uid);
+	push_node(s, uid, false);
 	
 	panel := Panel{
 		{0,0},
 		{screen_width, screen_height},
+		{0,0},
 		
 		.left,
 		.top,
@@ -331,7 +343,8 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		
 		true,
 		
-		0
+		0,
+		{screen_width, screen_height},
 	};
 	
 	push_panel(s, panel);
@@ -390,11 +403,14 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 			}
 			
 			i, found := slice.linear_search(to_promote.parent.sub_nodes[:], to_promote);
-			fmt.assertf(found, "the subnode to promote was not found subnode : %p, parent : %#v", to_promote, to_promote.parent);
-			ordered_remove(&to_promote.parent.sub_nodes, i);
-			append(&to_promote.parent.sub_nodes, to_promote);
+			if found {
+				fmt.assertf(found, "the subnode to promote was not found subnode : %p, parent : %#v", to_promote, to_promote.parent);
+				ordered_remove(&to_promote.parent.sub_nodes, i);
+				append(&to_promote.parent.sub_nodes, to_promote);
+			}
 			
 			promote(s, to_promote.parent);
+			
 		}
 		
 		promote(s, s.to_promote);
@@ -423,6 +439,9 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 				switch val in cmd {
 					case Command: {
 						append(commands, val);
+					}
+					case ^Node: {
+						depth_first_assign_priority(s, val, commands, priority);
 					}
 					case Insert_subnode:{
 						sub_node : ^Node;
@@ -465,6 +484,10 @@ set_mouse_pos :: proc (s : ^State, mouse_x, mouse_y, delta_x, delta_y : f32) {
 	s.mouse_delta = {delta_x, delta_y};
 }
 
+set_scroll :: proc (s : ^State, scroll_x, scroll_y : f32, is_trackpad : bool) {
+	s.scroll_delta = {scroll_x, scroll_y}
+}
+
 mouse_event :: proc (s : ^State, pressed : bool) {
 	if pressed {
 		s.mouse_state = .pressed;
@@ -501,7 +524,9 @@ pop_scissor :: proc(s : ^State) {
 
 push_panel :: proc (s : ^State, panel : Panel, enable_scissor := true, loc := #caller_location) {
 	
-	append(&s.panel_stack, panel)
+	append(&s.panel_stack, panel);
+	
+	increase_offset(s, get_style(s).out_padding);
 	
 	if panel.use_scissor {
 		r := Cmd_scissor{{panel.position.x, panel.position.y, panel.size.x, panel.size.y}, enable_scissor};
@@ -531,7 +556,7 @@ set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
 	s.next_cursor = cursor_type;
 }
 
-push_node :: proc (s : ^State, uid : Unique_id, loc := #caller_location) {
+push_node :: proc (s : ^State, uid : Unique_id, sortable : bool, loc := #caller_location) {
 	
 	assert(uid != {});
 	
@@ -559,10 +584,15 @@ push_node :: proc (s : ^State, uid : Unique_id, loc := #caller_location) {
 	}
 	else {
 		i, found := slice.linear_search(s.current_node.sub_nodes[:], node);
-		if !found {
-			append(&s.current_node.sub_nodes, node);
+		if sortable {
+			if !found {
+				append(&s.current_node.sub_nodes, node);
+			}
+			append(&s.current_node.sub_commands, Insert_subnode{}); // this should happen every frame as the sub_commands gets cleared.
 		}
-		append(&s.current_node.sub_commands, Insert_subnode{}); // this should happen every frame as the sub_commands gets cleared.
+		else {
+			append(&s.current_node.sub_commands, node); // this should happen every frame as the sub_commands gets cleared.
+		}
 	}
 	
 	node.refound = true;
@@ -638,6 +668,11 @@ get_style :: proc (s : ^State) -> Style {
 }
 
 @(require_results)
+get_scroll_style :: proc (s : ^State) -> Scroll_style {
+ 	return get_style(s).scroll;
+}
+
+@(require_results)
 get_button_style :: proc (s : ^State) -> Button_style {
  	return get_style(s).button;
 }
@@ -692,18 +727,26 @@ save_state :: proc (s : ^State, uid : Unique_id, new : Element_state) {
 increase_offset :: proc (s : ^State, offset : [2]f32) {
 	p := &s.panel_stack[len(s.panel_stack)-1]
 	
-	if p.append_hor {
-		p.current_offset += offset.x;
-	}
-	else {
-		p.current_offset += offset.y;
+	padding : f32; 
+	
+	if p.current_offset != 0 {
+		padding = get_style(s).in_padding;
 	}
 	
-	p.current_offset += get_style(s).in_padding;
+	if p.append_hor {
+		p.current_offset += offset.x + padding;
+		p.virtual_size.x = p.current_offset - padding + get_style(s).out_padding;
+		p.virtual_size.y = math.max(p.virtual_size.y, offset.y + 2 * get_style(s).out_padding);
+	}
+	else {
+		p.current_offset += offset.y + padding;
+		p.virtual_size.x = math.max(p.virtual_size.x, offset.x + 2 * get_style(s).out_padding);
+		p.virtual_size.y = p.current_offset - padding + get_style(s).out_padding;;
+	}
 }
 
 @(require_results)
-place_in_parent :: proc (s : ^State, parent_pos : [2]f32, parent_size : [2]f32, dest : Dest, size : [2]f32) -> [4]f32 {
+place_in_parent :: proc (s : ^State, parent_pos : [2]f32, parent_size : [2]f32, scroll_offset : [2]f32, dest : Dest, size : [2]f32) -> [4]f32 {
 	
 	pos : [2]f32;
 	
@@ -725,8 +768,20 @@ place_in_parent :: proc (s : ^State, parent_pos : [2]f32, parent_size : [2]f32, 
 			pos.y = parent_size.y - dest.offset_y - size.y;
 	}
 	
-	pos += parent_pos;
+	pos += parent_pos + scroll_offset;
 	
 	return {pos.x, pos.y, size.x, size.y};
 }
 
+is_hover :: proc (s : ^State, placement : [4]f32) -> bool {
+	
+	cur_scissor := s.scissor_stack[len(s.scissor_stack) - 1];
+	
+	if cur_scissor.enable {
+		if !utils.collision_point_rect(s.mouse_pos, cur_scissor.area) {
+			return false;
+		}
+	}
+	
+	return utils.collision_point_rect(s.mouse_pos, placement);
+}
