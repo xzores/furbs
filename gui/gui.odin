@@ -122,7 +122,16 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 			0.015,	//bar_thickness
 			{0.01, 0.01},	//padding
 			0.035,				//length_padding
-		}
+		},
+		menu = lm.Menu_style{
+			0.002, // line_thickness
+			0.003, // text_padding
+			0.02, // text_size
+			false, // text_shrink_to_fit
+			.left, // text_hor
+			.mid, // text_ver
+			0.025, // size
+		},
 	});
 	
 	return s;
@@ -191,6 +200,35 @@ end :: proc(s : ^State) {
 				render.set_texture(.texture_diffuse, render.texture2D_get_white());
 				
 				switch c.rect_type {
+					
+					case .menu_item_front:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						switch c.state {
+							case .cold:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.25, 0.15, 0.25, 1});
+							case .hot:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.35, 0.25, 0.35, 1});
+							case .active:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.55, 0.45, 0.55, 1});
+						}
+						
+					case .menu_background:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						switch c.state {
+							case .cold:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.25, 0.15, 0.15, 1});
+							case .hot:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.35, 0.25, 0.25, 1});
+							case .active:
+								render.draw_quad_rect(c.rect * unit_size, 0, {0.55, 0.45, 0.45, 1});
+						}
+					
+					case .menu_item_background:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.draw_quad_rect(c.rect * unit_size, 0, {0.35, 0.35, 0.35, 1});
 					
 					case .debug_rect:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
@@ -261,7 +299,7 @@ end :: proc(s : ^State) {
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.9, 0.9, 0.9, 1});
 						}
 					
-					case .checkbox_border, .window_border, .button_border:
+					case .checkbox_border, .window_border, .button_border, .menu_border, .menu_item_background_border, .menu_item_front_border:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, false);
 						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.line_thickness * unit_size);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
@@ -339,6 +377,8 @@ Ver_placement :: lm.Ver_placement;
 Hor_placement :: lm.Hor_placement;
 Dest :: lm.Dest;
 Top_bar_location :: lm.Top_bar_location;
+Sub_menu :: lm.Sub_menu;
+Menu_popout_dir :: lm.Menu_popout_dir;
 
 spacer :: lm.spacer;
 
@@ -346,13 +386,22 @@ button :: lm.button;
 checkbox :: lm.checkbox;
 begin_window :: lm.begin_window;
 end_window :: lm.end_window;
+menu :: lm.menu;
 
 /*
 checkbox :: proc (s : ^State, dest : Dest, value : ^bool, label := "") {
 	lm.checkbox(s, dest, value, label);
 }
 */
+Menu_bar_enum :: enum {
 
+}
+
+Menu_bar_flags :: bit_set[Menu_bar_enum]
+
+menu_bar :: proc (s : ^State, menus : []Sub_menu, popout_hor : Hor_placement, popout_ver : Ver_placement, reverse_sort : bool = false, dest : Maybe(Dest) = nil, user_id := 0, dont_touch := #caller_location) {
+	
+}
 
 
 

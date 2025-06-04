@@ -93,13 +93,52 @@ entry :: proc () {
 					if checkbox_state {
 						gui.begin_window(s_gui, {0.2, 0.2}, {}, gui.Dest{.mid, .top, math.sin(render.elapsed_time() / 2) / 4, 0}, "", .top);
 							gui.checkbox(s_gui, &checkbox_state, label = "Something 2");
-							gui.checkbox(s_gui, &checkbox_state, label = "Something 3");
+							res := gui.menu(s_gui, "Something 3", {"option a", "option b", "option c"}, .right_center);
+							if res != "" {
+								fmt.printf("option : %v\n", res);
+							}
 						gui.end_window(s_gui);
-						
 					}
 					
-					gui.checkbox(s_gui, &checkbox_state, label = "Something 4");
+					popout_dir : gui.Menu_popout_dir;
 					
+					popout_dir = cast(gui.Menu_popout_dir)(int(render.elapsed_time()) %% len(gui.Menu_popout_dir));
+					
+					gui.menu(s_gui, "hover me", {"option a", "option b", "option c"}, popout_dir, false, gui.Dest{.mid, .mid, 0, 0});
+					
+					//gui.menu_bar();
+					
+					if gui.begin_window(s_gui, {0.3, 0.3}, {.no_top_bar, .hor_scrollbar, .ver_scrollbar, .append_horizontally}, gui.Dest{.left, .top, 0.04, 0.01}, "") {
+						
+						for i in 0..<10 {
+							res :=  gui.menu(s_gui, fmt.tprintf("Something %v", i), {"option a", "option b", 
+								gui.Sub_menu{
+									"Sub menu",
+									{
+										"sub option 1",
+										"sub option 2",
+										gui.Sub_menu{
+											"Sub sub menu",
+											{
+												"sub sub option 1",
+												"sub sub option 2",
+											},
+											.right_down,
+											false,
+										},
+									},
+									.right_down,
+									false,
+								},
+								"option c",
+							}, .down, false);
+							if res != "" {
+								fmt.printf("option : %v\n", res);
+							}
+						}
+						gui.end_window(s_gui);
+					}
+							
 						//if gui.button_label(s_gui, "Button") {
 						//	gui.label(s_gui, "Button pressed!", .left);
 						//}

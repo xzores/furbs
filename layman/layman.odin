@@ -47,11 +47,19 @@ Rect_type :: enum {
 	scrollbar_background,
 	scrollbar_front,
 	
+	menu_background,
+	menu_border,
+	menu_item_background,
+	menu_item_background_border,
+	menu_item_front,
+	menu_item_front_border,
 }
 
 Text_type :: enum {
+	button_text,
 	checkbox_text,
 	title_text,
+	menu_item,
 }
 
 Cursor_type :: enum {
@@ -169,6 +177,18 @@ Scroll_style :: struct {
 	length_padding : f32,
 }
 
+Menu_style :: struct {
+	line_thickness : f32,
+	
+	text_padding : f32,
+	text_size : f32,
+	text_shrink_to_fit : bool,
+	text_hor : Hor_placement,
+	text_ver : Ver_placement,
+	
+	height : f32,
+}
+
 Font :: distinct int;
 
 Style :: struct {
@@ -180,6 +200,7 @@ Style :: struct {
 	checkbox : Checkbox_style,
 	window : Window_style,
 	scroll : Scroll_style,
+	menu : Menu_style,
 }
 
 Key_state :: enum {
@@ -522,14 +543,14 @@ pop_scissor :: proc(s : ^State) {
 	}
 }
 
-push_panel :: proc (s : ^State, panel : Panel, enable_scissor := true, loc := #caller_location) {
+push_panel :: proc (s : ^State, panel : Panel, loc := #caller_location) {
 	
 	append(&s.panel_stack, panel);
 	
 	increase_offset(s, get_style(s).out_padding);
 	
 	if panel.use_scissor {
-		r := Cmd_scissor{{panel.position.x, panel.position.y, panel.size.x, panel.size.y}, enable_scissor};
+		r := Cmd_scissor{{panel.position.x, panel.position.y, panel.size.x, panel.size.y}, panel.use_scissor};
 		push_scissor(s, r);
 	}
 }
@@ -688,6 +709,11 @@ get_window_style :: proc (s : ^State) -> Window_style {
 }
 
 @(require_results)
+get_menu_style :: proc (s : ^State) -> Menu_style {
+ 	return get_style(s).menu;
+}
+
+@(require_results)
 get_in_padding :: proc (s : ^State) -> f32 {
 	return get_style(s).in_padding;
 }
@@ -785,3 +811,45 @@ is_hover :: proc (s : ^State, placement : [4]f32) -> bool {
 	
 	return utils.collision_point_rect(s.mouse_pos, placement);
 }
+
+//TODO, we want a is_this_the_current_scoll_item besides is_hot_path
+is_hot_path :: proc (s : ^State, node : ^Node) -> bool {
+	
+	if s.hot == node.uid {
+		return true;
+	}
+	
+	check_sub_nodes :: proc (s : ^State, node : ^Node) -> bool {
+		for sub in node.sub_nodes {	
+			if s.hot == sub.uid {
+				return true;
+			}
+			if check_sub_nodes(s, sub) {
+				return true;
+			}
+		}
+		
+		for sub in node.sub_commands {	
+			switch val in sub {
+				case ^Node:
+					if s.hot == val.uid {
+						return true;
+					}
+					if check_sub_nodes(s, val) {
+						return true;
+					}
+				case Insert_subnode, Command:
+					//Do nothing
+			}
+		}
+		
+		return false;
+	}
+	
+	if check_sub_nodes(s, node) {
+		return true;
+	}
+	
+	return false;
+}
+

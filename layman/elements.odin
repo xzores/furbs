@@ -115,7 +115,7 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 		
 		text_placement := place_in_parent(s, placement.xy + style.text_padding, placement.zw - 2 * style.text_padding, 0, Dest{style.text_hor, style.text_ver, 0, 0}, text_size);
 		text_placement.y -= dec
-		append_command(s, Cmd_text{text_placement.xy, strings.clone(label, context.temp_allocator), style.text_size, 0, .checkbox_text});
+		append_command(s, Cmd_text{text_placement.xy, strings.clone(label, context.temp_allocator), style.text_size, 0, .button_text});
 	}
 	
 	if d, ok := dest.?; !ok {
@@ -250,10 +250,10 @@ Window_falgs_enum :: enum {
 	//Scrollbar
 	ver_scrollbar,
 	hor_scrollbar,
-	scroll_auto_hide,
+	scroll_auto_hide, //TODO
 	
 	//Dont allow use the interact with it or any sub elements.
-	no_input,
+	no_input, //TODO
 	
 	//Start as
 	collapsed,
@@ -323,26 +323,31 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 	{
 		_w := get_state(s, uid);
 		
-		if _w == nil || (!(.movable in flags) && !(.scaleable in flags)) {
+		first_placement := place_in_parent(s, parent.position, parent.size, parent.scroll_ofset, dest, size);
+		
+		first_placement.xy += bar_cause_offset
+		first_placement.zw -= top_bar_occupie
+		
+		if _w == nil {
 			
-			first_placement := place_in_parent(s, parent.position, parent.size, parent.scroll_ofset, dest, size);
 			
-			first_placement.xy += bar_cause_offset
-			first_placement.zw -= top_bar_occupie
-			
-			w_state.placement = first_placement;
-			
-			if _w == nil {
-				if .collapsed in flags {
-					w_state.collapsed = true;
-				}
-			}
+			w_state = Window_state {
+				first_placement, 		//placement : [4]f32,
+				nil,					//drag_by_mouse : Maybe([2]f32), //relavtive to mouse position 
+				.collapsed in flags,	//collapsed : bool,
+				flags,					//flags : Window_falgs,
+				{0,0},					//scroll_offset : [2]f32,
+			};
 		}
 		else if last_window, ok := _w.(Window_state); ok {
 			w_state = last_window;
 		}
 		else  {
 			panic("The was not a window last frame");
+		}
+		
+		if !(.movable in flags) {
+			w_state.placement = first_placement;
 		}
 	}
 	w_state.flags = flags;
@@ -843,24 +848,9 @@ end_window :: proc (s : ^State) {
 		
 		scroll_delta : [2]f32;
 		
-		if s.hot == s.current_node.uid {
+		//TODO there can be things inside things that scroll, we do not handle that yet.
+		if is_hot_path(s, s.current_node) {
 			scroll_delta = s.scroll_delta;
-		}
-		
-		if .ver_scrollbar in w_state.flags && panel.virtual_size.y > panel.size.y {
-			scroll_uid := s.current_node.uid;
-			scroll_uid.sub_priotity = 100;
-			
-			//the vertical scrollbar
-			scroll_height := panel.size.y - 2 * scroll_style.length_padding;
-			scroll_placement := place_in_parent(s, panel.position, panel.size, 0, Dest{.right, .mid, scroll_style.padding.x, 0}, [2]f32{scroll_style.bar_bg_thickness, scroll_height});
-			
-			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.y, scroll_delta.y, panel.virtual_size.y, panel.size.y, scroll_uid, scroll_height, scroll_placement, scroll_placement.y, scroll_placement.w, &w_state.scroll_offset.y, true, true);
-			
-			view_scroll_placement := place_in_parent(s, scroll_placement.xy, scroll_placement.zw, 0, Dest{.mid, .top, 0, scroll_procent * (scroll_height - active_height)}, [2]f32{scroll_style.bar_front_thickness, active_height});
-			
-			append_command(s, Cmd_rect{scroll_placement, .scrollbar_background, -1, display_state});
-			append_command(s, Cmd_rect{view_scroll_placement, .scrollbar_front, -1, display_state});
 		}
 		
 		if .hor_scrollbar in w_state.flags && panel.virtual_size.x > panel.size.x {
@@ -872,14 +862,35 @@ end_window :: proc (s : ^State) {
 			scroll_placement := place_in_parent(s, panel.position, panel.size, 0, Dest{.mid, .bottom, 0, scroll_style.padding.y}, [2]f32{scroll_height, scroll_style.bar_bg_thickness});
 			
 			sd : f32 = scroll_delta.x;
-			
 			if s.hot == scroll_uid {
-				sd += scroll_delta.y;
+				sd = s.scroll_delta.x;
+				sd += s.scroll_delta.y;
 			}
 			
 			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.x, sd, panel.virtual_size.x, panel.size.x, scroll_uid, scroll_height, scroll_placement, scroll_placement.x, scroll_placement.z, &w_state.scroll_offset.x, false, false);
 			
 			view_scroll_placement := place_in_parent(s, scroll_placement.xy, scroll_placement.zw, 0, Dest{.left, .mid, scroll_procent * (scroll_height - active_height), 0}, [2]f32{active_height, scroll_style.bar_front_thickness});
+			
+			append_command(s, Cmd_rect{scroll_placement, .scrollbar_background, -1, display_state});
+			append_command(s, Cmd_rect{view_scroll_placement, .scrollbar_front, -1, display_state});
+		}
+		
+		if .ver_scrollbar in w_state.flags && panel.virtual_size.y > panel.size.y {
+			scroll_uid := s.current_node.uid;
+			scroll_uid.sub_priotity = 100;
+			
+			sd : f32 = scroll_delta.y;
+			if s.hot == scroll_uid {
+				sd += s.scroll_delta.y;
+			}
+			
+			//the vertical scrollbar
+			scroll_height := panel.size.y - 2 * scroll_style.length_padding;
+			scroll_placement := place_in_parent(s, panel.position, panel.size, 0, Dest{.right, .mid, scroll_style.padding.x, 0}, [2]f32{scroll_style.bar_bg_thickness, scroll_height});
+			
+			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.y, sd, panel.virtual_size.y, panel.size.y, scroll_uid, scroll_height, scroll_placement, scroll_placement.y, scroll_placement.w, &w_state.scroll_offset.y, true, true);
+			
+			view_scroll_placement := place_in_parent(s, scroll_placement.xy, scroll_placement.zw, 0, Dest{.mid, .top, 0, scroll_procent * (scroll_height - active_height)}, [2]f32{scroll_style.bar_front_thickness, active_height});
 			
 			append_command(s, Cmd_rect{scroll_placement, .scrollbar_background, -1, display_state});
 			append_command(s, Cmd_rect{view_scroll_placement, .scrollbar_front, -1, display_state});
@@ -894,18 +905,312 @@ end_window :: proc (s : ^State) {
 	
 }
 
-expand_window :: proc () {
-	
-}
-
-collapse_window :: proc () {
-	
-}
-
 bring_window_to_front :: proc () {
-	
+		
 }
 
 bring_window_to_back :: proc () {
 	
+}
+
+//////////////////////////////////////// Menu ////////////////////////////////////////
+
+//TODO implment in to Menu_option
+Menu_checkbox :: struct {
+	label : string,
+	value : ^bool,
+}
+
+Menu_option :: union {
+	string,
+	//Menu_checkbox //TODO
+	Sub_menu
+}
+
+Sub_menu :: struct {
+	label : string,
+	options : []Menu_option,
+	popout_dir : Menu_popout_dir,
+	reverse_sort : bool,
+}
+
+Menu_popout_dir :: enum {
+	down, //center_down but without centering
+	up, //center_up but without centering
+	
+	down_right, //same as down, but keeps right
+	up_right, //same as up, but keeps right
+	
+	left_up,
+	center_up,
+	right_up,
+	left_center,
+	center_center,
+	right_center,
+	left_down,
+	center_down,
+	right_down,
+}
+
+menu :: proc (s : ^State, label : string, options : []Menu_option, popout_dir : Menu_popout_dir, reverse_sort : bool = false, dest : Maybe(Dest) = nil, user_id := 0, dont_touch := #caller_location) -> string {
+	
+	sub := Sub_menu {
+		label, 
+		options,
+		popout_dir,
+		reverse_sort,
+	}
+	
+	path := make([dynamic]int);
+	
+	return sub_menu(s, sub, 0, &path, dest, user_id, dont_touch);
+}
+
+sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dynamic]int, dest : Maybe(Dest) = nil, user_id := 0, dont_touch := #caller_location) -> (res : string) {
+	call_cnt := s.originations[{dont_touch, user_id}];
+	s.originations[{dont_touch, user_id}] += 1;
+	
+	uid := Unique_id {
+		dont_touch,
+		call_cnt,
+		sub_prio,
+		user_id,
+	}
+	
+	push_node(s, uid, true);
+	defer pop_node(s);
+	
+	panel := get_current_panel(s);
+	
+	_dest : Dest;
+	if d, ok := dest.?; ok {
+		_dest = d;
+	}
+	else {
+		//use parent panel behavior
+		gstyle := get_style(s);
+		
+		if panel.append_hor {
+			_dest = {panel.hor_behavior, panel.ver_behavior, panel.current_offset, gstyle.out_padding};
+		}
+		else {
+			_dest = {panel.hor_behavior, panel.ver_behavior, gstyle.out_padding, panel.current_offset};
+		}
+	}
+	
+	style := get_menu_style(s);
+	
+	width := s.font_width(s.user_data, style.text_size, label) + style.text_padding * 2;
+	size := [2]f32{width, style.height};
+	
+	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_ofset, _dest, size);
+	
+	if is_hover(s, placement) {
+		try_set_hot(s, uid);
+	}
+	
+	gui_state : Display_state = .cold;
+	
+	if is_hot_path(s, s.current_node) {
+		gui_state = .hot;
+	}
+	
+	append_command(s, Cmd_rect{placement, .menu_background, -1, gui_state});
+	append_command(s, Cmd_rect{placement, .menu_border, style.line_thickness, gui_state});
+	
+	if label != "" {
+		padding := style.text_padding
+		
+		asc, dec := s.font_height(s.user_data, style.text_size);
+		text_width := s.font_width(s.user_data, style.text_size, label);
+		
+		text_size :=  [2]f32{text_width, asc - dec};
+		
+		text_placement := place_in_parent(s, placement.xy + style.text_padding, placement.zw - 2 * style.text_padding, 0, Dest{style.text_hor, style.text_ver, 0, 0}, text_size);
+		text_placement.y -= dec
+		append_command(s, Cmd_text{text_placement.xy, strings.clone(label, context.temp_allocator), style.text_size, 0, .menu_item});
+	}
+	
+	if is_hot_path(s, s.current_node) {
+		//find the size of all the options 
+		
+		max_text_width : f32 = 0;
+		
+		for opt, i in options {
+			
+			switch o in opt {
+				case string:
+					max_text_width = math.max(max_text_width, s.font_width(s.user_data, style.text_size, o));
+				case Sub_menu:
+					max_text_width = math.max(max_text_width, s.font_width(s.user_data, style.text_size, o.label));
+			}
+		}
+		
+		sub_width := max_text_width + style.text_padding * 2;
+		
+		items_placement := placement;
+		items_placement.zw = [2]f32{sub_width, f32(len(options)) * style.height};
+		
+		switch popout_dir {
+			case .down:
+				items_placement.y += -items_placement.w
+				
+			case .up:
+				items_placement.y += placement.w
+				
+			case .down_right:
+				items_placement.y += -items_placement.w
+				items_placement.x += placement.z - items_placement.z
+				
+			case .up_right:
+				items_placement.y += placement.w
+				items_placement.x += placement.z - items_placement.z
+				
+			case .left_up:
+				items_placement.y += placement.w
+				items_placement.x += -items_placement.z
+				items_placement.y -= style.height
+				
+			case .center_up:
+				items_placement.y += placement.w
+				items_placement.y += placement.w / 2 - items_placement.w /2
+				items_placement.x += placement.z / 2 - items_placement.z /2
+				
+			case .right_up:
+				items_placement.y += placement.w
+				items_placement.x += placement.z
+				items_placement.y -= style.height
+				
+			case .left_center:
+				items_placement.y += placement.w / 2 - items_placement.w /2
+				items_placement.x += -items_placement.z
+				
+			case .center_center:
+				items_placement.y += placement.w / 2 - items_placement.w /2
+				items_placement.x += placement.z / 2 - items_placement.z /2
+				
+			case .right_center:
+				items_placement.y += placement.w / 2 - items_placement.w /2
+				items_placement.x += placement.z
+				
+			case .left_down:
+				items_placement.y += -items_placement.w
+				items_placement.x += -items_placement.z
+				items_placement.y += style.height
+				
+			case .center_down:
+				items_placement.y += -items_placement.w
+				items_placement.x += placement.z / 2 - items_placement.z /2
+				
+			case .right_down:
+				items_placement.y += -items_placement.w
+				items_placement.x += placement.z
+				items_placement.y += style.height
+		}
+		
+		//limit the placement to inside the parent scissors
+		{
+			scissor := s.scissor_stack[len(s.scissor_stack) - 1];
+			if scissor.enable {
+				items_placement.x = math.clamp(items_placement.x, scissor.area.x, scissor.area.x + scissor.area.z);
+				items_placement.y = math.clamp(items_placement.y, scissor.area.y, scissor.area.y + scissor.area.w);
+			}
+		}
+		
+		//disable scissors to allow the options to spill into other places
+		push_scissor(s, {0, false});
+		defer pop_scissor(s);
+		
+		append_command(s, Cmd_rect{items_placement, .menu_item_background, -1, gui_state});
+		append_command(s, Cmd_rect{items_placement, .menu_item_background_border, style.line_thickness, gui_state});
+		
+		push_panel(s, Panel{
+			items_placement.xy,
+			items_placement.zw, //the view size
+			0,	//if offset of the view
+			
+			.left,
+			.top,
+			false,	//Should we append new elements vertically or horizontally
+			
+			false,
+			
+			0, //At what offset should new element be added
+			{}, //the size which there exists items/elements
+		});
+		defer pop_panel(s);
+		
+		if is_hover(s, items_placement) {
+			try_set_hot(s, uid);
+		}
+		
+		for opt, i in options {
+			
+			sub_placement : [4]f32;
+			if reverse_sort {
+				sub_placement.xy = items_placement.xy
+				sub_placement.zw = {sub_width, style.height}
+				sub_placement.y += f32(i) * style.height;
+			}
+			else {
+				sub_placement.xy = items_placement.xy + {0, f32(len(options) - 1) * style.height};
+				sub_placement.zw = {sub_width, style.height}
+				sub_placement.y -= f32(i) * style.height;
+			}
+			
+			switch o in opt {
+				case string:
+					
+					clicked : bool
+					gui_state : Display_state = .cold;
+					
+					if is_hover(s, sub_placement) {
+						try_set_hot(s, uid);
+						try_set_active(s, uid);
+						gui_state = .hot;
+						if s.mouse_state == .pressed {
+							gui_state = .active;
+						}
+						if current_active(s) == uid && s.mouse_state == .down {
+							gui_state = .active;
+						}
+						if current_active(s) == uid && s.mouse_state == .released {
+							clicked = true
+							res = o;
+						}
+					}
+					
+					append_command(s, Cmd_rect{sub_placement, .menu_item_front, -1, gui_state});
+					append_command(s, Cmd_rect{sub_placement, .menu_item_front_border, style.line_thickness, gui_state});
+					
+					if o != "" {
+						padding := style.text_padding
+						
+						asc, dec := s.font_height(s.user_data, style.text_size);
+						text_width := s.font_width(s.user_data, style.text_size, o);
+						
+						text_size :=  [2]f32{text_width, asc - dec};
+						
+						text_placement := place_in_parent(s, sub_placement.xy + style.text_padding, sub_placement.zw - 2 * style.text_padding, 0, Dest{style.text_hor, style.text_ver, 0, 0}, text_size);
+						text_placement.y -= dec
+						append_command(s, Cmd_text{text_placement.xy, strings.clone(o, context.temp_allocator), style.text_size, 0, .menu_item});
+					}
+					
+				case Sub_menu:
+					sub_res := sub_menu(s, o, sub_prio + 1, path, Dest{.left, .bottom, sub_placement.x - items_placement.x, sub_placement.y - items_placement.y}, user_id, dont_touch);
+					if sub_res != "" {
+						res = sub_res;
+					}
+			}
+		}
+	}
+	
+	if d, ok := dest.?; !ok {
+		increase_offset(s, size);
+	}
+	else {
+		//expand_virtual_size(s, [4]f32{placement.x, placement.y, total_size.x, total_size.y});
+	}
+	
+	return;
 }
