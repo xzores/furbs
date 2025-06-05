@@ -16,7 +16,7 @@ entry :: proc () {
 		height = 1000,
 		title = "my gui window",
 		resize_behavior = .allow_resize,
-		antialiasing = .msaa4,
+		antialiasing = .msaa16,
 	}
 	
 	window := render.init({}, required_gl_verion = .opengl_4_3, window_desc = window_desc, pref_warn = true);
@@ -30,8 +30,8 @@ entry :: proc () {
 	
 	////////////////////
 	
-	s_gui := gui.init(window, font_size = 0.04);
-	defer gui.destroy(s_gui);
+	s := gui.init(window, font_size = 0.04);
+	defer gui.destroy(s);
 	
 	checkbox_state : bool = true;
 	slider_value : f32 = 0.5;
@@ -45,134 +45,101 @@ entry :: proc () {
 			
 			render.target_begin(window, [4]f32{0.24, 0.34, 0.12, 1});
 				
-				gui.begin(s_gui);
+				gui.begin(s);
 					
-					// Window with title and basic widgets
-					//if gui.window_begin(s_gui, "Demo Window", {0, 0, 0.5, 0.5}, flags = {.window_movable, .window_scaleable, .window_border, .window_minimizeable}, title = "my window") {
-						
-						//gui.layout_row_dynamic(s_gui, 0.02, 2);
-						//gui.label(s_gui, "Hello, Nuklear!", .TEXT_RIGHT);
+					//inside render loop, begin with two versions of panel_a, they share a game state, so their intacting with one will also interact with the ohter (i think that might be how i want it.)
+					gui.begin_split_panel(s, {math.sin(render.elapsed_time()) + 1, 0.77, 0.2}, .vertical, {.no_background, .no_border});
 					
-					bar_loc : gui.Top_bar_location = .top;
+					gui.next_split_panel(s);
 					
-					if checkbox_state {
-						bar_loc = .bottom
-					}
-					
-					if gui.begin_window(s_gui, {0.5, 0.5}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0, 0}, "Hello world", .bottom) {
-						gui.checkbox(s_gui, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
-						gui.checkbox(s_gui, &checkbox_state, label = "Something one");
-						
-						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable, .center_title, .append_horizontally}, gui.Dest{.mid, .mid, 0, 0}, "1234", .top) {
-							gui.checkbox(s_gui, &checkbox_state, label = "Enable feature x");
-							gui.spacer(s_gui, 0.02);
-							gui.checkbox(s_gui, &checkbox_state, label = "Something two");
-						}
-						gui.end_window(s_gui);
-						
-						if gui.button(s_gui, label = "MyButton") {
-							fmt.printf("Button clicked\n");
-						}
-						
-						if gui.begin_window(s_gui, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.right, .top, 0, 0.1}, "", .top) {
-							//
-						}
-						gui.end_window(s_gui);
-					}
-					gui.end_window(s_gui);
-					
-					if gui.begin_window(s_gui, {0.4, 0.4}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0.55, 0.3}, "asfga", .left) {
-						gui.checkbox(s_gui, &checkbox_state, label = "very very very very very very very very very long");
-						for i in 0..<100 {
-							gui.checkbox(s_gui, &checkbox_state, label = fmt.tprintf("Text thing %v", i));
-							gui.button(s_gui, label = fmt.tprintf("Text thing %v", i));
-						}
-					}
-					gui.end_window(s_gui);
-					
-					if checkbox_state {
-						gui.begin_window(s_gui, {0.2, 0.2}, {}, gui.Dest{.mid, .top, math.sin(render.elapsed_time() / 2) / 4, 0}, "", .top);
-							gui.checkbox(s_gui, &checkbox_state, label = "Something 2");
-							res := gui.menu(s_gui, "Something 3", {"option a", "option b", "option c"}, .right_center);
-							if res != "" {
-								fmt.printf("option : %v\n", res);
-							}
-						gui.end_window(s_gui);
-					}
-					
-					popout_dir : gui.Menu_popout_dir;
-					
-					popout_dir = cast(gui.Menu_popout_dir)(int(render.elapsed_time()) %% len(gui.Menu_popout_dir));
-					
-					gui.menu(s_gui, "hover me", {"option a", "option b", "option c"}, popout_dir, false, gui.Dest{.mid, .mid, 0, 0});
-					
-					//gui.menu_bar();
-					
-					if gui.begin_window(s_gui, {0.3, 0.3}, {.no_top_bar, .hor_scrollbar, .ver_scrollbar, .append_horizontally}, gui.Dest{.left, .top, 0.04, 0.01}, "") {
-						
-						for i in 0..<10 {
-							res :=  gui.menu(s_gui, fmt.tprintf("Something %v", i), {"option a", "option b", 
-								gui.Sub_menu{
-									"Sub menu",
-									{
-										"sub option 1",
-										"sub option 2",
-										gui.Sub_menu{
-											"Sub sub menu",
-											{
-												"sub sub option 1",
-												"sub sub option 2",
-											},
-											.right_down,
-											false,
-										},
-									},
-									.right_down,
-									false,
-								},
-								"option c",
-							}, .down, false);
-							if res != "" {
-								fmt.printf("option : %v\n", res);
-							}
-						}
-						gui.end_window(s_gui);
-					}
+						if gui.begin_window(s, {0.5, 0.5}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .mid, 0, 0}, "Hello world", .bottom) {
+							gui.checkbox(s, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
+							gui.checkbox(s, &checkbox_state, gui.Dest{.mid, .mid, 0, 0.4}, label = "Something one");
 							
-						//if gui.button_label(s_gui, "Button") {
-						//	gui.label(s_gui, "Button pressed!", .left);
-						//}
-						
-						/*
-						gui.layout_row_dynamic(s_gui, 30, 2);
-
-						gui.checkbox_label(s_gui, "Enable feature", &checkbox_state);
-
-						gui.layout_row_dynamic(s_gui, 30, 1);
-						gui.slider_float(s_gui, 0.0, &slider_value, 1.0, 0.01);
-
-						gui.layout_row_dynamic(s_gui, 30, 1);
-						gui.edit_string(s_gui, .simple, text_buffer[:], text_buffer.len, nil);
-
-						gui.layout_row_dynamic(s_gui, 30, 1);
-						combo_items := []cstring{"Option 1", "Option 2", "Option 3"};
-						gui.combo(s_gui, combo_items, combo_items.len, &combo_index, 30, Vec2{200, 200});
-
-						gui.layout_row_dynamic(s_gui, 30, 1);
-						gui.label(s_gui, "Pick a color:", .left);
-						gui.color_picker(s_gui, &color, .rgba);
-
-						gui.layout_row_dynamic(s_gui, 30, 1);
-						if gui.tree_push(s_gui, .node, "Tree", .collapsed) {
-							gui.label(s_gui, "Inside tree node", .left);
-							gui.tree_pop(s_gui);
+							if gui.begin_window(s, {0.2, 0.2}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable, .center_title, .append_horizontally}, gui.Dest{.left, .bottom, 0, 0}, "1234", .top) {
+								gui.checkbox(s, &checkbox_state, label = "Enable feature x");
+								gui.spacer(s, 0.02);
+								gui.checkbox(s, &checkbox_state, label = "Something two");
+							}
+							gui.end_window(s);
+							
+							if gui.button(s, label = "MyButton") {
+								fmt.printf("Button clicked\n");
+							}
+							
+							if gui.begin_window(s, {0.2, 0.2}, {.scaleable, .movable, .collapsable}, gui.Dest{.right, .top, 0, 0.1}, "", .top) {
+								//
+							}
+							gui.end_window(s);
 						}
-
-						*/
-					//}
-					//gui.window_end(s_gui);
+						gui.end_window(s);
+						
+						if gui.begin_window(s, {0.4, 0.4}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0.55, 0.3}, "asfga", .left) {
+							gui.checkbox(s, &checkbox_state, label = "very very very very very very very very very long");
+							for i in 0..<100 {
+								gui.checkbox(s, &checkbox_state, label = fmt.tprintf("Text thing %v", i));
+								gui.button(s, label = fmt.tprintf("Text thing %v", i));
+							}
+						}
+						gui.end_window(s);
+						
+						if checkbox_state {
+							gui.begin_window(s, {0.2, 0.2}, {}, gui.Dest{.mid, .top, math.sin(render.elapsed_time() / 2) / 4, 0}, "", .top);
+								gui.checkbox(s, &checkbox_state, label = "Something 2");
+								res := gui.menu(s, "Something 3", {"option a", "option b", "option c"}, .right_center);
+								if res != "" {
+									fmt.printf("option : %v\n", res);
+								}
+							gui.end_window(s);
+						}
+						
+						if gui.begin_window(s, {0.3, 0.3}, {.no_top_bar, .hor_scrollbar, .ver_scrollbar, .append_horizontally}, gui.Dest{.left, .top, 0.04, 0.01}, "") {
+							
+							for i in 0..<10 {
+								res :=  gui.menu(s, fmt.tprintf("Something %v", i), {"option a", "option b", 
+									gui.Sub_menu{
+										"Sub menu",
+										{
+											"sub option 1",
+											"sub option 2",
+											gui.Sub_menu{
+												"Sub sub menu",
+												{
+													"sub sub option 1",
+													"sub sub option 2",
+												},
+												.right_down,
+												false,
+											},
+										},
+										.right_down,
+										false,
+									},
+									"option c",
+								}, .down, false);
+								if res != "" {
+									fmt.printf("option : %v\n", res);
+								}
+							}
+							gui.end_window(s);
+						}
+						
+						popout_dir : gui.Menu_popout_dir;
+						popout_dir = cast(gui.Menu_popout_dir)(int(render.elapsed_time()) %% len(gui.Menu_popout_dir));
+						gui.menu(s, "hover me", {"option a", "option b", "option c"}, popout_dir, false, gui.Dest{.mid, .mid, 0, 0});
+											
+					gui.next_split_panel(s);
+						
+						//inside render loop, begin with two versions of panel_a, they share a game state, so their intacting with one will also interact with the ohter (i think that might be how i want it.)
+						gui.begin_split_panel(s, {1, 1}, .horizontal, {});
+							gui.checkbox(s, &checkbox_state, label = "Inside split panel");
+						gui.next_split_panel(s);
+							gui.checkbox(s, &checkbox_state, label = "Inside split panel2");
+						gui.end_split_panel(s);
+						
+					gui.end_split_panel(s);
 					
-				gui.end(s_gui);
+				gui.end(s);
 				
 				render.draw_fps_overlay();
 			render.target_end();

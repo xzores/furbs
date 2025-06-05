@@ -53,6 +53,9 @@ Rect_type :: enum {
 	menu_item_background_border,
 	menu_item_front,
 	menu_item_front_border,
+
+	split_panel_splitter,
+	
 }
 
 Text_type :: enum {
@@ -98,7 +101,7 @@ Cmd_scissor :: struct{
 Cmd_rect :: struct {
 	rect : [4]f32,
 	rect_type : Rect_type,
-	line_thickness : f32, 	//optional for some rects, -1 if not used
+	border_thickness : f32, 	//optional for some rects, -1 if not used
 	state : Display_state, 	//Used by some interactive elements
 }
 
@@ -129,9 +132,10 @@ Panel :: struct {
 	//transform : matrix[3,3]f32, //TO greneral
 	//uid : Unique_id,
 	
-	position : [2]f32,
+	position : [2]f32, //in relation to the parent panel
 	size : [2]f32, //the view size
 	scroll_ofset : [2]f32,	//if offset of the view
+	virtual_size : [2]f32, //the size which there exists items/elements
 	
 	hor_behavior : Hor_placement,
 	ver_behavior : Ver_placement,
@@ -140,11 +144,10 @@ Panel :: struct {
 	use_scissor : bool, 
 	
 	current_offset : f32, //At what offset should new element be added
-	virtual_size : [2]f32, //the size which there exists items/elements
 }
 
 Button_style :: struct {
-	line_thickness : f32,
+	border_thickness : f32,
 	
 	text_padding : f32,
 	text_size : f32,
@@ -156,14 +159,14 @@ Button_style :: struct {
 }
 
 Checkbox_style :: struct {
-	line_thickness : f32,
+	border_thickness : f32,
 	text_padding : f32,
 	text_size : f32,
 	size : [2]f32,
 }
 
 Window_style :: struct {
-	line_thickness : f32,
+	border_thickness : f32,
 	top_bar_size : f32,
 	title_padding : f32,
 	title_size : f32,
@@ -178,7 +181,7 @@ Scroll_style :: struct {
 }
 
 Menu_style :: struct {
-	line_thickness : f32,
+	border_thickness : f32,
 	
 	text_padding : f32,
 	text_size : f32,
@@ -187,6 +190,11 @@ Menu_style :: struct {
 	text_ver : Ver_placement,
 	
 	height : f32,
+}
+
+Split_panel_style :: struct {
+	border_thickness : f32,
+	splitter_thickness : f32,
 }
 
 Font :: distinct int;
@@ -201,6 +209,7 @@ Style :: struct {
 	window : Window_style,
 	scroll : Scroll_style,
 	menu : Menu_style,
+	split_panel : Split_panel_style,
 }
 
 Key_state :: enum {
@@ -212,9 +221,8 @@ Key_state :: enum {
 
 Unique_id :: struct {
 	src : runtime.Source_Code_Location,
-	call_cnt : int,
+	special_number : int, //user_id  or callcount
 	sub_priotity : int, //For elements with many interactive components
-	user_id : int,
 }
 
 Unique_look_up :: struct {
@@ -239,6 +247,13 @@ Node :: struct {
 	refound : bool,
 }
 
+Split_panel :: struct {
+	uid : Unique_id,
+	dir : Split_dir,
+	next_panel : int,
+	panels : [dynamic]Panel,
+}
+
 State :: struct {
 	
 	//////////////////////// STATIC ////////////////////////
@@ -247,10 +262,10 @@ State :: struct {
 	font_height : Text_height_f,
 	
 	//////////////////////// DYNAMIC ////////////////////////
-	//main_panel : Panel,
 	style_stack : [dynamic]Style,
 	panel_stack : [dynamic]Panel,
 	scissor_stack : [dynamic]Cmd_scissor,
+	split_panel_stack : [dynamic]Split_panel,
 	
 	hot : Unique_id,
 	active : Unique_id,
@@ -299,6 +314,7 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 		make([dynamic]Style),
 		make([dynamic]Panel),
 		make([dynamic]Cmd_scissor),
+		make([dynamic]Split_panel),
 		{},
 		{},
 		{},
@@ -348,15 +364,15 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		dont_touch,
 		0,
 		0, //For elements with many interactive components
-		0,
 	}
 	
-	push_node(s, uid, false);
+	push_node(s, uid, false, dont_touch);
 	
 	panel := Panel{
 		{0,0},
 		{screen_width, screen_height},
 		{0,0},
+		{screen_width, screen_height},
 		
 		.left,
 		.top,
@@ -365,7 +381,6 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		true,
 		
 		0,
-		{screen_width, screen_height},
 	};
 	
 	push_panel(s, panel);
@@ -488,6 +503,8 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 	pop_node(s);
 	
 	s.root = nil;
+	
+	assert(s.current_node == nil, "not all nodes where popped");
 	
 	return commands[:];
 }
@@ -714,18 +731,8 @@ get_menu_style :: proc (s : ^State) -> Menu_style {
 }
 
 @(require_results)
-get_in_padding :: proc (s : ^State) -> f32 {
-	return get_style(s).in_padding;
-}
-
-@(require_results)
-get_out_padding :: proc (s : ^State) -> f32 {
-	return get_style(s).out_padding;
-}
-
-@(require_results)
-get_current_size :: proc (s : ^State) -> f32 {
-	return 0.05;
+get_split_panel_style :: proc (s : ^State) -> Split_panel_style {
+ 	return get_style(s).split_panel;
 }
 
 current_hot :: proc (s : ^State) -> Unique_id {
@@ -801,11 +808,13 @@ place_in_parent :: proc (s : ^State, parent_pos : [2]f32, parent_size : [2]f32, 
 
 is_hover :: proc (s : ^State, placement : [4]f32) -> bool {
 	
-	cur_scissor := s.scissor_stack[len(s.scissor_stack) - 1];
-	
-	if cur_scissor.enable {
-		if !utils.collision_point_rect(s.mouse_pos, cur_scissor.area) {
-			return false;
+	if len(s.scissor_stack) != 0 {
+		cur_scissor := s.scissor_stack[len(s.scissor_stack) - 1];
+		
+		if cur_scissor.enable {
+			if !utils.collision_point_rect(s.mouse_pos, cur_scissor.area) {
+				return false;
+			}
 		}
 	}
 	
@@ -853,3 +862,21 @@ is_hot_path :: proc (s : ^State, node : ^Node) -> bool {
 	return false;
 }
 
+make_uid :: proc (s : ^State, user_id : int, dont_touch : runtime.Source_Code_Location, sub_prio := 0) -> Unique_id {
+	call_cnt := s.originations[{dont_touch, user_id}];
+	s.originations[{dont_touch, user_id}] += 1;
+	
+	special_number := call_cnt;
+	
+	if user_id != 0 {
+		special_number = user_id;
+	}
+	
+	uid := Unique_id {
+		dont_touch,
+		call_cnt,
+		sub_prio,
+	}
+	
+	return uid;
+}

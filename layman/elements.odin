@@ -39,15 +39,7 @@ spacer :: proc (s : ^State, space : f32) {
 //////////////////////////////////////// Button ////////////////////////////////////////
 
 button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0, dont_touch := #caller_location) -> (value : bool) {	
-	call_cnt := s.originations[{dont_touch, user_id}];
-	s.originations[{dont_touch, user_id}] += 1;
-	
-	uid := Unique_id {
-		dont_touch,
-		call_cnt,
-		0,
-		user_id,
-	}
+	uid := make_uid(s, user_id, dont_touch);
 	
 	push_node(s, uid, false);
 	defer pop_node(s);
@@ -103,7 +95,7 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 	}
 	
 	append_command(s, Cmd_rect{placement, .button_background, -1, gui_state});
-	append_command(s, Cmd_rect{placement, .button_border, style.line_thickness, gui_state});
+	append_command(s, Cmd_rect{placement, .button_border, style.border_thickness, gui_state});
 	
 	if label != "" {
 		padding := style.text_padding
@@ -131,15 +123,7 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 //////////////////////////////////////// Checkbox ////////////////////////////////////////
 
 checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := "", user_id := 0, dont_touch := #caller_location) -> bool {	
-	call_cnt := s.originations[{dont_touch, user_id}];
-	s.originations[{dont_touch, user_id}] += 1;
-	
-	uid := Unique_id {
-		dont_touch,
-		call_cnt,
-		0,
-		user_id,
-	}
+	uid := make_uid(s, user_id, dont_touch);
 	
 	push_node(s, uid, false);
 	defer pop_node(s);
@@ -192,10 +176,10 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 	}
 	
 	append_command(s, Cmd_rect{placement, .checkbox_background, -1, checkbox_state}); //The background
-	append_command(s, Cmd_rect{placement, .checkbox_border, style.line_thickness, checkbox_state}); //The background	
+	append_command(s, Cmd_rect{placement, .checkbox_border, style.border_thickness, checkbox_state}); //The background	
 	
 	if value^ {
-		act_placement := place_in_parent(s, placement.xy, placement.zw, 0, Dest{.mid, .mid, 0, 0}, size - style.line_thickness*6);
+		act_placement := place_in_parent(s, placement.xy, placement.zw, 0, Dest{.mid, .mid, 0, 0}, size - style.border_thickness*6);
 		append_command(s, Cmd_rect{act_placement, .checkbox_foreground, -1, checkbox_state}); //The background
 	}
 	
@@ -224,6 +208,227 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 //////////////////////////////////////// Input Field ////////////////////////////////////////
 
 //TODO input field
+
+
+//////////////////////////////////////// Container ////////////////////////////////////////
+
+//TODO rename the current panel to something else, and then use panel as the everyone else uses it.
+//That means a windows should have a panel and the panel is what should controll the scroll and such.  (Maybe that is the way the current panel works)
+
+/*
+Register_container :: proc (s : ^State, , user_id := 0, dont_touch := #caller_location) {
+	
+	
+	
+}
+
+begin_container :: proc (s : ^State, placement : [4]f32, user_id := 0, dont_touch := #caller_location) {
+	uid := make_uid(s, user_id, dont_touch);
+	
+	parent := s.panel_stack[len(s.panel_stack) - 1];
+	
+	//assert(parent_node_is_split_panel, "You must do a begin_split_panel before calling next_panel");
+	
+	push_node(s, uid, false);
+	
+	push_panel(s, Panel {
+		placement.xy,
+		placement.zw,
+		{},
+		{}, //calculated when things are added
+		
+		.left,
+		.top,
+		false,	//Should we append new elements vertically or horizontally
+		
+		false,
+		
+		0, //At what offset should new element be added
+	});
+}
+
+end_container :: proc (s : ^State) -> Container_ref {
+	
+	pop_panel(s);
+}
+*/
+
+//////////////////////////////////////// Splitter (simple) ////////////////////////////////////////
+
+Split_panel_falgs_enum :: enum {
+	
+	no_border,
+	no_background,
+	
+	allow_resize,
+	bottom_to_top,
+}
+
+Split_panel_falgs :: bit_set[Split_panel_falgs_enum];
+
+Split_dir :: enum {
+	horizontal,
+	vertical,
+}
+
+begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : Split_panel_falgs, user_id := 0, dont_touch := #caller_location) {
+	uid := make_uid(s, user_id, dont_touch);
+	
+	parent := s.panel_stack[len(s.panel_stack) - 1]
+	
+	push_node(s, uid, false);
+	
+	style := get_split_panel_style(s);
+	
+	total_ratios : f32;
+	
+	for r in ratios {
+		total_ratios += r;
+	}
+	
+	cur_offset : [2]f32 = {0,0};
+	
+	width := parent.size.x;
+	height := parent.size.y;
+	
+	if is_hover(s, {parent.position.x, parent.position.y, parent.size.x, parent.size.y}) {
+		try_set_hot(s, uid);
+		if s.mouse_state == .pressed {
+			try_set_active(s, uid);
+		}
+	}
+	
+	panels := make([dynamic]Panel);
+	
+	for r in ratios {
+		
+		procent := r / total_ratios;
+		
+		placement : [4]f32;
+		sub_size := [2]f32{width, height};
+		ver : Ver_placement = .bottom;
+		
+		if .bottom_to_top in flags {
+			ver = .bottom
+		}
+		
+		if dir == .horizontal {
+			sub_size.x = procent * width;
+		}
+		else {
+			sub_size.y = procent * height;
+		}
+	
+		fmt.printf("");
+		placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x , cur_offset.y}, sub_size);
+		
+		if dir == .horizontal {
+			cur_offset.x += procent * width;
+		}
+		else {
+			cur_offset.y += procent * height;
+		}
+		
+		//create a panel for each seqment
+		if !(.no_background in flags) {
+			append_command(s, Cmd_rect{placement, .window_background, -1, .cold});
+		}
+		if !(.no_border in flags) {
+			append_command(s, Cmd_rect{placement, .window_border, style.border_thickness, .cold}); 
+		}
+		
+		splitter_uid := make_uid(s, user_id, dont_touch, 1);
+		splitter_placement : [4]f32; 
+		
+		if dir == .horizontal {
+			splitter_placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x, cur_offset.y}, {style.splitter_thickness, height});
+		}
+		else {
+			splitter_placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x, cur_offset.y}, {width, style.splitter_thickness});
+		}
+		
+		if is_hover(s, splitter_placement) {
+			try_set_hot(s, splitter_uid);
+			if s.mouse_state == .pressed {
+				try_set_active(s, splitter_uid);
+			}
+			
+			if dir == .horizontal {
+				set_mouse_cursor(s, .scale_horizontal);
+			}
+			else {
+				set_mouse_cursor(s, .scale_verical);
+			}
+		}
+		
+		append_command(s, Cmd_rect{splitter_placement, .split_panel_splitter, style.splitter_thickness, .cold}); 
+		
+		if dir == .horizontal {
+			cur_offset.x += style.splitter_thickness;
+		}
+		else {
+			cur_offset.y += style.splitter_thickness;
+		}
+		
+		append(&panels, Panel{
+			placement.xy, //position
+			placement.zw, //size
+			{}, //scroll_ofset
+			{}, //virtual_size
+			.left, //hor_behavior
+			ver, //ver_behavior
+			false, //append_hor
+			true, //use_scissor
+			0, //current_offset
+		});
+	}
+	
+	uid.sub_priotity = 100;
+	append(&s.split_panel_stack, Split_panel {
+		uid,
+		dir,
+		0,
+		panels,
+	});
+	
+	next_split_panel(s, true);
+}
+
+//move to next panel
+next_split_panel :: proc (s : ^State, is_first := false) {
+	
+	if !is_first {
+		pop_panel(s);
+		pop_node(s);
+	}
+	
+	style := get_split_panel_style(s);
+	
+	sp := &s.split_panel_stack[len(s.split_panel_stack) - 1];
+	uid := sp.uid;
+	uid.sub_priotity += sp.next_panel + 1;
+
+	push_panel(s, sp.panels[sp.next_panel]);
+	fmt.printf("sp.panels[sp.next_panel] : %v\n", sp.panels[sp.next_panel]);
+	push_node(s, uid, false);
+	sp.next_panel += 1;
+	
+}
+
+end_split_panel :: proc (s : ^State, loc := #caller_location) {
+	//DO some stuff
+	
+	sp := pop(&s.split_panel_stack);
+	
+	assert(sp.next_panel == len(sp.panels), "You did not go though all the panels", loc)
+	
+	pop_panel(s);
+	pop_node(s);
+	
+	//the split panel nodes
+	pop_node(s);
+}
+
 
 //////////////////////////////////////// Window ////////////////////////////////////////
 
@@ -277,23 +482,14 @@ Window_state :: struct {
 }
 
 begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : Dest, title := "", top_bar_loc := Top_bar_location.top, user_id := 0, dont_touch := #caller_location) -> bool {
-	
-	call_cnt := s.originations[{dont_touch, user_id}];
-	s.originations[{dont_touch, user_id}] += 1;
-	
-	uid := Unique_id {
-		dont_touch,
-		call_cnt,
-		0,
-		user_id,
-	}
+	uid := make_uid(s, user_id, dont_touch);
 	
 	push_node(s, uid, true);
 	
 	gstyle := get_style(s);
 	style := get_window_style(s);
 	
-	min_size := [2]f32{1, 1} * (gstyle.out_padding + style.line_thickness) * 2 + style.title_size;
+	min_size := [2]f32{1, 1} * (gstyle.out_padding + style.border_thickness) * 2 + style.title_size;
 	
 	top_bar_occupie : [2]f32;
 	bar_cause_offset : [2]f32;
@@ -311,7 +507,7 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			top_bar_occupie = {style.top_bar_size, 0};
 			bar_cause_offset = {style.top_bar_size,0};
 	}
-	
+		
 	if (.no_top_bar in flags) {
 		top_bar_occupie = {};
 	}
@@ -327,6 +523,8 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		
 		first_placement.xy += bar_cause_offset
 		first_placement.zw -= top_bar_occupie
+		
+		fmt.printf("parent.position : %v : %v\n", parent.position, parent.size);
 		
 		if _w == nil {
 			
@@ -382,12 +580,8 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 	
 	//top bar
 	{
-		top_uid := Unique_id {
-			dont_touch,
-			call_cnt,
-			1,
-			user_id,
-		}
+		top_uid := uid;
+		top_uid.sub_priotity = 1;
 		
 		switch top_bar_loc {
 			case .top:
@@ -446,12 +640,8 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		
 		//Collapse button
 		if .collapsable in flags {
-			collapse_uid := Unique_id {
-				dont_touch,
-				call_cnt,
-				2,
-				user_id,
-			}
+			collapse_uid := uid;
+			collapse_uid.sub_priotity = 2;
 			
 			collapse_dest : Dest;
 			switch top_bar_loc {
@@ -589,15 +779,11 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		resize : [2]f32;
 		
 		if top_bar_loc != .top {
-			drag_uid := Unique_id {
-				dont_touch,
-				call_cnt,
-				3,
-				user_id,
-			}
+			drag_uid := uid;
+			drag_uid.sub_priotity = 3;
 			
-			//if we are close to the left edge (within one line_thickness)
-			r := [4]f32{placement.x, placement.y + placement.w - style.line_thickness, placement.z, style.line_thickness};
+			//if we are close to the left edge (within one border_thickness)
+			r := [4]f32{placement.x, placement.y + placement.w - style.border_thickness, placement.z, style.border_thickness};
 			if is_hover(s, r) {
 				try_set_hot(s, drag_uid);
 				if s.mouse_state == .pressed {
@@ -619,15 +805,11 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		}
 		
 		if top_bar_loc != .left {
-			drag_uid := Unique_id {
-				dont_touch,
-				call_cnt,
-				4,
-				user_id,
-			}
+			drag_uid := uid;
+			drag_uid.sub_priotity = 4;
 			
-			//if we are close to the left edge (within one line_thickness)
-			r := [4]f32{placement.x, placement.y, style.line_thickness, placement.w};
+			//if we are close to the left edge (within one border_thickness)
+			r := [4]f32{placement.x, placement.y, style.border_thickness, placement.w};
 			if is_hover(s, r) {
 				try_set_hot(s, drag_uid);
 				if s.mouse_state == .pressed {
@@ -650,15 +832,11 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		}
 		
 		if top_bar_loc != .right {
-			drag_uid := Unique_id {
-				dont_touch,
-				call_cnt,
-				5,
-				user_id,
-			}
+			drag_uid := uid;
+			drag_uid.sub_priotity = 5;
 			
-			//if we are close to the left edge (within one line_thickness)
-			r := [4]f32{placement.x + placement.z - style.line_thickness, placement.y, style.line_thickness, placement.w};
+			//if we are close to the left edge (within one border_thickness)
+			r := [4]f32{placement.x + placement.z - style.border_thickness, placement.y, style.border_thickness, placement.w};
 			if is_hover(s, r) {
 				try_set_hot(s, drag_uid);
 				if s.mouse_state == .pressed {
@@ -680,15 +858,11 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		}
 		
 		if top_bar_loc != .bottom {
-			drag_uid := Unique_id {
-				dont_touch,
-				call_cnt,
-				6,
-				user_id,
-			}
+			drag_uid := uid;
+			drag_uid.sub_priotity = 6;
 			
-			//if we are close to the left edge (within one line_thickness)
-			r := [4]f32{placement.x, placement.y, placement.z, style.line_thickness};
+			//if we are close to the left edge (within one border_thickness)
+			r := [4]f32{placement.x, placement.y, placement.z, style.border_thickness};
 			if is_hover(s, r) {
 				try_set_hot(s, drag_uid);
 				if s.mouse_state == .pressed {
@@ -740,13 +914,19 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			append_command(s, Cmd_rect{placement, .window_background, -1, .cold});
 		}
 		if !(.no_border in flags) {
-			append_command(s, Cmd_rect{placement, .window_border, style.line_thickness, .cold}); 
+			append_command(s, Cmd_rect{placement, .window_border, style.border_thickness, .cold}); 
 		}
 		
+		for i in 0..< len(s.panel_stack) {
+			fmt.printf("\t");
+		}
+		fmt.printf("placement.xy : %v\n", placement.xy + style.border_thickness);
+		
 		push_panel(s, Panel {
-			placement.xy + style.line_thickness,
-			placement.zw - 2 * style.line_thickness,
+			placement.xy + style.border_thickness,
+			placement.zw - 2 * style.border_thickness,
 			w_state.scroll_offset,
+			{}, //calculated when things are added
 			
 			hor_behavior,
 			ver_behavior,
@@ -755,8 +935,9 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			!(.allow_overflow in flags),
 			
 			0, //At what offset should new element be added
-			{}, //calculated when things are added
 		});
+		
+		append_command(s, Cmd_rect{{0,0,4,4}, .debug_rect, -1, .cold}); 
 	}
 	
 	save_state(s, uid, w_state);
@@ -967,15 +1148,7 @@ menu :: proc (s : ^State, label : string, options : []Menu_option, popout_dir : 
 }
 
 sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dynamic]int, dest : Maybe(Dest) = nil, user_id := 0, dont_touch := #caller_location) -> (res : string) {
-	call_cnt := s.originations[{dont_touch, user_id}];
-	s.originations[{dont_touch, user_id}] += 1;
-	
-	uid := Unique_id {
-		dont_touch,
-		call_cnt,
-		sub_prio,
-		user_id,
-	}
+	uid := make_uid(s, user_id, dont_touch, sub_prio);
 	
 	push_node(s, uid, true);
 	defer pop_node(s);
@@ -1007,6 +1180,9 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 	
 	if is_hover(s, placement) {
 		try_set_hot(s, uid);
+		if s.mouse_state == .pressed {
+			try_set_active(s, uid);
+		}
 	}
 	
 	gui_state : Display_state = .cold;
@@ -1016,7 +1192,7 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 	}
 	
 	append_command(s, Cmd_rect{placement, .menu_background, -1, gui_state});
-	append_command(s, Cmd_rect{placement, .menu_border, style.line_thickness, gui_state});
+	append_command(s, Cmd_rect{placement, .menu_border, style.border_thickness, gui_state});
 	
 	if label != "" {
 		padding := style.text_padding
@@ -1122,12 +1298,13 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 		defer pop_scissor(s);
 		
 		append_command(s, Cmd_rect{items_placement, .menu_item_background, -1, gui_state});
-		append_command(s, Cmd_rect{items_placement, .menu_item_background_border, style.line_thickness, gui_state});
+		append_command(s, Cmd_rect{items_placement, .menu_item_background_border, style.border_thickness, gui_state});
 		
 		push_panel(s, Panel{
 			items_placement.xy,
 			items_placement.zw, //the view size
 			0,	//if offset of the view
+			{}, //the size which there exists items/elements
 			
 			.left,
 			.top,
@@ -1136,7 +1313,6 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 			false,
 			
 			0, //At what offset should new element be added
-			{}, //the size which there exists items/elements
 		});
 		defer pop_panel(s);
 		
@@ -1181,7 +1357,7 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 					}
 					
 					append_command(s, Cmd_rect{sub_placement, .menu_item_front, -1, gui_state});
-					append_command(s, Cmd_rect{sub_placement, .menu_item_front_border, style.line_thickness, gui_state});
+					append_command(s, Cmd_rect{sub_placement, .menu_item_front_border, style.border_thickness, gui_state});
 					
 					if o != "" {
 						padding := style.text_padding

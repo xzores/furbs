@@ -96,7 +96,7 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 		in_padding = 0.005,
 		out_padding = 0.01,
 		button = lm.Button_style{
-			0.003, // line_thickness
+			0.003, // border_thickness
 			0.003, // text_padding
 			0.03, // text_size
 			false, // text_shrink_to_fit
@@ -105,13 +105,13 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 			{0.12, 0.04}, // size
 		},
 		checkbox = lm.Checkbox_style{
-			line_thickness = 0.003,
+			border_thickness = 0.003,
 			text_padding = 0.003,
 			text_size = 0.03,
 			size = {0.03, 0.03},
 		},
 		window = lm.Window_style{	
-			0.005,			//	line_thickness : f32,
+			0.005,			//	border_thickness : f32,
 			0.03,			//	top_bar_size : f32,
 			0.01,			//	title_padding : f32,
 			0.025,			//	title_size : f32,
@@ -124,7 +124,7 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 			0.035,				//length_padding
 		},
 		menu = lm.Menu_style{
-			0.002, // line_thickness
+			0.002, // border_thickness
 			0.003, // text_padding
 			0.02, // text_size
 			false, // text_shrink_to_fit
@@ -132,6 +132,10 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 			.mid, // text_ver
 			0.025, // size
 		},
+		split_panel = lm.Split_panel_style {
+			0.001, // border_thickness
+			0.005, //split thickness
+		}
 	});
 	
 	return s;
@@ -212,6 +216,10 @@ end :: proc(s : ^State) {
 							case .active:
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.55, 0.45, 0.55, 1});
 						}
+					
+					case .split_panel_splitter:
+						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						render.draw_quad_rect(c.rect * unit_size, 0, {0.55, 0.55, 0.55, 1});
 						
 					case .menu_background:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
@@ -301,7 +309,7 @@ end :: proc(s : ^State) {
 					
 					case .checkbox_border, .window_border, .button_border, .menu_border, .menu_item_background_border, .menu_item_front_border:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, false);
-						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.line_thickness * unit_size);
+						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.border_thickness * unit_size);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.25, 0.25, 0.25, 1});
 						
@@ -312,7 +320,7 @@ end :: proc(s : ^State) {
 						
 					case .window_collapse_button_up, .window_collapse_button_down, .window_collapse_button_left, .window_collapse_button_right:
 						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.line_thickness * unit_size);
+						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.border_thickness * unit_size);
 						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)c.roundness * unit_size);
 						
 						a, b, d : [2]f32;
@@ -387,17 +395,21 @@ checkbox :: lm.checkbox;
 begin_window :: lm.begin_window;
 end_window :: lm.end_window;
 menu :: lm.menu;
+begin_split_panel :: lm.begin_split_panel;
+next_split_panel :: lm.next_split_panel;
+end_split_panel :: lm.end_split_panel;
 
 /*
 checkbox :: proc (s : ^State, dest : Dest, value : ^bool, label := "") {
 	lm.checkbox(s, dest, value, label);
 }
 */
-Menu_bar_enum :: enum {
 
+Menu_bar_enum :: enum {
+	
 }
 
-Menu_bar_flags :: bit_set[Menu_bar_enum]
+Menu_bar_flags :: bit_set[Menu_bar_enum];
 
 menu_bar :: proc (s : ^State, menus : []Sub_menu, popout_hor : Hor_placement, popout_ver : Ver_placement, reverse_sort : bool = false, dest : Maybe(Dest) = nil, user_id := 0, dont_touch := #caller_location) {
 	
