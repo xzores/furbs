@@ -319,7 +319,7 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 			sub_size.y = procent * height;
 		}
 	
-		fmt.printf("cur_offset : %v\n", cur_offset);
+		fmt.printf("");
 		placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x , cur_offset.y}, sub_size);
 		
 		if dir == .horizontal {
@@ -474,8 +474,7 @@ Top_bar_location :: enum {
 }
 
 Window_state :: struct {
-	dest : Dest,
-	size : [2]f32,
+	placement : [4]f32,
 	drag_by_mouse : Maybe([2]f32), //relavtive to mouse position 
 	collapsed : bool,
 	flags : Window_falgs,
@@ -508,7 +507,7 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			top_bar_occupie = {style.top_bar_size, 0};
 			bar_cause_offset = {style.top_bar_size,0};
 	}
-	
+		
 	if (.no_top_bar in flags) {
 		top_bar_occupie = {};
 	}
@@ -528,9 +527,10 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		fmt.printf("parent.position : %v : %v\n", parent.position, parent.size);
 		
 		if _w == nil {
+			
+			
 			w_state = Window_state {
-				dest, 		//placement : [4]f32,
-				size,
+				first_placement, 		//placement : [4]f32,
 				nil,					//drag_by_mouse : Maybe([2]f32), //relavtive to mouse position 
 				.collapsed in flags,	//collapsed : bool,
 				flags,					//flags : Window_falgs,
@@ -542,6 +542,10 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		}
 		else  {
 			panic("The was not a window last frame");
+		}
+		
+		if !(.movable in flags) {
+			w_state.placement = first_placement;
 		}
 	}
 	w_state.flags = flags;
@@ -560,7 +564,7 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		append_hor = true;
 	}
 	
-	placement := place_in_parent(s, parent.position, parent.size, parent.scroll_ofset, w_state.dest, w_state.size);;
+	placement := place_in_parent(s, parent.position, parent.size, parent.scroll_ofset, {.left, .bottom, w_state.placement.x, w_state.placement.y}, w_state.placement.zw);;
 	//expand_virtual_size(s, placement);
 	
 	if !w_state.collapsed {
@@ -880,7 +884,7 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			}
 		}
 		
-		new_placement := placement;
+		new_placement := w_state.placement;
 		
 		new_placement.zw += resize;
 		
@@ -893,15 +897,13 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		
 		if new_placement.w < min_size.y {
 			if move.y != 0 {
-				move.y += new_placement.w - min_size.y;
+				move.y += new_placement.w - min_size.y
 			}
-			new_placement.w = min_size.y;
+			new_placement.w = min_size.y
 		}
 		
 		new_placement.xy += move;
 		
-		//placement to dest
-		placement_to_dest.
 		w_state.placement = new_placement; 
 		
 	}
