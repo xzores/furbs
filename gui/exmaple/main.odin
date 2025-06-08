@@ -12,7 +12,7 @@ import "../../utils"
 entry :: proc () {
 	
 	window_desc : render.Window_desc = {
-		width = 1000,
+		width = 1400,
 		height = 1000,
 		title = "my gui window",
 		resize_behavior = .allow_resize,
@@ -48,15 +48,19 @@ entry :: proc () {
 				gui.begin(s);
 					
 					//inside render loop, begin with two versions of panel_a, they share a game state, so their intacting with one will also interact with the ohter (i think that might be how i want it.)
-					gui.begin_split_panel(s, {math.sin(render.elapsed_time()) + 1, 0.77, 0.2}, .vertical, {.no_background, .no_border});
+					gui.begin_split_panel(s, {0.03, 0.77, 0.2}, .vertical, {});
 					
 					gui.next_split_panel(s);
-					
-						if gui.begin_window(s, {0.5, 0.5}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .mid, 0, 0}, "Hello world", .bottom) {
+						
+						popout_dir : gui.Menu_popout_dir;
+						popout_dir = cast(gui.Menu_popout_dir)(int(render.elapsed_time()) %% len(gui.Menu_popout_dir));
+						gui.menu(s, "hover me", {"option a", "option b", "option c"}, popout_dir, false, gui.Dest{.left, .top, 0.1, 0.1});
+											
+						if gui.begin_window(s, {0.5, 0.5}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.mid, .mid, 0, 0}, "Hello world", .top) {
 							gui.checkbox(s, &checkbox_state, dest = gui.Dest{.left, .bottom, 0.01, 0.01}, label = "Enable feature y");
 							gui.checkbox(s, &checkbox_state, gui.Dest{.mid, .mid, 0, 0.4}, label = "Something one");
 							
-							if gui.begin_window(s, {0.2, 0.2}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable, .center_title, .append_horizontally}, gui.Dest{.left, .bottom, 0, 0}, "1234", .top) {
+							if gui.begin_window(s, {0.2, 0.2}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable, .center_title, .append_horizontally}, gui.Dest{.left, .mid, 0, 0}, "1234", .top) {
 								gui.checkbox(s, &checkbox_state, label = "Enable feature x");
 								gui.spacer(s, 0.02);
 								gui.checkbox(s, &checkbox_state, label = "Something two");
@@ -74,7 +78,7 @@ entry :: proc () {
 						}
 						gui.end_window(s);
 						
-						if gui.begin_window(s, {0.4, 0.4}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .bottom, 0.55, 0.3}, "asfga", .left) {
+						if gui.begin_window(s, {0.4, 0.4}, {.scaleable, .ver_scrollbar, .hor_scrollbar, .movable, .collapsable}, gui.Dest{.left, .top, 0.05, 0.3}, "asfga", .left) {
 							gui.checkbox(s, &checkbox_state, label = "very very very very very very very very very long");
 							for i in 0..<100 {
 								gui.checkbox(s, &checkbox_state, label = fmt.tprintf("Text thing %v", i));
@@ -84,7 +88,7 @@ entry :: proc () {
 						gui.end_window(s);
 						
 						if checkbox_state {
-							gui.begin_window(s, {0.2, 0.2}, {}, gui.Dest{.mid, .top, math.sin(render.elapsed_time() / 2) / 4, 0}, "", .top);
+							gui.begin_window(s, {0.2, 0.2}, {}, gui.Dest{.mid, .bottom, math.sin(render.elapsed_time() / 2) / 4, 0}, "", .top);
 								gui.checkbox(s, &checkbox_state, label = "Something 2");
 								res := gui.menu(s, "Something 3", {"option a", "option b", "option c"}, .right_center);
 								if res != "" {
@@ -93,7 +97,7 @@ entry :: proc () {
 							gui.end_window(s);
 						}
 						
-						if gui.begin_window(s, {0.3, 0.3}, {.no_top_bar, .hor_scrollbar, .ver_scrollbar, .append_horizontally}, gui.Dest{.left, .top, 0.04, 0.01}, "") {
+						if gui.begin_window(s, {0.3, 0.3}, {.no_top_bar, .hor_scrollbar, .ver_scrollbar, .append_horizontally, .scaleable}, gui.Dest{.right, .mid, 0.04, 0.01}, "") {
 							
 							for i in 0..<10 {
 								res :=  gui.menu(s, fmt.tprintf("Something %v", i), {"option a", "option b", 
@@ -124,17 +128,14 @@ entry :: proc () {
 							gui.end_window(s);
 						}
 						
-						popout_dir : gui.Menu_popout_dir;
-						popout_dir = cast(gui.Menu_popout_dir)(int(render.elapsed_time()) %% len(gui.Menu_popout_dir));
-						gui.menu(s, "hover me", {"option a", "option b", "option c"}, popout_dir, false, gui.Dest{.mid, .mid, 0, 0});
-											
 					gui.next_split_panel(s);
 						
 						//inside render loop, begin with two versions of panel_a, they share a game state, so their intacting with one will also interact with the ohter (i think that might be how i want it.)
-						gui.begin_split_panel(s, {1, 1}, .horizontal, {});
+						gui.begin_split_panel(s, {2, 1}, .horizontal, {.allow_resize});
 							gui.checkbox(s, &checkbox_state, label = "Inside split panel");
 						gui.next_split_panel(s);
 							gui.checkbox(s, &checkbox_state, label = "Inside split panel2");
+						
 						gui.end_split_panel(s);
 						
 					gui.end_split_panel(s);
@@ -149,13 +150,6 @@ entry :: proc () {
 	}
 	
 }
-
-
-
-
-
-
-
 
 main :: proc () {
 	

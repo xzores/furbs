@@ -128,13 +128,9 @@ Command :: union {
 ///////////////////////////////////////////////////////////////////////////////////////
 
 Panel :: struct {
-	//objs : map[runtime.Source_Code_Location]Object
-	//transform : matrix[3,3]f32, //TO greneral
-	//uid : Unique_id,
-	
 	position : [2]f32, //in relation to the parent panel
 	size : [2]f32, //the view size
-	scroll_ofset : [2]f32,	//if offset of the view
+	scroll_offset : [2]f32,
 	virtual_size : [2]f32, //the size which there exists items/elements
 	
 	hor_behavior : Hor_placement,
@@ -142,8 +138,11 @@ Panel :: struct {
 	append_hor : bool,	//Should we append new elements vertically or horizontally
 	
 	use_scissor : bool, 
+	enable_hor_scroll : bool,
+	enable_ver_scroll : bool,
 	
 	current_offset : f32, //At what offset should new element be added
+	uid : Maybe(Unique_id),
 }
 
 Button_style :: struct {
@@ -272,6 +271,7 @@ State :: struct {
 	next_hot : Unique_id,
 	next_active : Unique_id,
 	to_promote : ^Node, //Almost the same as to next_active, but this one has 
+	overlay_node : ^Node,
 	
 	highest_priority : u32,
 	prio_cnt : u32,
@@ -296,6 +296,8 @@ State :: struct {
 
 Element_state :: union {
 	Window_state,
+	Splitter_state,
+	Panel_state,
 }
 
 Text_width_f :: #type proc (user_data : rawptr, size : f32, str: string) -> (width : f32);
@@ -320,6 +322,7 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 		{},
 		{},
 		{},
+		nil,
 		0,
 		0,
 		nil,
@@ -351,6 +354,7 @@ destroy :: proc(s : ^State) {
 	delete(s.style_stack);
 	delete(s.panel_stack);
 	delete(s.scissor_stack);
+	delete(s.split_panel_stack);
 	delete(s.uid_to_node);
 	delete(s.priorities);
 	delete(s.originations);
@@ -366,7 +370,7 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		0, //For elements with many interactive components
 	}
 	
-	push_node(s, uid, false, dont_touch);
+	push_node(s, uid, .default, dont_touch);
 	
 	panel := Panel{
 		{0,0},
@@ -379,13 +383,14 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		false,
 		
 		true,
+		false,
+		false,
 		
 		0,
+		nil,
 	};
 	
 	push_panel(s, panel);
-	
-	s.root = s.current_node;
 	
 	for uid, node in s.uid_to_node {
 		node.refound = false;
@@ -446,7 +451,6 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 			}
 			
 			promote(s, to_promote.parent);
-			
 		}
 		
 		promote(s, s.to_promote);
@@ -477,7 +481,12 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 						append(commands, val);
 					}
 					case ^Node: {
-						depth_first_assign_priority(s, val, commands, priority);
+						if val == s.overlay_node {
+							//wait to draw until later
+						}
+						else {
+							depth_first_assign_priority(s, val, commands, priority);
+						}
 					}
 					case Insert_subnode:{
 						sub_node : ^Node;
@@ -499,10 +508,14 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 	}
 	
 	depth_first_assign_priority(s, s.root, &commands, &priority);
+	if s.overlay_node != nil {
+		depth_first_assign_priority(s, s.overlay_node, &commands, &priority);
+	}
 	
 	pop_node(s);
 	
 	s.root = nil;
+	s.overlay_node = nil;
 	
 	assert(s.current_node == nil, "not all nodes where popped");
 	
@@ -540,13 +553,27 @@ push_scissor :: proc(s : ^State, scissor : Cmd_scissor) {
 	
 	//make sure the scissor stays inside the current one
 	//scissor_stack is x, y, width, height
+	dx : f32 = 0;
+	dy : f32 = 0;
+	
 	if len(s.scissor_stack) >= 1 {
 		r := s.scissor_stack[len(s.scissor_stack)-1].area;
-		scissor.area.x = math.clamp(scissor.area.x, r.x, r.x + r.z);
-		scissor.area.y = math.clamp(scissor.area.y, r.y, r.y + r.w);
-		scissor.area.z = math.min(scissor.area.z, r.x + r.z - scissor.area.x);
-		scissor.area.w = math.min(scissor.area.w, r.y + r.w - scissor.area.y);
+		
+		if scissor.area.x < r.x {
+			dx = r.x - scissor.area.x;
+			scissor.area.x = r.x;
+		}
+		if scissor.area.y < r.y {
+			dy = r.y - scissor.area.y;
+			scissor.area.y = r.y;
+		}
+		
+		scissor.area.z = math.min(scissor.area.z - dx, r.x + r.z - scissor.area.x);
+		scissor.area.w = math.min(scissor.area.w - dy, r.y + r.w - scissor.area.y);
 	}
+	
+	scissor.area.z = math.max(scissor.area.z, 0);
+	scissor.area.w = math.max(scissor.area.w, 0);
 	
 	append(&s.scissor_stack, scissor);
 	append_command(s, scissor);
@@ -560,27 +587,189 @@ pop_scissor :: proc(s : ^State) {
 	}
 }
 
+Panel_state :: struct {
+	scroll_offset : [2]f32,
+}
+
+PANEL_SUBPRIORITY :: 10_000;
+
 push_panel :: proc (s : ^State, panel : Panel, loc := #caller_location) {
+	panel := panel;
 	
+	uid : Unique_id = s.current_node.uid;
+	uid.special_number = PANEL_SUBPRIORITY;
+	if u, ok := panel.uid.?; ok {
+		uid = u;
+	}
+	
+	p_state : Panel_state;
+	
+	{
+		_p := get_state(s, uid);
+		
+		if _p == nil {
+			
+			p_state = Panel_state {
+				panel.scroll_offset,
+			};
+		}
+		else if last_panel, ok := _p.(Panel_state); ok {
+			p_state = last_panel;
+		}
+		else  {
+			panic("The was not a window last frame");
+		}
+	}
+	
+	if panel.enable_hor_scroll {
+		panel.scroll_offset.x = p_state.scroll_offset.x;
+	}
+	if panel.enable_ver_scroll {
+		panel.scroll_offset.y = p_state.scroll_offset.y;
+	}
+	
+	panel.uid = uid;
 	append(&s.panel_stack, panel);
-	
 	increase_offset(s, get_style(s).out_padding);
 	
 	if panel.use_scissor {
 		r := Cmd_scissor{{panel.position.x, panel.position.y, panel.size.x, panel.size.y}, panel.use_scissor};
 		push_scissor(s, r);
 	}
+	
+	save_state(s, uid, p_state);
 }
 
 pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
 	
 	panel := s.panel_stack[len(s.panel_stack) - 1]
 	
+	{
+		scroll_style := get_scroll_style(s);
+		
+		handle_scroll_bar :: proc (s : ^State, mouse_pos : f32, scroll_delta : f32, virtual_size, size : f32, scroll_uid : Unique_id, scroll_height : f32, placement : [4]f32, scroll_placement_coord : f32,
+									 scroll_placement_height : f32, scroll_offset : ^f32, reverse, reverse_scroll: bool) -> (scroll_procent : f32, active_height : f32, display_state : Display_state) {
+			
+			if is_hover(s, placement) {
+				try_set_hot(s, scroll_uid);
+				if s.mouse_state == .pressed {
+					try_set_active(s, scroll_uid);
+				}
+				if s.mouse_state == .down && s.hot == scroll_uid {
+					try_set_active(s, scroll_uid);
+				}
+			}
+			if s.mouse_state == .down && s.active == scroll_uid {
+				try_set_active(s, scroll_uid);
+			}
+			
+			procentage_of_view_in_virtual : f32 = size / virtual_size;
+			active_height = scroll_height * procentage_of_view_in_virtual;
+			
+			display_state = .cold;
+			
+			m : f32= -1
+			if reverse { 
+				m = 1;
+			}
+			
+			scroll_procent = m * scroll_offset^ / (virtual_size - size);
+			
+			if s.hot == scroll_uid {
+				display_state = .hot;
+			}
+			if s.active == scroll_uid {
+				display_state = .active;
+				scroll_procent = math.remap_clamped(mouse_pos, scroll_placement_coord + active_height / 2, scroll_placement_coord + scroll_placement_height - active_height / 2, 0, 1);
+				
+				if reverse {
+					scroll_procent = 1 - scroll_procent;
+				}
+			}
+			
+			m_scroll : f32= -1
+			if reverse_scroll { 
+				m = 1;
+			}
+			
+			scroll_procent += m_scroll * scroll_delta / (virtual_size - size);
+			scroll_procent = math.clamp(scroll_procent, 0, 1);
+			
+			scroll_offset^ = m * scroll_procent * (virtual_size - size);
+			
+			return;
+		}
+		
+		scroll_delta : [2]f32;
+		
+		//TODO there can be things inside things that scroll, we do not handle that yet.
+		if is_hot_path(s, s.current_node) {
+			scroll_delta = s.scroll_delta;
+		}
+		
+		if panel.enable_hor_scroll && panel.virtual_size.x > panel.size.x {
+			scroll_uid := s.current_node.uid;
+			scroll_uid.sub_priotity = PANEL_SUBPRIORITY + 1;
+			
+			//the horizontal scrollbar
+			scroll_height := panel.size.x - 2 * scroll_style.length_padding;
+			scroll_placement := place_in_parent(s, panel.position, panel.size, 0, Dest{.mid, .bottom, 0, scroll_style.padding.y}, [2]f32{scroll_height, scroll_style.bar_bg_thickness});
+			
+			sd : f32 = scroll_delta.x;
+			if s.hot == scroll_uid {
+				sd = s.scroll_delta.x;
+				sd += s.scroll_delta.y;
+			}
+			
+			push_node(s, scroll_uid, .default);
+			defer pop_node(s);
+			
+			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.x, sd, panel.virtual_size.x, panel.size.x, scroll_uid, scroll_height, scroll_placement, scroll_placement.x, scroll_placement.z, &panel.scroll_offset.x, false, false);
+			
+			view_scroll_placement := place_in_parent(s, scroll_placement.xy, scroll_placement.zw, 0, Dest{.left, .mid, scroll_procent * (scroll_height - active_height), 0}, [2]f32{active_height, scroll_style.bar_front_thickness});
+			
+			append_command(s, Cmd_rect{scroll_placement, .scrollbar_background, -1, display_state});
+			append_command(s, Cmd_rect{view_scroll_placement, .scrollbar_front, -1, display_state});
+		}
+		if panel.virtual_size.x < panel.size.x {
+			panel.scroll_offset.x = 0;
+		}
+		
+		if panel.enable_ver_scroll && panel.virtual_size.y > panel.size.y {
+			scroll_uid := s.current_node.uid;
+			scroll_uid.sub_priotity = PANEL_SUBPRIORITY + 2;
+			
+			sd : f32 = scroll_delta.y;
+			if s.hot == scroll_uid {
+				sd += s.scroll_delta.y;
+			}
+			
+			//the vertical scrollbar
+			scroll_height := panel.size.y - 2 * scroll_style.length_padding;
+			scroll_placement := place_in_parent(s, panel.position, panel.size, 0, Dest{.right, .mid, scroll_style.padding.x, 0}, [2]f32{scroll_style.bar_bg_thickness, scroll_height});
+			
+			push_node(s, scroll_uid, .default);
+			defer pop_node(s);
+			
+			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.y, sd, panel.virtual_size.y, panel.size.y, scroll_uid, scroll_height, scroll_placement, scroll_placement.y, scroll_placement.w, &panel.scroll_offset.y, true, true);
+			
+			view_scroll_placement := place_in_parent(s, scroll_placement.xy, scroll_placement.zw, 0, Dest{.mid, .top, 0, scroll_procent * (scroll_height - active_height)}, [2]f32{scroll_style.bar_front_thickness, active_height});
+			
+			append_command(s, Cmd_rect{scroll_placement, .scrollbar_background, -1, display_state});
+			append_command(s, Cmd_rect{view_scroll_placement, .scrollbar_front, -1, display_state});
+		}
+		if panel.virtual_size.y < panel.size.y {
+			panel.scroll_offset.y = 0;
+		}
+	}
+	
 	if panel.use_scissor {
 		pop_scissor(s);
 	}
 	pop(&s.panel_stack, loc);
-		
+	
+	save_state(s, panel.uid.(Unique_id), Panel_state{panel.scroll_offset});
+	
 	return panel;
 }
 
@@ -594,7 +783,13 @@ set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
 	s.next_cursor = cursor_type;
 }
 
-push_node :: proc (s : ^State, uid : Unique_id, sortable : bool, loc := #caller_location) {
+Node_mode :: enum {
+	default,
+	sortable,
+	overlay,
+}
+
+push_node :: proc (s : ^State, uid : Unique_id, mode : Node_mode, loc := #caller_location) {
 	
 	assert(uid != {});
 	
@@ -622,14 +817,20 @@ push_node :: proc (s : ^State, uid : Unique_id, sortable : bool, loc := #caller_
 	}
 	else {
 		i, found := slice.linear_search(s.current_node.sub_nodes[:], node);
-		if sortable {
-			if !found {
-				append(&s.current_node.sub_nodes, node);
-			}
-			append(&s.current_node.sub_commands, Insert_subnode{}); // this should happen every frame as the sub_commands gets cleared.
-		}
-		else {
-			append(&s.current_node.sub_commands, node); // this should happen every frame as the sub_commands gets cleared.
+		
+		switch mode {
+			case .sortable:
+				if !found {
+					append(&s.current_node.sub_nodes, node);
+				}
+				append(&s.current_node.sub_commands, Insert_subnode{}); // this should happen every frame as the sub_commands gets cleared.
+		
+			case .overlay:
+				s.overlay_node = node;
+				append(&s.current_node.sub_commands, node); // this should happen every frame as the sub_commands gets cleared.
+				
+			case .default:
+				append(&s.current_node.sub_commands, node); // this should happen every frame as the sub_commands gets cleared.
 		}
 	}
 	
@@ -654,7 +855,7 @@ try_set_hot :: proc (s : ^State, uid : Unique_id) {
 	
 	if s.active == uid {
 		s.next_hot = uid;
-		s.highest_priority = max(u32);
+		s.highest_priority = max(u32) / 4 + cur_prio;
 		return;
 	}
 	
@@ -677,7 +878,7 @@ try_set_active :: proc (s : ^State, uid : Unique_id) {
 	if s.active == uid {
 		s.next_active = uid;
 		s.to_promote = s.current_node;
-		s.highest_priority = max(u32);
+		s.highest_priority = max(u32) / 4;
 		return;
 	}
 	
@@ -698,7 +899,13 @@ get_next_priority :: proc (s : ^State) -> u32 {
 	}
 	s.prio_cnt += 1;
 	
-	return (cast(u32)cur_prio << 16) + s.prio_cnt;
+	res := (cast(u32)cur_prio << 16) + s.prio_cnt;
+	
+	if s.current_node == s.overlay_node {
+		res += max(u32) / 4
+	}
+	
+	return res;
 }
 
 get_style :: proc (s : ^State) -> Style {
@@ -806,6 +1013,7 @@ place_in_parent :: proc (s : ^State, parent_pos : [2]f32, parent_size : [2]f32, 
 	return {pos.x, pos.y, size.x, size.y};
 }
 
+@(require_results)
 is_hover :: proc (s : ^State, placement : [4]f32) -> bool {
 	
 	if len(s.scissor_stack) != 0 {
@@ -822,6 +1030,7 @@ is_hover :: proc (s : ^State, placement : [4]f32) -> bool {
 }
 
 //TODO, we want a is_this_the_current_scoll_item besides is_hot_path
+@(require_results)
 is_hot_path :: proc (s : ^State, node : ^Node) -> bool {
 	
 	if s.hot == node.uid {
@@ -862,6 +1071,7 @@ is_hot_path :: proc (s : ^State, node : ^Node) -> bool {
 	return false;
 }
 
+@(require_results)
 make_uid :: proc (s : ^State, user_id : int, dont_touch : runtime.Source_Code_Location, sub_prio := 0) -> Unique_id {
 	call_cnt := s.originations[{dont_touch, user_id}];
 	s.originations[{dont_touch, user_id}] += 1;
@@ -879,4 +1089,91 @@ make_uid :: proc (s : ^State, user_id : int, dont_touch : runtime.Source_Code_Lo
 	}
 	
 	return uid;
+}
+
+@(require_results)
+move_dest :: proc(dest: Dest, dx, dy: f32) -> Dest {
+	new_dest := dest;
+
+	// Horizontal adjustment
+	switch dest.hor {
+		case .left, .mid:
+			new_dest.offset_x += dx;
+		case .right:
+			new_dest.offset_x -= dx;
+	}
+
+	// Vertical adjustment
+	switch dest.ver {
+		case .bottom, .mid:
+			new_dest.offset_y += dy;
+		case .top:
+			new_dest.offset_y -= dy;
+	}
+
+	return new_dest;
+}
+
+Resize_edge :: enum {
+	left,
+	right,
+	top,
+	bottom,
+}
+
+resize :: proc(dest: Dest, size: [2]f32, delta: f32, edge : Resize_edge) -> (Dest, [2]f32) {
+	new_dest := dest;
+	new_size := size;
+	
+	switch edge {
+		case .left:
+			switch dest.hor {
+				case .left:
+					new_size.x -= delta;
+					new_dest.offset_x += delta;
+				case .mid:
+					new_size.x -= delta;
+					new_dest.offset_x += delta / 2;
+				case .right:
+					new_size.x -= delta;
+			}
+		
+		case .right:
+			switch dest.hor {
+				case .left:
+					new_size.x += delta;
+				case .mid:
+					new_size.x += delta;
+					new_dest.offset_x += delta / 2;
+				case .right:
+					new_size.x += delta;
+					new_dest.offset_x -= delta;
+			}
+	
+		case .top:
+			switch dest.ver {
+				case .bottom:
+					new_size.y += delta;
+				case .mid:
+					new_size.y += delta;
+					new_dest.offset_y += delta / 2;
+				case .top:
+					new_size.y += delta;
+					new_dest.offset_y -= delta;
+			}
+		
+		case .bottom:
+			switch dest.ver {
+				case .bottom:
+					new_size.y -= delta;
+					new_dest.offset_y += delta;
+				case .mid:
+					new_size.y -= delta;
+					new_dest.offset_y += delta / 2;
+				case .top:
+					new_size.y -= delta;
+			}
+	}
+	
+	return new_dest, new_size;
 }

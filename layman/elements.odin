@@ -41,7 +41,7 @@ spacer :: proc (s : ^State, space : f32) {
 button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0, dont_touch := #caller_location) -> (value : bool) {	
 	uid := make_uid(s, user_id, dont_touch);
 	
-	push_node(s, uid, false);
+	push_node(s, uid, .default);
 	defer pop_node(s);
 	
 	panel := get_current_panel(s);
@@ -67,7 +67,7 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 	size := style.size;
 	total_size += size;
 	
-	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_ofset, _dest, size);
+	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_offset, _dest, size);
 	
 	if is_hover(s, placement) {
 		try_set_hot(s, uid);
@@ -125,7 +125,7 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := "", user_id := 0, dont_touch := #caller_location) -> bool {	
 	uid := make_uid(s, user_id, dont_touch);
 	
-	push_node(s, uid, false);
+	push_node(s, uid, .default);
 	defer pop_node(s);
 	
 	panel := get_current_panel(s);
@@ -149,7 +149,7 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 	style := get_checkbox_style(s);
 	size := style.size;
 	
-	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_ofset, _dest, size);
+	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_offset, _dest, size);
 	
 	if is_hover(s, placement) {
 		try_set_hot(s, uid);
@@ -227,8 +227,6 @@ begin_container :: proc (s : ^State, placement : [4]f32, user_id := 0, dont_touc
 	
 	parent := s.panel_stack[len(s.panel_stack) - 1];
 	
-	//assert(parent_node_is_split_panel, "You must do a begin_split_panel before calling next_panel");
-	
 	push_node(s, uid, false);
 	
 	push_panel(s, Panel {
@@ -274,9 +272,7 @@ Split_dir :: enum {
 begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : Split_panel_falgs, user_id := 0, dont_touch := #caller_location) {
 	uid := make_uid(s, user_id, dont_touch);
 	
-	parent := s.panel_stack[len(s.panel_stack) - 1]
-	
-	push_node(s, uid, false);
+	push_node(s, uid, .default);
 	
 	style := get_split_panel_style(s);
 	
@@ -286,7 +282,41 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 		total_ratios += r;
 	}
 	
-	cur_offset : [2]f32 = {0,0};
+	cur_offset : [2]f32 = {0, 0};
+	
+	parent := s.panel_stack[len(s.panel_stack) - 1]
+	s_state : Splitter_state;
+	
+	//the first time the window is found
+	{
+		_s := get_state(s, uid);
+		if _s == nil {
+			
+			procentages := make([dynamic]f32, len(ratios), len(ratios));
+			
+			for &p, i in procentages {
+				p = ratios[i] / total_ratios;
+			}
+			
+			s_state = Splitter_state {
+				procentages,
+				flags,
+			};
+		}
+		else if last_splitter, ok := _s.(Splitter_state); ok {
+			s_state = last_splitter;
+		}
+		else  {
+			panic("The was not a window last frame");
+		}
+		
+		if !(.allow_resize in flags) {
+			for &p, i in s_state.procentages {
+				p = ratios[i] / total_ratios;
+			}
+		}
+	}
+	s_state.flags = flags;	
 	
 	width := parent.size.x;
 	height := parent.size.y;
@@ -298,15 +328,13 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 		}
 	}
 	
-	panels := make([dynamic]Panel);
+	panels := make([dynamic]Panel, context.temp_allocator);
 	
-	for r in ratios {
-		
-		procent := r / total_ratios;
+	for procent, i in s_state.procentages {
 		
 		placement : [4]f32;
 		sub_size := [2]f32{width, height};
-		ver : Ver_placement = .bottom;
+		ver : Ver_placement = .top;
 		
 		if .bottom_to_top in flags {
 			ver = .bottom
@@ -318,8 +346,104 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 		else {
 			sub_size.y = procent * height;
 		}
+		
+		placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x , cur_offset.y}, sub_size);
+		
+		if dir == .horizontal {
+			cur_offset.x += procent * width;
+		}
+		else {
+			cur_offset.y += procent * height;
+		}
+		
+		splitter_uid := make_uid(s, user_id, dont_touch, 1);
+		splitter_placement : [4]f32; 
+		
+		if dir == .horizontal {
+			splitter_placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x, cur_offset.y}, {style.splitter_thickness, height});
+		}
+		else {
+			splitter_placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x, cur_offset.y}, {width, style.splitter_thickness});
+		}
+		
+		if .allow_resize in flags {
+			
+			if is_hover(s, splitter_placement) {
+				try_set_hot(s, splitter_uid);
+				if s.mouse_state == .pressed {
+					try_set_active(s, splitter_uid);
+				}
+				
+				if dir == .horizontal {
+					set_mouse_cursor(s, .scale_horizontal);
+					//TODO make a split_panel state, which stores procentage of panel which is accesiable.
+				}
+				else {
+					set_mouse_cursor(s, .scale_verical);
+				}
+			}
+			
+			if current_active(s) == splitter_uid {
+				if s.mouse_state == .down {
+					try_set_active(s, splitter_uid);
+				}
+				
+				if dir == .horizontal {
+					set_mouse_cursor(s, .scale_horizontal);
+					delta := s.mouse_pos.x - splitter_placement.x - splitter_placement.z;
+					//turn into procentage
+					new_procentage := procent + (delta / parent.size.x);
+					next_new_procentage := s_state.procentages[i + 1] - (delta / parent.size.x);
+					s_state.procentages[i] = new_procentage;
+					s_state.procentages[i+1] = next_new_procentage;
+				}
+				else {
+					set_mouse_cursor(s, .scale_verical);
+					delta := s.mouse_pos.y - splitter_placement.y - splitter_placement.w;
+					//turn into procentage
+					new_procentage := procent - (delta / parent.size.y);
+					next_new_procentage := s_state.procentages[i + 1] + (delta / parent.size.y);
+					s_state.procentages[i] = new_procentage;
+					s_state.procentages[i+1] = next_new_procentage;
+				}
+			}
+		}
+		
+	}
 	
-		fmt.printf("");
+	cur_offset = {0, 0};
+	
+	total_procentage : f32;
+	
+	for p in s_state.procentages {
+		total_procentage += p;
+	}
+	
+	for &p, i in s_state.procentages {
+		p = p / total_procentage
+	}
+	
+	for &p, i in s_state.procentages {
+		p = math.clamp(p, 0.01, 0.99);
+	}
+	
+	for procent, i in s_state.procentages {
+		
+		placement : [4]f32;
+		sub_size := [2]f32{width, height};
+		ver : Ver_placement = .top;
+		
+		if .bottom_to_top in flags {
+			ver = .bottom
+		}
+		
+		if dir == .horizontal {
+			sub_size.x = procent * width;
+		}
+		else {
+			sub_size.y = procent * height;
+		}
+		
 		placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x , cur_offset.y}, sub_size);
 		
 		if dir == .horizontal {
@@ -347,20 +471,6 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 			splitter_placement = place_in_parent(s, parent.position, parent.size, {}, Dest{.left, ver, cur_offset.x, cur_offset.y}, {width, style.splitter_thickness});
 		}
 		
-		if is_hover(s, splitter_placement) {
-			try_set_hot(s, splitter_uid);
-			if s.mouse_state == .pressed {
-				try_set_active(s, splitter_uid);
-			}
-			
-			if dir == .horizontal {
-				set_mouse_cursor(s, .scale_horizontal);
-			}
-			else {
-				set_mouse_cursor(s, .scale_verical);
-			}
-		}
-		
 		append_command(s, Cmd_rect{splitter_placement, .split_panel_splitter, style.splitter_thickness, .cold}); 
 		
 		if dir == .horizontal {
@@ -379,9 +489,14 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 			ver, //ver_behavior
 			false, //append_hor
 			true, //use_scissor
+			true, //scroll_hor
+			true, //scroll_ver
 			0, //current_offset
+			nil, //uid
 		});
 	}
+	
+	save_state(s, uid, s_state);
 	
 	uid.sub_priotity = 100;
 	append(&s.split_panel_stack, Split_panel {
@@ -395,9 +510,9 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 }
 
 //move to next panel
-next_split_panel :: proc (s : ^State, is_first := false) {
+next_split_panel :: proc (s : ^State, keep_false := false) {
 	
-	if !is_first {
+	if !keep_false {
 		pop_panel(s);
 		pop_node(s);
 	}
@@ -407,10 +522,9 @@ next_split_panel :: proc (s : ^State, is_first := false) {
 	sp := &s.split_panel_stack[len(s.split_panel_stack) - 1];
 	uid := sp.uid;
 	uid.sub_priotity += sp.next_panel + 1;
-
+	
+	push_node(s, uid, .default);
 	push_panel(s, sp.panels[sp.next_panel]);
-	fmt.printf("sp.panels[sp.next_panel] : %v\n", sp.panels[sp.next_panel]);
-	push_node(s, uid, false);
 	sp.next_panel += 1;
 	
 }
@@ -453,8 +567,8 @@ Window_falgs_enum :: enum {
 	collapsable,
 	
 	//Scrollbar
-	ver_scrollbar,
 	hor_scrollbar,
+	ver_scrollbar,
 	scroll_auto_hide, //TODO
 	
 	//Dont allow use the interact with it or any sub elements.
@@ -474,17 +588,22 @@ Top_bar_location :: enum {
 }
 
 Window_state :: struct {
-	placement : [4]f32,
+	dest : Dest,
+	size : [2]f32,
 	drag_by_mouse : Maybe([2]f32), //relavtive to mouse position 
 	collapsed : bool,
 	flags : Window_falgs,
-	scroll_offset : [2]f32,
+}
+
+Splitter_state :: struct {
+	procentages : [dynamic]f32,
+	flags : Split_panel_falgs,
 }
 
 begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : Dest, title := "", top_bar_loc := Top_bar_location.top, user_id := 0, dont_touch := #caller_location) -> bool {
 	uid := make_uid(s, user_id, dont_touch);
 	
-	push_node(s, uid, true);
+	push_node(s, uid, .sortable);
 	
 	gstyle := get_style(s);
 	style := get_window_style(s);
@@ -519,22 +638,19 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 	{
 		_w := get_state(s, uid);
 		
-		first_placement := place_in_parent(s, parent.position, parent.size, parent.scroll_ofset, dest, size);
+		first_placement := place_in_parent(s, parent.position, parent.size, parent.scroll_offset, dest, size);
 		
 		first_placement.xy += bar_cause_offset
 		first_placement.zw -= top_bar_occupie
 		
-		fmt.printf("parent.position : %v : %v\n", parent.position, parent.size);
-		
 		if _w == nil {
 			
-			
 			w_state = Window_state {
-				first_placement, 		//placement : [4]f32,
+				dest,
+				size,
 				nil,					//drag_by_mouse : Maybe([2]f32), //relavtive to mouse position 
 				.collapsed in flags,	//collapsed : bool,
 				flags,					//flags : Window_falgs,
-				{0,0},					//scroll_offset : [2]f32,
 			};
 		}
 		else if last_window, ok := _w.(Window_state); ok {
@@ -544,8 +660,8 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			panic("The was not a window last frame");
 		}
 		
-		if !(.movable in flags) {
-			w_state.placement = first_placement;
+		if !(.movable in flags) && !(.scaleable in flags) {
+			w_state.dest = dest;
 		}
 	}
 	w_state.flags = flags;
@@ -564,7 +680,7 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		append_hor = true;
 	}
 	
-	placement := place_in_parent(s, parent.position, parent.size, parent.scroll_ofset, {.left, .bottom, w_state.placement.x, w_state.placement.y}, w_state.placement.zw);;
+	placement := place_in_parent(s, parent.position, parent.size, parent.scroll_offset, w_state.dest, w_state.size);
 	//expand_virtual_size(s, placement);
 	
 	if !w_state.collapsed {
@@ -626,15 +742,18 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			}
 			
 			if current_active(s) == top_uid {
-				w_state.drag_by_mouse = top_bar_placement.xy - s.mouse_pos;
+				if w_state.drag_by_mouse == nil {
+					w_state.drag_by_mouse = s.mouse_pos - placement.xy;
+				}
 				set_mouse_cursor(s, .draging);
 			}
 			else {
 				w_state.drag_by_mouse = nil;
 			}
-		
+			
 			if drag, ok := w_state.drag_by_mouse.([2]f32); ok {
-				w_state.placement.xy += s.mouse_delta;
+				delta := (s.mouse_pos - placement.xy) - drag
+				w_state.dest = move_dest(w_state.dest, delta.x, delta.y);
 			}
 		}
 		
@@ -776,9 +895,9 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 	if .scaleable in flags {
 		
 		move : [2]f32;
-		resize : [2]f32;
+		delta_size : [2]f32;
 		
-		if top_bar_loc != .top {
+		if top_bar_loc != .top || (.no_top_bar in flags) {
 			drag_uid := uid;
 			drag_uid.sub_priotity = 3;
 			
@@ -800,11 +919,11 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			
 			if current_active(s) == drag_uid {
 				delta := s.mouse_pos.y - (r.y + r.w);
-				resize.y += delta;
+				w_state.dest, w_state.size = resize(w_state.dest, w_state.size, delta, .top);
 			}
 		}
 		
-		if top_bar_loc != .left {
+		if top_bar_loc != .left || (.no_top_bar in flags) {
 			drag_uid := uid;
 			drag_uid.sub_priotity = 4;
 			
@@ -826,12 +945,11 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			
 			if current_active(s) == drag_uid {
 				delta := s.mouse_pos.x - r.x;
-				move.x += delta;
-				resize.x -= delta;
+				w_state.dest, w_state.size = resize(w_state.dest, w_state.size, delta, .left);
 			}
 		}
 		
-		if top_bar_loc != .right {
+		if top_bar_loc != .right || (.no_top_bar in flags) {
 			drag_uid := uid;
 			drag_uid.sub_priotity = 5;
 			
@@ -853,11 +971,11 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			
 			if current_active(s) == drag_uid {
 				delta := s.mouse_pos.x - (r.x + r.z);
-				resize.x += delta;
+				w_state.dest, w_state.size = resize(w_state.dest, w_state.size, delta, .right);
 			}
 		}
 		
-		if top_bar_loc != .bottom {
+		if top_bar_loc != .bottom || (.no_top_bar in flags) {
 			drag_uid := uid;
 			drag_uid.sub_priotity = 6;
 			
@@ -879,11 +997,13 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			
 			if current_active(s) == drag_uid {
 				delta := s.mouse_pos.y - r.y;
-				move.y += delta;
-				resize.y -= delta;
+				w_state.dest, w_state.size = resize(w_state.dest, w_state.size, delta, .bottom);
 			}
 		}
 		
+		//delta_size
+		
+		/*
 		new_placement := w_state.placement;
 		
 		new_placement.zw += resize;
@@ -905,7 +1025,7 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		new_placement.xy += move;
 		
 		w_state.placement = new_placement; 
-		
+		*/
 	}
 	
 	if !w_state.collapsed {
@@ -917,15 +1037,10 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			append_command(s, Cmd_rect{placement, .window_border, style.border_thickness, .cold}); 
 		}
 		
-		for i in 0..< len(s.panel_stack) {
-			fmt.printf("\t");
-		}
-		fmt.printf("placement.xy : %v\n", placement.xy + style.border_thickness);
-		
 		push_panel(s, Panel {
 			placement.xy + style.border_thickness,
 			placement.zw - 2 * style.border_thickness,
-			w_state.scroll_offset,
+			{0,0},
 			{}, //calculated when things are added
 			
 			hor_behavior,
@@ -933,11 +1048,13 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 			append_hor,	//Should we append new elements vertically or horizontally
 			
 			!(.allow_overflow in flags),
+			.hor_scrollbar in flags,
+			.ver_scrollbar in flags,
 			
 			0, //At what offset should new element be added
+			nil,
 		});
-		
-		append_command(s, Cmd_rect{{0,0,4,4}, .debug_rect, -1, .cold}); 
+
 	}
 	
 	save_state(s, uid, w_state);
@@ -968,115 +1085,7 @@ end_window :: proc (s : ^State) {
 		}
 	}
 	
-	if !w_state.collapsed {
-		
-		panel := s.panel_stack[len(s.panel_stack)-1]
-		
-		scroll_style := get_scroll_style(s);
-		
-		handle_scroll_bar :: proc (s : ^State, mouse_pos : f32, scroll_delta : f32, virtual_size, size : f32, scroll_uid : Unique_id, scroll_height : f32, placement : [4]f32, scroll_placement_coord : f32,
-									 scroll_placement_height : f32, scroll_offset : ^f32, reverse, reverse_scroll: bool) -> (scroll_procent : f32, active_height : f32, display_state : Display_state) {
-			
-			if is_hover(s, placement) {
-				try_set_hot(s, scroll_uid);
-				if s.mouse_state == .pressed {
-					try_set_active(s, scroll_uid);
-				}
-				if s.mouse_state == .down && s.hot == scroll_uid {
-					try_set_active(s, scroll_uid);
-				}
-			}
-			if s.mouse_state == .down && s.active == scroll_uid {
-				try_set_active(s, scroll_uid);
-			}
-			
-			procentage_of_view_in_virtual : f32 = size / virtual_size;
-			active_height = scroll_height * procentage_of_view_in_virtual;
-			
-			display_state = .cold;
-			
-			m : f32= -1
-			if reverse { 
-				m = 1;
-			}
-			
-			scroll_procent = m * scroll_offset^ / (virtual_size - size);
-			
-			if s.hot == scroll_uid {
-				display_state = .hot;
-			}
-			if s.active == scroll_uid {
-				display_state = .active;
-				scroll_procent = math.remap_clamped(mouse_pos, scroll_placement_coord + active_height / 2, scroll_placement_coord + scroll_placement_height - active_height / 2, 0, 1);
-				
-				if reverse {
-					scroll_procent = 1 - scroll_procent;
-				}
-			}
-			
-			m_scroll : f32= -1
-			if reverse_scroll { 
-				m = 1;
-			}
-			
-			scroll_procent += m_scroll * scroll_delta / (virtual_size - size);
-			scroll_procent = math.clamp(scroll_procent, 0, 1);
-			
-			scroll_offset^ = m * scroll_procent * (virtual_size - size);
-			
-			return;
-		}
-		
-		scroll_delta : [2]f32;
-		
-		//TODO there can be things inside things that scroll, we do not handle that yet.
-		if is_hot_path(s, s.current_node) {
-			scroll_delta = s.scroll_delta;
-		}
-		
-		if .hor_scrollbar in w_state.flags && panel.virtual_size.x > panel.size.x {
-			scroll_uid := s.current_node.uid;
-			scroll_uid.sub_priotity = 101;
-			
-			//the horizontal scrollbar
-			scroll_height := panel.size.x - 2 * scroll_style.length_padding;
-			scroll_placement := place_in_parent(s, panel.position, panel.size, 0, Dest{.mid, .bottom, 0, scroll_style.padding.y}, [2]f32{scroll_height, scroll_style.bar_bg_thickness});
-			
-			sd : f32 = scroll_delta.x;
-			if s.hot == scroll_uid {
-				sd = s.scroll_delta.x;
-				sd += s.scroll_delta.y;
-			}
-			
-			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.x, sd, panel.virtual_size.x, panel.size.x, scroll_uid, scroll_height, scroll_placement, scroll_placement.x, scroll_placement.z, &w_state.scroll_offset.x, false, false);
-			
-			view_scroll_placement := place_in_parent(s, scroll_placement.xy, scroll_placement.zw, 0, Dest{.left, .mid, scroll_procent * (scroll_height - active_height), 0}, [2]f32{active_height, scroll_style.bar_front_thickness});
-			
-			append_command(s, Cmd_rect{scroll_placement, .scrollbar_background, -1, display_state});
-			append_command(s, Cmd_rect{view_scroll_placement, .scrollbar_front, -1, display_state});
-		}
-		
-		if .ver_scrollbar in w_state.flags && panel.virtual_size.y > panel.size.y {
-			scroll_uid := s.current_node.uid;
-			scroll_uid.sub_priotity = 100;
-			
-			sd : f32 = scroll_delta.y;
-			if s.hot == scroll_uid {
-				sd += s.scroll_delta.y;
-			}
-			
-			//the vertical scrollbar
-			scroll_height := panel.size.y - 2 * scroll_style.length_padding;
-			scroll_placement := place_in_parent(s, panel.position, panel.size, 0, Dest{.right, .mid, scroll_style.padding.x, 0}, [2]f32{scroll_style.bar_bg_thickness, scroll_height});
-			
-			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.y, sd, panel.virtual_size.y, panel.size.y, scroll_uid, scroll_height, scroll_placement, scroll_placement.y, scroll_placement.w, &w_state.scroll_offset.y, true, true);
-			
-			view_scroll_placement := place_in_parent(s, scroll_placement.xy, scroll_placement.zw, 0, Dest{.mid, .top, 0, scroll_procent * (scroll_height - active_height)}, [2]f32{scroll_style.bar_front_thickness, active_height});
-			
-			append_command(s, Cmd_rect{scroll_placement, .scrollbar_background, -1, display_state});
-			append_command(s, Cmd_rect{view_scroll_placement, .scrollbar_front, -1, display_state});
-		}
-		
+	if !w_state.collapsed {		
 		pop_panel(s);
 	}
 	
@@ -1144,13 +1153,15 @@ menu :: proc (s : ^State, label : string, options : []Menu_option, popout_dir : 
 	
 	path := make([dynamic]int);
 	
-	return sub_menu(s, sub, 0, &path, dest, user_id, dont_touch);
+	res, _ := sub_menu(s, sub, 0, &path, dest, user_id, dont_touch);
+	
+	return res;
 }
 
-sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dynamic]int, dest : Maybe(Dest) = nil, user_id := 0, dont_touch := #caller_location) -> (res : string) {
+sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dynamic]int, dest : Maybe(Dest) = nil, user_id := 0, dont_touch := #caller_location) -> (res : string, is_hovered : bool) {
 	uid := make_uid(s, user_id, dont_touch, sub_prio);
 	
-	push_node(s, uid, true);
+	push_node(s, uid, .sortable);
 	defer pop_node(s);
 	
 	panel := get_current_panel(s);
@@ -1176,9 +1187,10 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 	width := s.font_width(s.user_data, style.text_size, label) + style.text_padding * 2;
 	size := [2]f32{width, style.height};
 	
-	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_ofset, _dest, size);
+	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_offset, _dest, size);
 	
 	if is_hover(s, placement) {
+		is_hovered = true;
 		try_set_hot(s, uid);
 		if s.mouse_state == .pressed {
 			try_set_active(s, uid);
@@ -1208,12 +1220,14 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 	}
 	
 	if is_hot_path(s, s.current_node) {
-		//find the size of all the options 
+		//uid := make_uid(s, user_id, dont_touch, sub_prio + 1000);
+		//push_node(s, uid, .overlay); 
+		//defer pop_node(s);
 		
+		//find the size of all the options 
 		max_text_width : f32 = 0;
 		
 		for opt, i in options {
-			
 			switch o in opt {
 				case string:
 					max_text_width = math.max(max_text_width, s.font_width(s.user_data, style.text_size, o));
@@ -1311,13 +1325,17 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 			false,	//Should we append new elements vertically or horizontally
 			
 			false,
+			true,
+			true,
 			
 			0, //At what offset should new element be added
+			nil,
 		});
 		defer pop_panel(s);
 		
 		if is_hover(s, items_placement) {
 			try_set_hot(s, uid);
+			is_hovered = true;
 		}
 		
 		for opt, i in options {
@@ -1373,9 +1391,12 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 					}
 					
 				case Sub_menu:
-					sub_res := sub_menu(s, o, sub_prio + 1, path, Dest{.left, .bottom, sub_placement.x - items_placement.x, sub_placement.y - items_placement.y}, user_id, dont_touch);
+					sub_res, hov := sub_menu(s, o, sub_prio + 1, path, Dest{.left, .bottom, sub_placement.x - items_placement.x, sub_placement.y - items_placement.y}, user_id, dont_touch);
 					if sub_res != "" {
 						res = sub_res;
+					}
+					if hov {
+						is_hovered = true;
 					}
 			}
 		}

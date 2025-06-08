@@ -133,7 +133,7 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 			0.025, // size
 		},
 		split_panel = lm.Split_panel_style {
-			0.001, // border_thickness
+			0.002, // border_thickness
 			0.005, //split thickness
 		}
 	});
