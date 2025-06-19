@@ -125,7 +125,7 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 		},
 		menu = lm.Menu_style{
 			0.002, // border_thickness
-			0.003, // text_padding
+			0.01, // text_padding
 			0.02, // text_size
 			false, // text_shrink_to_fit
 			.left, // text_hor
@@ -412,6 +412,8 @@ Menu_bar_enum :: enum {
 Menu_bar_flags :: bit_set[Menu_bar_enum];
 
 menu_bar :: proc (s : ^State, menus : []Sub_menu, popout_hor : Hor_placement, popout_ver : Ver_placement, reverse_sort : bool = false, dest : Maybe(Dest) = nil, user_id := 0, dont_touch := #caller_location) {
+	
+	
 	
 }
 

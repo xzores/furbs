@@ -242,6 +242,7 @@ Node :: struct {
 	sub_nodes : [dynamic]^Node,
 	sub_commands : [dynamic]Sub_command,
 	parent : ^Node,
+	is_overlay : bool,
 	
 	refound : bool,
 }
@@ -271,7 +272,6 @@ State :: struct {
 	next_hot : Unique_id,
 	next_active : Unique_id,
 	to_promote : ^Node, //Almost the same as to next_active, but this one has 
-	overlay_node : ^Node,
 	
 	highest_priority : u32,
 	prio_cnt : u32,
@@ -322,7 +322,6 @@ init :: proc (user_data : rawptr, font_width : Text_width_f, font_height : Text_
 		{},
 		{},
 		{},
-		nil,
 		0,
 		0,
 		nil,
@@ -370,7 +369,7 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		0, //For elements with many interactive components
 	}
 	
-	push_node(s, uid, .default, dont_touch);
+	push_node(s, uid, false, false, dont_touch);
 	
 	panel := Panel{
 		{0,0},
@@ -463,9 +462,11 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 	
 	// Do a depth first search on the nodes and assign an ever increasing priority to each one, in the order they are visited.
 	commands := make([dynamic]Command, context.temp_allocator);
+	overlay_commands := make([dynamic]Command, context.temp_allocator);
 	priority : u16;
 	
-	depth_first_assign_priority :: proc(s : ^State, node: ^Node, commands : ^[dynamic]Command, priority : ^u16) {
+	depth_first_assign_priority :: proc(s : ^State, node: ^Node, commands : ^[dynamic]Command, overlay_commands : ^[dynamic]Command, priority : ^u16, is_overlay : bool) {
+		is_overlay := is_overlay;
 		assert(node != nil, "node is nil");
 		
 		s.priorities[node] = priority^;
@@ -478,15 +479,18 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 			for cmd in node.sub_commands {
 				switch val in cmd {
 					case Command: {
-						append(commands, val);
+						if is_overlay {
+							append(overlay_commands, val);
+						} else {
+							append(commands, val);
+						}
 					}
 					case ^Node: {
-						if val == s.overlay_node {
-							//wait to draw until later
+						if val.is_overlay {
+							is_overlay = true;
 						}
-						else {
-							depth_first_assign_priority(s, val, commands, priority);
-						}
+						
+						depth_first_assign_priority(s, val, commands, overlay_commands, priority, is_overlay);
 					}
 					case Insert_subnode:{
 						sub_node : ^Node;
@@ -500,22 +504,22 @@ end :: proc(s : ^State, do_sort := true, loc := #caller_location) -> []Command {
 						}
 						fmt.assertf(sub_node != nil, "Failed to find sub_node from %v in %v", current_sub_node, node.sub_nodes);
 						
-						depth_first_assign_priority(s, sub_node, commands, priority);
+						depth_first_assign_priority(s, sub_node, commands, overlay_commands, priority, is_overlay);
 					}
 				}
 			}
 		}
 	}
 	
-	depth_first_assign_priority(s, s.root, &commands, &priority);
-	if s.overlay_node != nil {
-		depth_first_assign_priority(s, s.overlay_node, &commands, &priority);
+	depth_first_assign_priority(s, s.root, &commands, &overlay_commands, &priority, false);
+	
+	for c in overlay_commands {
+		append(&commands, c);
 	}
 	
 	pop_node(s);
 	
 	s.root = nil;
-	s.overlay_node = nil;
 	
 	assert(s.current_node == nil, "not all nodes where popped");
 	
@@ -557,19 +561,22 @@ push_scissor :: proc(s : ^State, scissor : Cmd_scissor) {
 	dy : f32 = 0;
 	
 	if len(s.scissor_stack) >= 1 {
-		r := s.scissor_stack[len(s.scissor_stack)-1].area;
+		parent_scissor := s.scissor_stack[len(s.scissor_stack)-1];
 		
-		if scissor.area.x < r.x {
-			dx = r.x - scissor.area.x;
-			scissor.area.x = r.x;
+		if parent_scissor.enable {
+			r := parent_scissor.area;
+			if scissor.area.x < r.x {
+				dx = r.x - scissor.area.x;
+				scissor.area.x = r.x;
+			}
+			if scissor.area.y < r.y {
+				dy = r.y - scissor.area.y;
+				scissor.area.y = r.y;
+			}
+			
+			scissor.area.z = math.min(scissor.area.z - dx, r.x + r.z - scissor.area.x);
+			scissor.area.w = math.min(scissor.area.w - dy, r.y + r.w - scissor.area.y);
 		}
-		if scissor.area.y < r.y {
-			dy = r.y - scissor.area.y;
-			scissor.area.y = r.y;
-		}
-		
-		scissor.area.z = math.min(scissor.area.z - dx, r.x + r.z - scissor.area.x);
-		scissor.area.w = math.min(scissor.area.w - dy, r.y + r.w - scissor.area.y);
 	}
 	
 	scissor.area.z = math.max(scissor.area.z, 0);
@@ -721,7 +728,7 @@ pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
 				sd += s.scroll_delta.y;
 			}
 			
-			push_node(s, scroll_uid, .default);
+			push_node(s, scroll_uid, false, false);
 			defer pop_node(s);
 			
 			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.x, sd, panel.virtual_size.x, panel.size.x, scroll_uid, scroll_height, scroll_placement, scroll_placement.x, scroll_placement.z, &panel.scroll_offset.x, false, false);
@@ -748,7 +755,7 @@ pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
 			scroll_height := panel.size.y - 2 * scroll_style.length_padding;
 			scroll_placement := place_in_parent(s, panel.position, panel.size, 0, Dest{.right, .mid, scroll_style.padding.x, 0}, [2]f32{scroll_style.bar_bg_thickness, scroll_height});
 			
-			push_node(s, scroll_uid, .default);
+			push_node(s, scroll_uid, false, false);
 			defer pop_node(s);
 			
 			scroll_procent, active_height, display_state := handle_scroll_bar(s, s.mouse_pos.y, sd, panel.virtual_size.y, panel.size.y, scroll_uid, scroll_height, scroll_placement, scroll_placement.y, scroll_placement.w, &panel.scroll_offset.y, true, true);
@@ -773,6 +780,23 @@ pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
 	return panel;
 }
 
+
+
+//////////////////////////////////////// RTIGHT CLICK OPTION ////////////////////////////////////////
+
+/*
+//prio of -1 means append
+option_panel :: proc (label : string, prio := -1) -> {
+	
+}
+
+option_element :: proc () -> {
+	
+}
+*/
+
+
+
 //////////////////////////////////////// PRIVATE ////////////////////////////////////////
 
 append_command :: proc (s : ^State, cmd : Command) {
@@ -783,13 +807,7 @@ set_mouse_cursor :: proc (s : ^State, cursor_type : Cursor_type) {
 	s.next_cursor = cursor_type;
 }
 
-Node_mode :: enum {
-	default,
-	sortable,
-	overlay,
-}
-
-push_node :: proc (s : ^State, uid : Unique_id, mode : Node_mode, loc := #caller_location) {
+push_node :: proc (s : ^State, uid : Unique_id, sortable : bool, overlay : bool, loc := #caller_location) {
 	
 	assert(uid != {});
 	
@@ -807,6 +825,7 @@ push_node :: proc (s : ^State, uid : Unique_id, mode : Node_mode, loc := #caller
 			make([dynamic]^Node),
 			make([dynamic]Sub_command),
 			nil,
+			overlay,
 			true,
 		};
 		s.uid_to_node[uid] = node;
@@ -818,19 +837,14 @@ push_node :: proc (s : ^State, uid : Unique_id, mode : Node_mode, loc := #caller
 	else {
 		i, found := slice.linear_search(s.current_node.sub_nodes[:], node);
 		
-		switch mode {
-			case .sortable:
-				if !found {
-					append(&s.current_node.sub_nodes, node);
-				}
-				append(&s.current_node.sub_commands, Insert_subnode{}); // this should happen every frame as the sub_commands gets cleared.
-		
-			case .overlay:
-				s.overlay_node = node;
-				append(&s.current_node.sub_commands, node); // this should happen every frame as the sub_commands gets cleared.
-				
-			case .default:
-				append(&s.current_node.sub_commands, node); // this should happen every frame as the sub_commands gets cleared.
+		if sortable {
+			if !found {
+				append(&s.current_node.sub_nodes, node);
+			}
+			append(&s.current_node.sub_commands, Insert_subnode{}); // this should happen every frame as the sub_commands gets cleared
+		}
+		else {
+			append(&s.current_node.sub_commands, node); // this should happen every frame as the sub_commands gets cleared.
 		}
 	}
 	
@@ -901,7 +915,7 @@ get_next_priority :: proc (s : ^State) -> u32 {
 	
 	res := (cast(u32)cur_prio << 16) + s.prio_cnt;
 	
-	if s.current_node == s.overlay_node {
+	if s.current_node.is_overlay {
 		res += max(u32) / 4
 	}
 	
@@ -1121,7 +1135,7 @@ Resize_edge :: enum {
 	bottom,
 }
 
-resize :: proc(dest: Dest, size: [2]f32, delta: f32, edge : Resize_edge) -> (Dest, [2]f32) {
+resize_rect :: proc(dest: Dest, size: [2]f32, delta: f32, edge : Resize_edge) -> (Dest, [2]f32) {
 	new_dest := dest;
 	new_size := size;
 	
