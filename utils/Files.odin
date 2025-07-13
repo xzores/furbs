@@ -9,6 +9,45 @@ import "core:os"
 import "core:log"
 import "core:path/filepath"
 
+
+// ensure_path ensures all directories in 'path' exist, creating them if needed.
+// It handles paths ending in either a directory or a filename.
+ensure_path :: proc(path: string) -> (err: os.Error) {
+    // Normalize the path (removes redundant separators, etc.)
+    path, alc_err := filepath.clean(path)           // normalizes OS separators:contentReference[oaicite:6]{index=6}
+	assert(alc_err == nil);
+	defer delete(path);
+
+    // If the path has a file extension, treat it as a filename
+    if filepath.ext(path) != "" {            // ext(path) returns the file extension or "":contentReference[oaicite:7]{index=7}
+        path, _ = filepath.split(path)       // splits off the last element (dir, file):contentReference[oaicite:8]{index=8}
+    }
+    // If nothing remains, there is no directory to create
+    if path == "" || path == "." {
+        return 0
+    }
+
+    // Recursively ensure parent directories exist
+    parent := filepath.dir(path)            // get parent directory:contentReference[oaicite:9]{index=9}
+	defer delete(parent);
+    if parent != "" && parent != path {
+        err = ensure_path(parent)
+        if err != 0 {
+            return err
+        }
+    }
+	
+    // Create the directory itself
+    err = os.make_directory(path)           // creates the directory:contentReference[oaicite:10]{index=10}
+    // If it already exists, ignore the error (mimic mkdir -p)
+    if err != 0 && err != os.ERROR_ALREADY_EXISTS {
+        return err
+    }
+    return 0
+}
+
+
+
 load_all_in_dir_as_txt :: proc(directory_path : string, extension : string, include_extension : bool = false, alloc := context.allocator) -> (res : map[string]string) {
 
 	context.allocator = alloc;
