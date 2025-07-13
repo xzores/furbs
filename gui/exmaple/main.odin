@@ -47,9 +47,9 @@ entry :: proc () {
 				
 				gui.begin(s);
 					
-					if gui.option_panel("pick ") {
+					/*if gui.option_panel("pick ") {
 						
-					}
+					}*/
 					
 					//inside render loop, begin with two versions of panel_a, they share a game state, so their intacting with one will also interact with the ohter (i think that might be how i want it.)
 					gui.begin_split_panel(s, {1, 1}, .vertical, {.auto_size, .append_horizontally});
@@ -58,9 +58,9 @@ entry :: proc () {
 						gui.menu(s, "something else", {"save", "load"}, .down_right, false);
 						gui.menu(s, "simulation", {"save", "load"}, .down_right, false);
 						
-						if gui.option_panel("turn transparrent") {
+						/*if gui.option_panel("turn transparrent") {
 							
-						}
+						}*/
 						
 					gui.next_split_panel(s);
 					
@@ -95,7 +95,7 @@ entry :: proc () {
 								gui.checkbox(s, &checkbox_state, label = "very very very very very very very very very long");
 								for i in 0..<100 {
 									gui.checkbox(s, &checkbox_state, label = fmt.tprintf("Text thing %v", i));
-									gui.button(s, label = fmt.tprintf("Text thing %v", i));
+									//gui.button(s, label = fmt.tprintf("Text thing %v", i));
 								}
 							}
 							gui.end_window(s);

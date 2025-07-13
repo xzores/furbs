@@ -136,12 +136,13 @@ Panel :: struct {
 	hor_behavior : Hor_placement,
 	ver_behavior : Ver_placement,
 	append_hor : bool,	//Should we append new elements vertically or horizontally
+	wrap_on_overflow : bool,
 	
 	use_scissor : bool, 
 	enable_hor_scroll : bool,
 	enable_ver_scroll : bool,
 	
-	current_offset : f32, //At what offset should new element be added
+	current_offset : [2]f32, //At what offset should new element be added
 	uid : Maybe(Unique_id),
 }
 
@@ -382,6 +383,7 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		false,
 		
 		true,
+		false,
 		false,
 		false,
 		
@@ -637,7 +639,7 @@ push_panel :: proc (s : ^State, panel : Panel, loc := #caller_location) {
 	
 	panel.uid = uid;
 	append(&s.panel_stack, panel);
-	increase_offset(s, get_style(s).out_padding);
+	_ = do_offset(s, get_style(s).out_padding);
 	
 	if panel.use_scissor {
 		r := Cmd_scissor{{panel.position.x, panel.position.y, panel.size.x, panel.size.y}, panel.use_scissor};
@@ -743,6 +745,8 @@ pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
 		}
 		
 		if panel.enable_ver_scroll && panel.virtual_size.y > panel.size.y {
+		
+			fmt.printf("vert scroll\n");
 			scroll_uid := s.current_node.uid;
 			scroll_uid.sub_priotity = PANEL_SUBPRIORITY + 2;
 			
@@ -781,7 +785,6 @@ pop_panel :: proc (s : ^State, loc := #caller_location) -> Panel {
 }
 
 
-
 //////////////////////////////////////// RTIGHT CLICK OPTION ////////////////////////////////////////
 
 /*
@@ -794,7 +797,6 @@ option_element :: proc () -> {
 	
 }
 */
-
 
 
 //////////////////////////////////////// PRIVATE ////////////////////////////////////////
@@ -978,25 +980,72 @@ save_state :: proc (s : ^State, uid : Unique_id, new : Element_state) {
 	s.statefull_elements[uid] = new;
 }
 
-increase_offset :: proc (s : ^State, offset : [2]f32) {
+@(require_results)
+do_offset :: proc (s : ^State, to_offset : [2]f32) -> [2]f32 {
 	p := &s.panel_stack[len(s.panel_stack)-1]
 	
-	padding : f32; 
+	res : [2]f32 = p.current_offset;
 	
-	if p.current_offset != 0 {
-		padding = get_style(s).in_padding;
+	where_append_ver:: proc (s : ^State, p : ^Panel, to_offset : [2]f32) -> (new_offset : [2]f32, space_occ : [4]f32) {
+		
+	}
+	
+	where_append_hor:: proc (s : ^State, p : ^Panel, to_offset : [2]f32) -> (new_offset : [2]f32, space_occ : [4]f32) {
+		
+	}
+	
+	do_append_hor :: proc (s : ^State, p : ^Panel, to_offset : [2]f32, is_alternative : bool) {
+		padding : f32; 
+	
+		if p.current_offset != 0 {
+			padding = get_style(s).in_padding;
+		}
+	
+		p.current_offset.x += to_offset.x + padding;
+		p.virtual_size.x = math.max(p.virtual_size.x, p.current_offset.x - padding + get_style(s).out_padding);
+		p.virtual_size.y = math.max(p.virtual_size.y, to_offset.y + 2 * get_style(s).out_padding);  // incease the virtual size to fit the element
+		if is_alternative { //if it is alternative it adds to element to the virtual size
+			p.virtual_size.x = math.max(p.virtual_size.x, p.current_offset.x + to_offset.x + 2 * get_style(s).out_padding);
+		}
+	}
+	
+	do_append_ver :: proc (s : ^State, p : ^Panel, to_offset : [2]f32, is_alternative : bool) {
+		padding : f32; 
+		
+		if p.current_offset != 0 {
+			padding = get_style(s).in_padding;
+		}
+		
+		p.current_offset.y += to_offset.y + padding;
+		p.virtual_size.x = math.max(p.virtual_size.x, to_offset.x + 2 * get_style(s).out_padding);  // incease the virtual size to fit the element
+		p.virtual_size.y = math.max(p.virtual_size.y, p.current_offset.y - padding + get_style(s).out_padding);
+		if is_alternative { //if it is alternative it adds to element to the virtual size
+			p.virtual_size.y = math.max(p.virtual_size.y, p.current_offset.y + to_offset.y + 2 * get_style(s).out_padding);
+		}
 	}
 	
 	if p.append_hor {
-		p.current_offset += offset.x + padding;
-		p.virtual_size.x = p.current_offset - padding + get_style(s).out_padding;
-		p.virtual_size.y = math.max(p.virtual_size.y, offset.y + 2 * get_style(s).out_padding);
+		
+		if (p.current_offset.x + get_style(s).out_padding + to_offset.x > p.size.x) && to_offset.x > get_style(s).out_padding {
+			p.current_offset.x = get_style(s).out_padding;
+			do_append_ver(s, p, to_offset, true);
+			res = p.current_offset;
+		}
+		
+		do_append_hor(s, p, to_offset, false);
 	}
 	else {
-		p.current_offset += offset.y + padding;
-		p.virtual_size.x = math.max(p.virtual_size.x, offset.x + 2 * get_style(s).out_padding);
-		p.virtual_size.y = p.current_offset - padding + get_style(s).out_padding;;
+		
+		if (p.current_offset.y + get_style(s).out_padding + to_offset.y > p.size.y) && to_offset.y != 0 {
+			p.current_offset.y = get_style(s).out_padding;
+			do_append_hor(s, p, to_offset, true);
+			res = p.current_offset;
+		}
+		
+		do_append_ver(s, p, to_offset, false);
 	}
+	
+	return res;
 }
 
 @(require_results)

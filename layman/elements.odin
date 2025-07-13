@@ -33,7 +33,7 @@ Dest :: struct {
 //////////////////////////////////////// Spacers ////////////////////////////////////////
 
 spacer :: proc (s : ^State, space : f32) {
-	increase_offset(s, space);
+	_ = do_offset(s, space);
 }
 
 //////////////////////////////////////// Button ////////////////////////////////////////
@@ -45,7 +45,11 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 	defer pop_node(s);
 	
 	panel := get_current_panel(s);
-	total_size : [2]f32;
+	
+	style := get_button_style(s);
+	size := style.size;
+	
+	offset := do_offset(s, size);
 	
 	_dest : Dest;
 	if d, ok := dest.?; ok {
@@ -56,16 +60,13 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 		gstyle := get_style(s);
 		
 		if panel.append_hor {
-			_dest = {panel.hor_behavior, panel.ver_behavior, panel.current_offset, gstyle.out_padding};
+			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x, offset.y + gstyle.out_padding};
 		}
 		else {
-			_dest = {panel.hor_behavior, panel.ver_behavior, gstyle.out_padding, panel.current_offset};
+			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x + gstyle.out_padding, offset.y};
 		}
 	}
 	
-	style := get_button_style(s);
-	size := style.size;
-	total_size += size;
 	
 	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_offset, _dest, size);
 	
@@ -110,13 +111,6 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 		append_command(s, Cmd_text{text_placement.xy, strings.clone(label, context.temp_allocator), style.text_size, 0, .button_text});
 	}
 	
-	if d, ok := dest.?; !ok {
-		increase_offset(s, total_size);
-	}
-	else {
-		//expand_virtual_size(s, [4]f32{placement.x, placement.y, total_size.x, total_size.y});
-	}
-	
 	return;
 }
 
@@ -130,6 +124,18 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 	
 	panel := get_current_panel(s);
 	
+	style := get_checkbox_style(s);
+	size := style.size;
+	total_size := size;
+	
+	if label != "" {
+		text_size := style.text_size;
+		asc, dec := s.font_height(s.user_data, style.text_size);
+		total_size.x += style.text_padding + s.font_width(s.user_data, asc - dec, label); //TODO this should be total_placement as the text can expand in the negative direction.
+	}
+	
+	offset := do_offset(s, total_size);
+	
 	_dest : Dest;
 	if d, ok := dest.?; ok {
 		_dest = d;
@@ -139,15 +145,12 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 		gstyle := get_style(s);
 		
 		if panel.append_hor {
-			_dest = {panel.hor_behavior, panel.ver_behavior, panel.current_offset, gstyle.out_padding};
+			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x, offset.y + gstyle.out_padding};
 		}
 		else {
-			_dest = {panel.hor_behavior, panel.ver_behavior, gstyle.out_padding, panel.current_offset};
+			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x +  gstyle.out_padding, offset.y};
 		}
 	}
-	
-	style := get_checkbox_style(s);
-	size := style.size;
 	
 	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_offset, _dest, size);
 	
@@ -183,7 +186,6 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 		append_command(s, Cmd_rect{act_placement, .checkbox_foreground, -1, checkbox_state}); //The background
 	}
 	
-	total_size := size;
 	if label != "" {
 		text_size := style.text_size
 		
@@ -192,14 +194,6 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 		asc, dec := s.font_height(s.user_data, style.text_size);
 		text_placement.y += -dec;
 		append_command(s, Cmd_text{text_placement, strings.clone(label, context.temp_allocator), style.text_size, 0, .checkbox_text});
-		total_size += {style.text_padding + s.font_width(s.user_data, asc - dec, label), 0}; //TODO this should be total_placement as the text can expand in the negative direction.
-	}
-	
-	if d, ok := dest.?; !ok {
-		increase_offset(s, total_size);
-	}
-	else {
-		//expand_virtual_size(s, placement);
 	}
 	
 	return value^;
@@ -265,6 +259,7 @@ Split_panel_falgs_enum :: enum {
 	bottom_to_top,
 	right_to_left,
 	append_horizontally,
+	wrap_on_overflow,
 	
 	//Scrollbar
 	hor_scrollbar,
@@ -537,6 +532,7 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 			true, //use_scissor
 			.hor_scrollbar in flags, //scroll_hor
 			.ver_scrollbar in flags, //scroll_ver
+			.wrap_on_overflow in flags,
 			0, //current_offset
 			nil, //uid
 		});
@@ -615,6 +611,7 @@ Window_falgs_enum :: enum {
 	bottom_to_top,
 	right_to_left,
 	append_horizontally,
+	wrap_on_overflow,
 	
 	//Ables
 	movable,
@@ -1088,21 +1085,22 @@ begin_window :: proc (s : ^State, size : [2]f32, flags : Window_falgs, dest : De
 		}
 		
 		push_panel(s, Panel {
-			placement.xy + style.border_thickness,
-			placement.zw - 2 * style.border_thickness,
-			{0,0},
-			{}, //calculated when things are added
-			
-			hor_behavior,
-			ver_behavior,
-			append_hor,	//Should we append new elements vertically or horizontally
-			
-			!(.allow_overflow in flags),
-			.hor_scrollbar in flags,
-			.ver_scrollbar in flags,
-			
-			0, //At what offset should new element be added
-			nil,
+			placement.xy + style.border_thickness, 			//	position : [2]f32, //in relation to the parent panel
+			placement.zw - 2 * style.border_thickness, 		//	size : [2]f32, //the view size
+			{0,0}, 											//	scroll_offset : [2]f32,
+			{}, //calculated when things are added 			//	virtual_size : [2]f32, //the size which there exists items/elements
+			 													
+			hor_behavior, 									//	hor_behavior : Hor_placement,
+			ver_behavior, 									//	ver_behavior : Ver_placement,
+			append_hor,										//	append_hor : bool,	//Should we append new elements vertically or horizontally
+			.wrap_on_overflow in flags, 					//	wrap_on_overflow : bool,
+			 											
+			!(.allow_overflow in flags),					//	use_scissor : bool, 
+			.hor_scrollbar in flags, 						//	enable_hor_scroll : bool,
+			.ver_scrollbar in flags, 						//	enable_ver_scroll : bool,
+			 													
+			0, 												//	current_offset : [2]f32, //At what offset should new element be added
+			nil, 											//	uid : Maybe(Unique_id),
 		});
 
 	}
@@ -1215,6 +1213,13 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 	
 	panel := get_current_panel(s);
 	
+	style := get_menu_style(s);
+	
+	width := s.font_width(s.user_data, style.text_size, label) + style.text_padding * 2;
+	size := [2]f32{width, style.height};
+	
+	offset := do_offset(s, size);
+	
 	_dest : Dest;
 	if d, ok := dest.?; ok {
 		_dest = d;
@@ -1224,17 +1229,12 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 		gstyle := get_style(s);
 		
 		if panel.append_hor {
-			_dest = {panel.hor_behavior, panel.ver_behavior, panel.current_offset, gstyle.out_padding};
+			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x, offset.y + gstyle.out_padding};
 		}
 		else {
-			_dest = {panel.hor_behavior, panel.ver_behavior, gstyle.out_padding, panel.current_offset};
+			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x +  gstyle.out_padding, offset.y};
 		}
 	}
-	
-	style := get_menu_style(s);
-	
-	width := s.font_width(s.user_data, style.text_size, label) + style.text_padding * 2;
-	size := [2]f32{width, style.height};
 	
 	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_offset, _dest, size);
 	
@@ -1377,7 +1377,8 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 			false,
 			true,
 			true,
-			
+			false,
+						
 			0, //At what offset should new element be added
 			nil,
 		});
@@ -1456,13 +1457,6 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 		}
 	}
 	
-	if d, ok := dest.?; !ok {
-		increase_offset(s, size);
-	}
-	else {
-		//expand_virtual_size(s, [4]f32{placement.x, placement.y, total_size.x, total_size.y});
-	}
-	
 	return;
 }
 
@@ -1486,10 +1480,10 @@ sub_menu :: proc (s : ^State, using menu : Sub_menu, sub_prio : int, path : ^[dy
 		gstyle := get_style(s);
 		
 		if panel.append_hor {
-			_dest = {panel.hor_behavior, panel.ver_behavior, panel.current_offset, gstyle.out_padding};
+			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x, gstyle.out_padding};
 		}
 		else {
-			_dest = {panel.hor_behavior, panel.ver_behavior, gstyle.out_padding, panel.current_offset};
+			_dest = {panel.hor_behavior, panel.ver_behavior, gstyle.out_padding, offset.y};
 		}
 	}
 	

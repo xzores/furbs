@@ -1,3 +1,4 @@
+#+feature dynamic-literals
 package network
 
 import "core:fmt"
@@ -35,7 +36,7 @@ test_main :: proc (t : ^testing.T) {
     Disconnect :: struct {};
     Disconnected_by_server :: struct {}; //TODO add infomation about why.
     
-    commands_map : map[message_id_type]typeid = {
+    commands_map : map[Message_id_type]typeid = {
         
         //random number to make it less likely a wrong connection will be accepted.
         14732 = Hello,
@@ -171,8 +172,7 @@ test_main :: proc (t : ^testing.T) {
 
         /////////// Server ///////////
         server_network_params : Network_params = make_params(cleaner_func, commands_map, server_initial_allowed_commands, server_command_allowing_list, server_command_disallowing_list);
-		server : Server;
-        make_server(&server, server_network_params, {Default_game_ip, Default_game_port});
+		server : ^Server = create_server(server_network_params, {Default_game_ip, Default_game_port});
 
         //For testing we start a new thread for scraping commands from the client.
         server_thread := thread.create(server_test, &server);
@@ -214,7 +214,7 @@ test_main :: proc (t : ^testing.T) {
         /////////// Closure ///////////
         server.should_close = true;
         thread.destroy(server_thread);
-        close_server(&server);
+        close_server(server);
 
 		delete_params(&server_network_params);
         fmt.printf("\n\n\n");

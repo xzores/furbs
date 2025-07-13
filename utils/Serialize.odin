@@ -121,31 +121,46 @@ Serialization_error :: enum {
 
 //Handels trivial, structs and unions, but does include the size as a u32, so only use for non-trivial structs or unions.
 @(require_results)
-serialize_to_bytes :: proc(value : any, loc := #caller_location) -> ([]u8, Serialization_error) { //The header includes itself, and is the size type of Header_size_type
+serialize_to_bytes_res :: proc(value : any, loc := #caller_location) -> ([]u8, Serialization_error) { //The header includes itself, and is the size type of Header_size_type
 	using runtime;
 	
 	data := make([dynamic]u8);
 	
-	header_index := len(data);
-	resize(&data, len(data) + size_of(Header_size_type));
+	err := serialize_to_bytes_append(value, &data, loc);
 	
-	res := _serialize_to_bytes(value, &data, loc);
-	if res != .ok {
+	if err != nil {
 		delete(data);
-		return nil, res;
+		return nil, err;
+	}
+	
+	return data[:], .ok;
+}
+
+//Handels trivial, structs and unions, but does include the size as a u32, so only use for non-trivial structs or unions.
+@(require_results)
+serialize_to_bytes_append :: proc(value : any, data : ^[dynamic]u8, loc := #caller_location) -> (Serialization_error) { //The header includes itself, and is the size type of Header_size_type
+	using runtime;
+	
+	header_index := len(data);
+	resize(data, len(data) + size_of(Header_size_type));
+	
+	res := _serialize_to_bytes(value, data, loc);
+	if res != .ok {
+		return res;
 	}
 
 	//Set the header size in the begining.
 	message_size : int = len(data) - header_index;
 	if message_size >= cast(int)max(Header_size_type) {
-		delete(data);
-		return nil, .value_too_big;
+		return .value_too_big;
 	}
 	header : ^u32 = cast(^u32)&data[header_index];
 	header^ = cast(u32)message_size;
 
-	return data[:], .ok;
+	return .ok;
 }
+
+serialize_to_bytes :: proc {serialize_to_bytes_res, serialize_to_bytes_append}
 
 @(private, require_results)
 _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_location) -> Serialization_error { //The header includes itself, and is the size type of Header_size_type
@@ -247,7 +262,7 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 
 //One would have to free the memory with free(...) if one does not use a temp allocator.
 @(require_results)
-deserialize_from_bytes :: proc($To_type : typeid, data : []u8, alloc : mem.Allocator, loc := #caller_location) -> (value : To_type, err : Serialization_error) {
+deserialize_from_bytes_static :: proc($To_type : typeid, data : []u8, alloc : mem.Allocator, loc := #caller_location) -> (value : To_type, err : Serialization_error) {
 	using runtime;
 	
 	context.allocator = mem.panic_allocator();
@@ -264,6 +279,30 @@ deserialize_from_bytes :: proc($To_type : typeid, data : []u8, alloc : mem.Alloc
 
 	return value_data, nil;
 }
+
+//One would have to free the memory with free(...) if one does not use a temp allocator.
+@(require_results)
+deserialize_from_bytes_any :: proc(as_type : typeid, data : []u8, alloc : mem.Allocator, loc := #caller_location) -> (value : any, err : Serialization_error) {
+	using runtime;
+	
+	context.allocator = mem.panic_allocator();
+
+	used_bytes : u32 = size_of(Header_size_type);
+	
+	ptr, alloc_err := mem.alloc(reflect.size_of_typeid(as_type), mem.DEFAULT_ALIGNMENT, alloc, loc);
+
+	fmt.assertf(alloc_err == nil, "failed to allocate : %v", alloc_err);
+
+	err = _deserialize_from_bytes(as_type, data, &used_bytes, ptr, alloc, loc);
+	
+	if err != nil {
+		return {}, err;
+	}
+	
+	return Raw_Any{ptr, as_type}, nil;
+}
+
+deserialize_from_bytes :: proc {deserialize_from_bytes_static, deserialize_from_bytes_any};
 
 @(private, require_results)
 _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Header_size_type, value_data : rawptr, alloc : mem.Allocator, loc := #caller_location) -> Serialization_error {

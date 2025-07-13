@@ -94,7 +94,7 @@ init :: proc (window : ^render.Window, default_font := render.get_default_fonts(
 	lm.push_style(s, lm.Style{
 		font = auto_cast default_font,
 		in_padding = 0.005,
-		out_padding = 0.01,
+		out_padding = 0.02,
 		button = lm.Button_style{
 			0.003, // border_thickness
 			0.003, // text_padding
