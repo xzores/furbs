@@ -39,6 +39,11 @@ Layer :: struct {
 	biases : []Bias,
 }
 
+Feedforward_activations :: struct {
+	activations : [][]Float,
+	//activations_gradient : [][]Float,
+}
+
 optimizer_proc :: #type proc();
 
 Optimizer :: struct {
@@ -177,6 +182,16 @@ calculate_loss :: proc (prediction : []Float, awnser : []Float, func : Loss_func
 	return L;
 }
 
+
+
+
+
+
+
+
+
+
+
 //////////////////////////////// FEED FORWARD STUFF ////////////////////////////////
 
 make_layer :: proc (input_layer_dim : int, layer_dim : int) -> Layer {
@@ -227,31 +242,46 @@ destroy_feedforward :: proc (network : ^Feedforward_network) {
 	free(network);
 }
 
-@(require_results)
-feed_feedforward_activations :: proc (network : ^Feedforward_network, data : []Float, loc := #caller_location) -> (activations : [][]Float) {
+init_activations :: proc (network : ^Feedforward_network) -> Feedforward_activations {
+
+	activations := make([][]Float, len(network.layers) + 1);
+	
+	//preallocate the activations
+	activations[0] = make([]Float, network.input_size);
+	for l, i in network.layers {
+		activations[i+1] = make([]Float, l.weights.rows);
+	}
+	
+	return {activations};
+}
+
+destroy_feedforward_activations :: proc (activations : Feedforward_activations) {
+	for a in activations.activations {
+		delete(a);
+	}
+	delete(activations.activations);
+}
+
+feedforward_activations :: proc (network : ^Feedforward_network, activations : Feedforward_activations, data : []Float, loc := #caller_location) {
 	
 	// Check if input data length matches network input size
 	fmt.assertf(len(data) == network.input_size, "The input data (%v) does not match the length of the input %v", len(data), network.input_size, loc = loc)
 	
-	// Initialize activations array to hold activations for all layers, including the input layer
-	activations = make([][]Float, len(network.layers) + 1);
-	
 	// Clone input data to use as initial activation (input layer)
 	current_activation : []Float = slice.clone(data);
-	activations[0] = current_activation; // Store the input layer's activation
+	activations.activations[0] = current_activation; // Store the input layer's activation
 	
 	// Loop through each layer to compute activations
 	for l, i in network.layers {
+		// Store the computed activation for this layer
+		next_activation := activations.activations[i + 1];
 		// Compute next layer's activation by multiplying weights with current activation
-		next_activation := utils.matrix_vec_mul(l.weights, current_activation, loc);
+		utils.matrix_vec_mul_inplace(l.weights, current_activation, next_activation, loc);
 		
 		// Add biases to the result
 		add_to_slice(next_activation, l.biases); // Adds biases in place
 		// Apply activation function to the result
 		apply_activation_function(next_activation, network.activation); // Modifies next_activation in place
-		
-		// Store the computed activation for this layer
-		activations[i + 1] = next_activation;
 		
 		// Update current activation for the next iteration
 		current_activation = next_activation;
@@ -260,11 +290,11 @@ feed_feedforward_activations :: proc (network : ^Feedforward_network, data : []F
 	return;
 }
 
-destroy_feedforward_activations :: proc (activations : [][]Float) {
-	for a in activations {
-		delete(a);
-	}
-	delete(activations);
+get_prediction :: proc (activations : Feedforward_activations, loc := #caller_location) -> (prediction : []Float) {
+	
+	prediction = activations.activations[len(activations.activations)-1];
+	
+	return prediction;
 }
 
 @(require_results)
@@ -319,10 +349,10 @@ get_loss_gradient :: proc (prediction : []Float, awnser : []Float, func : Loss_f
 // b = Bias vector
 // a = Input activations from previous layer
 // η = learning_rate
-backprop_feedforward :: proc (using network : ^Feedforward_network, activations : [][]Float, awnser : []Float, func : Loss_function, learning_rate : Float, loc := #caller_location) {
+backprop_feedforward :: proc (using network : ^Feedforward_network, activations : Feedforward_activations, awnser : []Float, func : Loss_function, learning_rate : Float, loc := #caller_location) {
 
 	// Get the final output prediction (y^L where L is the last layer)
-	prediction := activations[len(activations)-1];
+	prediction := activations.activations[len(activations.activations)-1];
 	assert(len(prediction) == len(awnser), "The prediction and awnser lengths does not match", loc);
 	
 	// Initialize gradient with ∂L/∂y^L (gradient of loss w.r.t. final output)
@@ -334,12 +364,12 @@ backprop_feedforward :: proc (using network : ^Feedforward_network, activations 
 		
 		// Get input activations for this layer: a^(l-1)
 		// For layer i, activations[i] contains the input to that layer
-		X := activations[i];
+		X := activations.activations[i];
 		
 		// Convert ∂L/∂y^l to ∂L/∂z^l by multiplying by activation derivative
 		// G currently holds ∂L/∂y^l, we need ∂L/∂z^l = ∂L/∂y^l ⊙ σ'(y^l)
 		// For most activation functions, we can compute σ'(z) from the output y = σ(z)
-		y_curr := activations[i + 1]; // Current layer's activations (output of this layer)
+		y_curr := activations.activations[i + 1]; // Current layer's activations (output of this layer)
 		
 		#partial switch activation {
 			case .none:
@@ -431,3 +461,9 @@ get_data_error :: proc (using network : ^Feedforward_network, prediction : []Flo
 feed :: proc {feed_feedforward}
 backprop :: proc {backprop_feedforward}
 destroy :: proc {destroy_feedforward}
+
+
+
+
+
+

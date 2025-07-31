@@ -216,19 +216,19 @@ matrix_mul :: #force_inline proc(A, B : Matrix($T), loc := #caller_location) -> 
 	return result;
 }
 
+/* IDK WHAT THIS IS
 matrix_subtract :: #force_inline proc(A, B : Matrix($T), loc := #caller_location) -> Matrix(T) {
 
 	return result;
 }
+*/
 
-matrix_vec_mul :: #force_inline proc(A : Matrix($T), B : []T, loc := #caller_location) -> []T where intrinsics.type_is_numeric(T) {
+matrix_vec_mul_inplace :: #force_inline proc(A : Matrix($T), B : []T, result : []T, loc := #caller_location) where intrinsics.type_is_numeric(T) {
 	// Ensure the matrix and vector can be multiplied (A.columns == length(B))
+	fmt.assertf(len(result) == A.rows, "Result vector must have the same length as the matrix rows, got %v, expected %v", len(result), A.rows, loc = loc);
 	if A.columns != len(B) {
 		fmt.panicf("Matrix and vector dimensions do not align for multiplication, Matrix : (%v, %v). The vector has length %v and the matrix has %v columbs", A.rows, A.columns, len(B), A.columns);
 	}
-
-	// Initialize result vector
-	result := make([]T, A.rows, loc = loc);
 
 	// Perform matrix-vector multiplication
 	for i in 0 ..< A.rows {
@@ -242,6 +242,18 @@ matrix_vec_mul :: #force_inline proc(A : Matrix($T), B : []T, loc := #caller_loc
 		}
 		result[i] = sum;
 	}
+}
+
+matrix_vec_mul :: #force_inline proc(A : Matrix($T), B : []T, loc := #caller_location) -> []T where intrinsics.type_is_numeric(T) {
+	// Ensure the matrix and vector can be multiplied (A.columns == length(B))
+	if A.columns != len(B) {
+		fmt.panicf("Matrix and vector dimensions do not align for multiplication, Matrix : (%v, %v). The vector has length %v and the matrix has %v columbs", A.rows, A.columns, len(B), A.columns);
+	}
+
+	// Initialize result vector
+	result := make([]T, A.rows, loc = loc);
+
+	matrix_vec_mul_inplace(A, B, result, loc);
 
 	return result;
 }
