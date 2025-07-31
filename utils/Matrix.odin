@@ -122,9 +122,9 @@ matrix_get_row_values :: #force_inline proc(m : Matrix($T), n : int) -> []T {
 }
 
 
-matrix_get_columb_values_cloned :: proc (m : Matrix($T), n : int) -> []T {
+matrix_get_columb_values_cloned :: proc (m : Matrix($T), n : int, alloc := context.allocator, loc := #caller_location) -> []T {
 	
-	col := make([]T, m.rows);
+	col := make([]T, m.rows, alloc, loc = loc);
 	
 	for c := 0; c < m.rows; c += 1 {
 		col[c] = m.data[c * m.columns + n];

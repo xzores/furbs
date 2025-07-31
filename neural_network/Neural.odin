@@ -260,6 +260,13 @@ feed_feedforward_activations :: proc (network : ^Feedforward_network, data : []F
 	return;
 }
 
+destroy_feedforward_activations :: proc (activations : [][]Float) {
+	for a in activations {
+		delete(a);
+	}
+	delete(activations);
+}
+
 @(require_results)
 feed_feedforward :: proc (using network : ^Feedforward_network, data : []Float, loc := #caller_location) -> (prediction : []Float) {
 	
