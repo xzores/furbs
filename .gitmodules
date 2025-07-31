@@ -4,3 +4,6 @@
 [submodule "miniz"]
 	path = miniz
 	url = https://github.com/sarvex/odin-miniz.git
+[submodule "duckdb-odin"]
+	path = duckdb-odin
+	url = https://github.com/lionel626/duckdb-odin.git

@@ -1,4 +1,4 @@
-package nerual_network;
+package neural_network
 
 import "base:intrinsics"
 
@@ -61,6 +61,38 @@ sigmoid_gradient :: #force_inline proc(v: $T) -> T where intrinsics.type_is_nume
 	return sig * (1.0 - sig);
 }
 
+@(require_results)
+relu :: #force_inline proc(v: $T) -> T where intrinsics.type_is_numeric(T) {
+	return math.max(0.0, v);
+}
+
+@(require_results)
+relu_gradient :: #force_inline proc(v: $T) -> T where intrinsics.type_is_numeric(T) {
+	return v > 0.0 ? 1.0 : 0.0;
+}
+
+@(require_results)
+silu :: #force_inline proc(v: $T) -> T where intrinsics.type_is_numeric(T) {
+	return v * sigmoid(v);
+}
+
+@(require_results)
+silu_gradient :: #force_inline proc(v: $T) -> T where intrinsics.type_is_numeric(T) {
+	sig := sigmoid(v);
+	return sig * (1.0 + v * (1.0 - sig));
+}
+
+@(require_results)
+hyper_tan :: #force_inline proc(v: $T) -> T where intrinsics.type_is_numeric(T) {
+	return math.tanh(v);
+}
+
+@(require_results)
+hyper_tan_gradient :: #force_inline proc(v: $T) -> T where intrinsics.type_is_numeric(T) {
+	tanh_v := math.tanh(v);
+	return 1.0 - tanh_v * tanh_v;
+}
+
 //Replaces the values in A by the element wise addition of the two slices.
 add_to_slice :: proc (A : []$T, B : []T, loc := #caller_location) {
 	fmt.assertf(len(A) == len(B), "Cannot sum vectors with lengths %v and %v", len(A), len(B), loc = loc);
@@ -72,6 +104,21 @@ add_to_slice :: proc (A : []$T, B : []T, loc := #caller_location) {
 //replaces the values, by the activation_function.
 apply_activation_function :: proc (arr : []$T, A : Activation_function) {
 	#partial switch A {
+		case .none:
+			// No activation function - values remain unchanged
+			return;
+		case .relu:
+			for &a in arr {
+				a = relu(a);
+			}
+		case .silu:
+			for &a in arr {
+				a = silu(a);
+			}
+		case .hyper_tan:
+			for &a in arr {
+				a = hyper_tan(a);
+			}
 		case .sigmoid:
 			for &a in arr {
 				a = sigmoid(a);
@@ -84,6 +131,23 @@ apply_activation_function :: proc (arr : []$T, A : Activation_function) {
 //replaces the values, by the gradient of the activation_function.
 apply_activation_function_gradient :: proc (arr : []$T, A : Activation_function) {
 	#partial switch A {
+		case .none:
+			// No activation function - gradient is 1 (identity)
+			for &a in arr {
+				a = 1.0;
+			}
+		case .relu:
+			for &a in arr {
+				a = relu_gradient(a);
+			}
+		case .silu:
+			for &a in arr {
+				a = silu_gradient(a);
+			}
+		case .hyper_tan:
+			for &a in arr {
+				a = hyper_tan_gradient(a);
+			}
 		case .sigmoid:
 			for &a in arr {
 				a = sigmoid_gradient(a);
@@ -196,7 +260,6 @@ feed_feedforward_activations :: proc (network : ^Feedforward_network, data : []F
 	return;
 }
 
-
 @(require_results)
 feed_feedforward :: proc (using network : ^Feedforward_network, data : []Float, loc := #caller_location) -> (prediction : []Float) {
 	
@@ -240,61 +303,103 @@ get_loss_gradient :: proc (prediction : []Float, awnser : []Float, func : Loss_f
 	return G,
 }
 
-//Might change the input vectors.
+//Backpropagation implementation for feedforward networks
+//Mathematical notation:
+// L = Loss function
+// y = Output activations (after activation function)  
+// z = Pre-activation values (before activation function)
+// W = Weight matrix
+// b = Bias vector
+// a = Input activations from previous layer
+// η = learning_rate
 backprop_feedforward :: proc (using network : ^Feedforward_network, activations : [][]Float, awnser : []Float, func : Loss_function, learning_rate : Float, loc := #caller_location) {
 
-	//Note the awnser is the last output or "activations" in the layer.
+	// Get the final output prediction (y^L where L is the last layer)
 	prediction := activations[len(activations)-1];
 	assert(len(prediction) == len(awnser), "The prediction and awnser lengths does not match", loc);
 	
-	//This is the gradient of the Cost/Loss
+	// Initialize gradient with ∂L/∂y^L (gradient of loss w.r.t. final output)
 	G := get_loss_gradient(prediction, awnser, func);
 	defer delete(G);
 	
-	//Do the backpropergation by using G 
+	// Backpropagate through each layer in reverse order
 	#reverse for l, i in layers {
 		
+		// Get input activations for this layer: a^(l-1)
+		// For layer i, activations[i] contains the input to that layer
 		X := activations[i];
-		fmt.printf("X : %#v\n", X)
 		
-		//This is the backpropergration for the "activation layer" which is in this lib incorperated into the layer
-		//So this is a step needed before the we do the weights, biases and for the gradient of the subsequent backprops.
-		apply_activation_function_gradient(G, activation); //inplace, it replaces the values, by the gradient.
+		// Convert ∂L/∂y^l to ∂L/∂z^l by multiplying by activation derivative
+		// G currently holds ∂L/∂y^l, we need ∂L/∂z^l = ∂L/∂y^l ⊙ σ'(y^l)
+		// For most activation functions, we can compute σ'(z) from the output y = σ(z)
+		y_curr := activations[i + 1]; // Current layer's activations (output of this layer)
 		
-		//This can also be expressed as (dc/dw_ji * dy_j/dx_i) = (dc/dy_j * xi)
-		//Whis is the same as a columb-row multiplication, this leads to a matrix with dimensions jxi
-		//This matrix has the same dimensions as the weight matrix. You might say that it is xi transposed to be more correct.
-		dcdw : Matrix = utils.vec_columb_vec_row_mul(G, X); // This is dC/da, so it is gradient with respect to the output.
+		#partial switch activation {
+			case .none:
+				// Identity: σ'(z) = 1, so ∂L/∂z = ∂L/∂y
+				// G remains unchanged
+			case .sigmoid:
+				// For sigmoid: σ'(z) = y(1-y) where y = σ(z)
+				for &g, idx in G {
+					g *= y_curr[idx] * (1.0 - y_curr[idx]);
+				}
+			case .relu:
+				// For ReLU: σ'(z) = 1 if y > 0, else 0
+				for &g, idx in G {
+					if y_curr[idx] <= 0.0 {
+						g = 0.0;
+					}
+				}
+			case .hyper_tan:
+				// For tanh: σ'(z) = 1 - y² where y = tanh(z)
+				for &g, idx in G {
+					g *= (1.0 - y_curr[idx] * y_curr[idx]);
+				}
+			case .silu:
+				// For SiLU: σ'(z) = σ(z)(1 + z(1-σ(z)))
+				// This is complex to compute from output alone, would need input z
+				// For now, fall back to approximation or store z values
+				panic("SiLU gradient needs pre-activation values - not implemented");
+			case:
+				panic("Activation function gradient not implemented");
+		}
+		
+		// Compute weight gradients: ∂L/∂W^l = ∂L/∂z^l ⊗ a^(l-1)
+		// This is an outer product: each element (i,j) = (∂L/∂z^l)_i * (a^(l-1))_j
+		// Results in matrix same size as W^l
+		dcdw : Matrix = utils.vec_columb_vec_row_mul(G, X); // ∂L/∂W^l
 			
-		// This is the same as dC/dY, which is weird, but ok.
-		//This is just an alias for G
-		dcdb : []Float = G; // This is da/dz, so it the inverse activation function.
+		// Compute bias gradients: ∂L/∂b^l = ∂L/∂z^l
+		// Bias gradient is identical to pre-activation gradient
+		dcdb : []Float = G; // ∂L/∂b^l
 		
-		//New allocation, passes the error gradient back to the next layer.
-		G_new := utils.matrix_transposed_vec_mul(l.weights, G);
+		// Compute gradient for previous layer: ∂L/∂a^(l-1) = (W^l)^T * ∂L/∂z^l
+		// This propagates the error back to the previous layer's activations
+		G_new := utils.matrix_transposed_vec_mul(l.weights, G); // ∂L/∂a^(l-1)
 		
-		//TODO uncomment
-		//assert(dcdw.cols == l.weights.cols, "Columbs does not match");
-		//assert(dcdw.rows == l.weights.rows, "Rows does not match");
+
 		
-		//Apply the gradients 
-		//TODO this should not be done at this stage, we need to make epochs
-		//We average over a large part of the dataset.
+		// Gradient descent parameter updates:
+		// W^l ← W^l - η * ∂L/∂W^l
+		// b^l ← b^l - η * ∂L/∂b^l
 		{
+			// Update biases: b^l = b^l - η * ∂L/∂b^l
 			assert(len(dcdb) == len(l.biases), "Incorrect biases length");
 			for &v in soa_zip(bias=l.biases, dcdb=dcdb) {
 				v.bias -= learning_rate * v.dcdb;
 			}
 			
-			assert(len(l.weights.data) == len(dcdw.data), "Incorrect weigths length");
+			// Update weights: W^l = W^l - η * ∂L/∂W^l  
+			assert(len(l.weights.data) == len(dcdw.data), "Incorrect weights length");
 			for &v in soa_zip(w=l.weights.data, wg=dcdw.data) {
 				v.w -= learning_rate * v.wg;
 			}
 		}
 		
+		// Clean up current layer gradients and prepare for next iteration
 		utils.matrix_destroy(dcdw);
 		delete(G);
-		G = G_new;
+		G = G_new; // G now contains ∂L/∂a^(l-1) for next iteration
 	}
 }
 

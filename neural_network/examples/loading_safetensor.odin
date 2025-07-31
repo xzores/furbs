@@ -12,6 +12,7 @@ import nn ".."
 
 //@(test) load_safetensor_1 :: proc (t : ^testing.T) {
 
+/*
 entry :: proc() {
 	
 	//nn.load_safetensors_from_filename("tiny_model/model.safetensors");
@@ -43,6 +44,8 @@ entry :: proc() {
 	fmt.printf("output :%v", string(s))
 	
 }
+
+*/
 
 main :: proc () {
 	
