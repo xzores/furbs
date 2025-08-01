@@ -27,23 +27,6 @@ Loss_function :: enum {
 	MSE, // mean squared error
 }
 
-Feedforward_network :: struct {
-	input_size : int, //"nodes", but not really because there is no activation function and no bias.
-	layers : []Layer,
-	activation : Activation_function,
-	//opmizer : Optimizer,
-}
-
-Layer :: struct {
-	weights : Matrix,
-	biases : []Bias,
-}
-
-Feedforward_activations :: struct {
-	activations : [][]Float,
-	//activations_gradient : [][]Float,
-}
-
 optimizer_proc :: #type proc();
 
 Optimizer :: struct {
@@ -184,6 +167,58 @@ calculate_loss :: proc (prediction : []Float, awnser : []Float, func : Loss_func
 
 
 
+//////////////////////////////// INIT ARCHITECTURE ////////////////////////////////
+
+Module :: union {
+	^Feedforward_network,
+}
+
+Dimensions :: []int;
+Input :: distinct Dimensions;
+Output :: distinct Dimensions;
+
+Interface_proc :: #type proc (); //TODO 
+Flatten : Interface_proc : proc () {};
+
+Connection :: struct {
+	from : union {Input, int},
+	to : union {Output, int},
+	method : Interface_proc,
+}
+
+Architecture :: struct {
+	modules : []Module,
+	connections : []Connection,
+}
+
+init_architecture :: proc (modules : []Module, connections : []Connection) -> (arch : ^Architecture) {
+	arch = new(Architecture);
+	
+	//TODO check that input and output dimensions match the, there can be multiple inputs
+	
+	//TODO check that all things are connected and that nothing is left unconencted
+	
+	//TODO check that 
+
+	arch^ = {
+		slice.clone(modules),
+		slice.clone(connections),
+	}
+
+	return arch;
+}
+
+destroy_architecture :: proc (arch : ^Architecture) {
+	//The modules are not own by the architecture, they are deleted sperately.
+	delete(arch.modules);
+	delete(arch.connections);
+	free(arch);
+}
+
+train_architecture :: proc (arch : ^Architecture, inputs : []Tensor) -> (outputs : []Tensor) {
+	
+	
+}
 
 
 
@@ -193,6 +228,23 @@ calculate_loss :: proc (prediction : []Float, awnser : []Float, func : Loss_func
 
 
 //////////////////////////////// FEED FORWARD STUFF ////////////////////////////////
+
+Feedforward_network :: struct {
+	input_size : int, //"nodes", but not really because there is no activation function and no bias.
+	layers : []Layer,
+	activation : Activation_function,
+	//opmizer : Optimizer,
+}
+
+Layer :: struct {
+	weights : Matrix,
+	biases : []Bias,
+}
+
+Feedforward_activations :: struct {
+	activations : [][]Float,
+	//activations_gradient : [][]Float,
+}
 
 make_layer :: proc (input_layer_dim : int, layer_dim : int) -> Layer {
 	

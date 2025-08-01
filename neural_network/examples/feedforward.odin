@@ -14,10 +14,6 @@ import nn ".."
 Feedforward :: proc (t : ^testing.T) {
 */
 
-Optimizer_struct :: struct {
-
-}
-
 entry :: proc () {
 	
 	config := nn.Dataset_Config{
@@ -41,7 +37,7 @@ entry :: proc () {
 		activations := nn.init_activations(ff);
 		defer nn.destroy_feedforward_activations(activations);
 
-		for k in 0..<1 {
+		for k in 0..<10 {
 			for i in 0..<dataset.sample_count {
 				nn.feedforward_activations(ff, activations, utils.matrix_get_row_values(dataset.features, i));
 				
@@ -96,11 +92,6 @@ entry :: proc () {
 			// Show first few predictions for debugging
 			if i < 5 {
 				fmt.printf("Sample %d: Predicted %d, Actual %d %v\n", i, predicted_digit, actual_digit, predicted_digit == actual_digit);
-				
-				// Show ASCII image for first sample
-				if i == 0 {
-					nn.print_ascii_image(utils.matrix_get_row_values(test_dataset.features, i), 28, 28, "Test Sample 0");
-				}
 			}
 			
 			// Progress indicator
