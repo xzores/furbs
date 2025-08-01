@@ -6,6 +6,7 @@ import "core:math"
 import "core:math/rand"
 import "core:slice"
 import "core:fmt"
+import "core:log"
 
 import "../utils"
 
@@ -14,6 +15,7 @@ Weight :: Float;
 Bias :: Float;
 
 Matrix 			:: utils.Matrix(Weight);
+Tensor 			:: utils.Tensor(Weight);
 
 Activation_function :: enum {
 	none,
@@ -165,60 +167,6 @@ calculate_loss :: proc (prediction : []Float, awnser : []Float, func : Loss_func
 	return L;
 }
 
-
-
-//////////////////////////////// INIT ARCHITECTURE ////////////////////////////////
-
-Module :: union {
-	^Feedforward_network,
-}
-
-Dimensions :: []int;
-Input :: distinct Dimensions;
-Output :: distinct Dimensions;
-
-Interface_proc :: #type proc (); //TODO 
-Flatten : Interface_proc : proc () {};
-
-Connection :: struct {
-	from : union {Input, int},
-	to : union {Output, int},
-	method : Interface_proc,
-}
-
-Architecture :: struct {
-	modules : []Module,
-	connections : []Connection,
-}
-
-init_architecture :: proc (modules : []Module, connections : []Connection) -> (arch : ^Architecture) {
-	arch = new(Architecture);
-	
-	//TODO check that input and output dimensions match the, there can be multiple inputs
-	
-	//TODO check that all things are connected and that nothing is left unconencted
-	
-	//TODO check that 
-
-	arch^ = {
-		slice.clone(modules),
-		slice.clone(connections),
-	}
-
-	return arch;
-}
-
-destroy_architecture :: proc (arch : ^Architecture) {
-	//The modules are not own by the architecture, they are deleted sperately.
-	delete(arch.modules);
-	delete(arch.connections);
-	free(arch);
-}
-
-train_architecture :: proc (arch : ^Architecture, inputs : []Tensor) -> (outputs : []Tensor) {
-	
-	
-}
 
 
 
@@ -490,24 +438,6 @@ backprop_feedforward :: proc (using network : ^Feedforward_network, activations 
 		delete(G);
 		G = G_new; // G now contains ∂L/∂a^(l-1) for next iteration
 	}
-}
-
-@(require_results)
-get_data_error :: proc (using network : ^Feedforward_network, prediction : []Float, awnser : []Float, func : Loss_function, loc := #caller_location) -> (data_err : []Float) {
-	
-	assert(len(prediction) == len(awnser), "The prediction and awnser lengths does not match", loc);
-	fmt.assertf(len(prediction) == input_size, "The prediction data (%v) does not match the length of the input %v", len(prediction), input_size, loc = loc)
-	
-	//This is the gradient of the Cost/Loss
-	G := get_loss_gradient(prediction, awnser, func);
-	
-	//Do the backpropergation by using G 
-	for l, i in layers {
-		delete(G);
-		G = utils.matrix_transposed_vec_mul(l.weights, G);;
-	}
-	
-	return G;
 }
 
 feed :: proc {feed_feedforward}
