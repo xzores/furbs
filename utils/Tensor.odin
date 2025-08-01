@@ -21,7 +21,7 @@ tensor_make :: proc ($T : typeid, dims : ..int) -> Tensor(T) {
 		total_size *= d;
 	}
 
-	return {slice.clone(dims), make([]t, total_size)};
+	return {slice.clone(dims), make([]T, total_size)};
 }
 
 tensor_make_identity :: proc($T: typeid, dims: ..int) -> Tensor(T) {
@@ -39,11 +39,10 @@ tensor_make_identity :: proc($T: typeid, dims: ..int) -> Tensor(T) {
 	return t;
 }
 
-tensor_destroy :: proc (m : Tensor($T)) {
-	delete(m.data);
+tensor_destroy :: proc (m : Tensor($T), loc := #caller_location) {
+	delete(m.data, loc = loc);
+	delete(m.dims, loc = loc);
 }
-
-
 
 ///////////////////////////// Indexing, columns and rows /////////////////////////////
 
@@ -54,6 +53,212 @@ tensor_get :: #force_inline proc (m : Tensor($T), dims: []int, indices: []int) -
 tensor_set :: #force_inline proc (m : Tensor($T), value : T, dims: []int, indices: []int) {
 	#force_inline set_array_xy(m.data, value, dims, indices);
 }
+
+// Copy tensor data from src to dest
+tensor_copy :: proc(dest: Tensor($T), src: Tensor(T), loc := #caller_location) {
+	assert(len(dest.data) == len(src.data), "Tensor sizes must match for copy", loc);
+	for i in 0..<len(src.data) {
+		dest.data[i] = src.data[i];
+	}
+}
+
+// Matrix-tensor multiplication inplace (for batch processing)
+// result = tensor * mat
+tensor_matrix_mul_inplace :: proc(result: Tensor($T), tensor: Tensor(T), mat: Matrix(T), loc := #caller_location) {
+	// For 2D tensors: tensor shape is [batch_size, input_features]
+	// mat shape is [input_features, output_features]
+	// result shape should be [batch_size, output_features]
+	
+	assert(len(tensor.dims) >= 2, "Tensor must be at least 2D", loc);
+	assert(tensor.dims[1] == mat.columns, "Tensor features must match matrix columns", loc);
+	assert(len(result.dims) >= 2, "Result tensor must be at least 2D", loc);
+	assert(result.dims[0] == tensor.dims[0], "Batch sizes must match", loc);
+	assert(result.dims[1] == mat.rows, "Result features must match matrix rows", loc);
+	
+	batch_size := tensor.dims[0];
+	input_features := tensor.dims[1];
+	output_features := mat.rows;
+	
+	// For each sample in the batch
+	for batch_idx in 0..<batch_size {
+		// Get the input slice for this batch
+		input_start := batch_idx * input_features;
+		input_end := input_start + input_features;
+		input_slice := tensor.data[input_start:input_end];
+		
+		// Get the output slice for this batch
+		output_start := batch_idx * output_features;
+		output_end := output_start + output_features;
+		output_slice := result.data[output_start:output_end];
+		
+		// Matrix-vector multiplication for this sample
+		matrix_vec_mul_inplace(mat, input_slice, output_slice, loc);
+	}
+}
+
+// Add bias to tensor inplace (broadcast across batch)
+tensor_add_bias_inplace :: proc(tensor: Tensor($T), biases: []T, loc := #caller_location) {
+	assert(len(tensor.dims) >= 2, "Tensor must be at least 2D", loc);
+	assert(tensor.dims[1] == len(biases), "Tensor features must match bias length", loc);
+	
+	batch_size := tensor.dims[0];
+	features := tensor.dims[1];
+	
+	// For each sample in the batch
+	for batch_idx in 0..<batch_size {
+		// Get the slice for this batch
+		start := batch_idx * features;
+		end := start + features;
+		slice := tensor.data[start:end];
+		
+		// Add biases to this sample
+		add_to_slice(slice, biases);
+	}
+}
+
+// Add two tensors inplace
+tensor_add_inplace :: proc(A: Tensor($T), B: Tensor(T), loc := #caller_location) {
+	assert(len(A.data) == len(B.data), "Tensor sizes must match for addition", loc);
+	for i in 0..<len(A.data) {
+		A.data[i] += B.data[i];
+	}
+}
+
+// Subtract two tensors inplace
+tensor_subtract_inplace :: proc(A: Tensor($T), B: Tensor(T), loc := #caller_location) {
+	assert(len(A.data) == len(B.data), "Tensor sizes must match for subtraction", loc);
+	for i in 0..<len(A.data) {
+		A.data[i] -= B.data[i];
+	}
+}
+
+// Element-wise multiplication inplace
+tensor_multiply_inplace :: proc(A: Tensor($T), B: Tensor(T), loc := #caller_location) {
+	assert(len(A.data) == len(B.data), "Tensor sizes must match for multiplication", loc);
+	for i in 0..<len(A.data) {
+		A.data[i] *= B.data[i];
+	}
+}
+
+// Element-wise division inplace
+tensor_divide_inplace :: proc(A: Tensor($T), B: Tensor(T), loc := #caller_location) {
+	assert(len(A.data) == len(B.data), "Tensor sizes must match for division", loc);
+	for i in 0..<len(A.data) {
+		A.data[i] /= B.data[i];
+	}
+}
+
+// Scale tensor by scalar inplace
+tensor_scale_inplace :: proc(tensor: Tensor($T), scalar: T) {
+	for i in 0..<len(tensor.data) {
+		tensor.data[i] *= scalar;
+	}
+}
+
+// Fill tensor with value
+tensor_fill :: proc(tensor: Tensor($T), value: T) {
+	for i in 0..<len(tensor.data) {
+		tensor.data[i] = value;
+	}
+}
+
+// Get tensor shape as string
+tensor_shape_string :: proc(tensor: Tensor($T)) -> string {
+	if len(tensor.dims) == 0 {
+		return "[]";
+	}
+	
+	result := fmt.tprintf("[%d", tensor.dims[0]);
+	for i in 1..<len(tensor.dims) {
+		result = fmt.tprintf("%s, %d", result, tensor.dims[i]);
+	}
+	result = fmt.tprintf("%s]", result);
+	return result;
+}
+
+// Check if tensors have same shape
+tensor_same_shape :: proc(A: Tensor($T), B: Tensor(T)) -> bool {
+	if len(A.dims) != len(B.dims) {
+		return false;
+	}
+	for i in 0..<len(A.dims) {
+		if A.dims[i] != B.dims[i] {
+			return false;
+		}
+	}
+	return true;
+}
+
+// Get total number of elements in tensor
+tensor_size :: proc(tensor: Tensor($T)) -> int {
+	return len(tensor.data);
+}
+
+// Get tensor dimensions
+tensor_dims :: proc(tensor: Tensor($T)) -> []int {
+	return tensor.dims;
+}
+
+// Create tensor from slice with given dimensions
+tensor_from_slice :: proc(data: []$T, dims: []int, loc := #caller_location) -> Tensor(T) {
+	total_size := 1;
+	for d in dims {
+		total_size *= d;
+	}
+	assert(len(data) == total_size, "Data size must match dimensions", loc);
+	
+	return {slice.clone(dims), slice.clone(data)};
+}
+
+// Convert tensor to slice (returns a copy)
+tensor_to_slice :: proc(tensor: Tensor($T), loc := #caller_location) -> []T {
+	return slice.clone(tensor.data);
+}
+
+// Get a slice of the tensor data (no copy)
+tensor_data_slice :: proc(tensor: Tensor($T)) -> []T {
+	return tensor.data;
+}
+
+// Reshape tensor (if possible)
+tensor_reshape :: proc(tensor: Tensor($T), new_dims: []int, loc := #caller_location) -> Tensor(T) {
+	total_size := 1;
+	for d in new_dims {
+		total_size *= d;
+	}
+	assert(len(tensor.data) == total_size, "Cannot reshape: size mismatch", loc);
+	
+	return {slice.clone(new_dims), slice.clone(tensor.data)};
+}
+
+// Transpose 2D tensor
+tensor_transpose_2d :: proc(tensor: Tensor($T), loc := #caller_location) -> Tensor(T) {
+	assert(len(tensor.dims) == 2, "Tensor must be 2D for transpose", loc);
+	
+	rows := tensor.dims[0];
+	cols := tensor.dims[1];
+	
+	result := tensor_make(T, cols, rows);
+	
+	for i in 0..<rows {
+		for j in 0..<cols {
+			src_idx := i * cols + j;
+			dst_idx := j * rows + i;
+			result.data[dst_idx] = tensor.data[src_idx];
+		}
+	}
+	
+	return result;
+}
+
+// Helper function to add to slice (used by tensor_add_bias_inplace)
+add_to_slice :: proc(A: []$T, B: []T, loc := #caller_location) {
+	assert(len(A) == len(B), "Cannot add slices with different lengths", loc);
+	for i in 0..<len(A) {
+		A[i] += B[i];
+	}
+}
+
 
 ///////////////////////////// Linear algebra, multiplication and vectors /////////////////////////////
 /*
