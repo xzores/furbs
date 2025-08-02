@@ -463,3 +463,97 @@ set_array_xy :: #force_inline proc (a : []$T, value : T, dims: []int, indices: [
 
 	a[index] = value;
 }
+
+// Convert tensor to matrix view (no copy, just different view)
+tensor_as_matrix :: proc(tensor: Tensor($T), loc := #caller_location) -> Matrix(T) {
+	assert(len(tensor.dims) >= 2, "Tensor must be at least 2D for matrix view", loc);
+	
+	// For a tensor with shape [batch_size, features], we view it as a matrix
+	// where rows = batch_size and columns = features
+	rows := tensor.dims[0];
+	columns := tensor.dims[1];
+	
+	return Matrix(T){
+		rows = rows,
+		columns = columns,
+		data = tensor.data, // Same data, different view
+	};
+}
+
+// Outer product of two vectors, creating a tensor
+// If A has shape [batch_size, out_dim] and B has shape [batch_size, in_dim]
+// Result has shape [batch_size, out_dim, in_dim]
+outer_prodcut :: proc(A: Tensor($T), B: Tensor(T), loc := #caller_location) -> Tensor(T) {
+	assert(len(A.dims) >= 2, "A must be at least 2D", loc);
+	assert(len(B.dims) >= 2, "B must be at least 2D", loc);
+	assert(A.dims[0] == B.dims[0], "Batch sizes must match for outer product", loc);
+	
+	batch_size := A.dims[0];
+	out_dim := A.dims[1];
+	in_dim := B.dims[1];
+	
+	// Create result tensor with shape [batch_size, out_dim, in_dim]
+	result := tensor_make(T, batch_size, out_dim, in_dim);
+	
+	// For each batch
+	for batch_idx in 0..<batch_size {
+		// Get the slices for this batch
+		a_start := batch_idx * out_dim;
+		a_end := a_start + out_dim;
+		a_slice := A.data[a_start:a_end];
+		
+		b_start := batch_idx * in_dim;
+		b_end := b_start + in_dim;
+		b_slice := B.data[b_start:b_end];
+		
+		// Compute outer product for this batch
+		result_start := batch_idx * out_dim * in_dim;
+		for i in 0..<out_dim {
+			for j in 0..<in_dim {
+				result_idx := result_start + i * in_dim + j;
+				result.data[result_idx] = a_slice[i] * b_slice[j];
+			}
+		}
+	}
+	
+	return result;
+}
+
+// Get a sub-matrix from a tensor at a specific batch index
+// For a tensor with shape [batch_size, rows, cols], returns a matrix with shape [rows, cols]
+tensor_get_sub_matrix :: proc(tensor: Tensor($T), batch_indices: []int, loc := #caller_location) -> Matrix(T) {
+	assert(len(tensor.dims) >= 3, "Tensor must be at least 3D for sub-matrix extraction", loc);
+	assert(len(batch_indices) == 1, "Currently only supports single batch index", loc);
+	
+	batch_idx := batch_indices[0];
+	rows := tensor.dims[1];
+	cols := tensor.dims[2];
+	
+	// Calculate the start index for this batch
+	start_idx := batch_idx * rows * cols;
+	end_idx := start_idx + rows * cols;
+	
+	// Create a matrix view of the tensor data for this batch
+	return Matrix(T){
+		rows = rows,
+		columns = cols,
+		data = tensor.data[start_idx:end_idx], // View into the tensor data
+	};
+}
+
+// Get a sub-vector from a tensor at a specific batch index
+// For a tensor with shape [batch_size, vector_length], returns a slice with shape [vector_length]
+tensor_get_sub_vector :: proc(tensor: Tensor($T), batch_indices: []int, loc := #caller_location) -> []T {
+	assert(len(tensor.dims) >= 2, "Tensor must be at least 2D for sub-vector extraction", loc);
+	assert(len(batch_indices) == 1, "Currently only supports single batch index", loc);
+	
+	batch_idx := batch_indices[0];
+	vector_length := tensor.dims[1];
+	
+	// Calculate the start and end indices for this batch
+	start_idx := batch_idx * vector_length;
+	end_idx := start_idx + vector_length;
+	
+	// Return a view into the tensor data for this batch
+	return tensor.data[start_idx:end_idx];
+}

@@ -125,7 +125,7 @@ entry_single :: proc () {
 entry :: proc () {
 	
 	config := nn.Dataset_Config{
-		max_samples = 10000,
+		max_samples = 10,
 	};
 
 	dataset, err := nn.load_parquet_dataset("C:/Users/jakob/Datasets/mnist/mnist/mnist/train-00000-of-00001.parquet", config);
@@ -180,8 +180,8 @@ entry :: proc () {
 				nn.backprop_feedforward_batch(ff, activations, answers, .MSE, learning_rate);
 				
 				// Print progress every 10 batches
-				if i %% 10 == 0 {
-					//fmt.printf("  Batch %d/%d, Loss: %.4f\n", i + 1, len(batch_input), loss);
+				if i %% 1000 == 0 {
+					fmt.printf("  Batch %d/%d, Loss: %.4f\n", i + 1, len(batch_input), loss);
 				}
 			}
 		}

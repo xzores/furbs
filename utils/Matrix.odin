@@ -308,31 +308,35 @@ vec_columb_vec_row_mul :: #force_inline proc(A, B : []$T, loc := #caller_locatio
 }
 
 //This will first transpose the matrix a then multiply with the vector.
-matrix_transposed_vec_mul :: #force_inline proc(col_vec : Matrix($T), row_vec : []T, loc := #caller_location) -> []T where intrinsics.type_is_numeric(T) {
-	A := col_vec; B := row_vec;
+matrix_transposed_vec_mul :: #force_inline proc(mat : Matrix($T), row_vec : []T, loc := #caller_location) -> []T where intrinsics.type_is_numeric(T) {
+	// Initialize result vector
+	result := make([]T, mat.columns, loc = loc);  // After transpose, we have col_vec.columns rows
+
+	matrix_transposed_vec_mul_at(mat, row_vec, result, loc);
+
+	return result;
+}
+
+//This will first transpose the matrix a then multiply with the vector.
+matrix_transposed_vec_mul_at :: #force_inline proc(mat : Matrix($T), row_vec : []T, result : []T, loc := #caller_location) where intrinsics.type_is_numeric(T) {
+	B := row_vec;
 	
 	// Ensure the matrix and vector can be multiplied (A.rows == len(B) after transpose)
-	if A.rows != len(B) {
-		fmt.panicf("Matrix and vector dimensions do not align for multiplication after transpose, Matrix: (%v, %v). The vector has length %v and the matrix has %v rows", A.rows, A.columns, len(B), A.rows);
-	}
-
-	// Initialize result vector
-	result := make([]T, A.columns, loc = loc);  // After transpose, we have A.columns rows
+	fmt.assertf(mat.rows == len(B), "Matrix and vector dimensions do not align for multiplication after transpose, Matrix: (%v, %v). The vector has length %v and the matrix has %v rows", mat.rows, mat.columns, len(B), mat.rows, loc = loc);
+	fmt.assertf(mat.columns == len(result), "Matrix and vector dimensions do not align for multiplication after transpose, Matrix: (%v, %v). The result vector has length %v and the matrix has %v columns", mat.rows, mat.columns, len(result), mat.columns, loc = loc);
 
 	// Perform transposed matrix-vector multiplication
-	for j in 0 ..< A.columns { // Iterate over what will be rows after transpose
+	for j in 0 ..< mat.columns { // Iterate over what will be rows after transpose
 		sum : T;
 
-		for i in 0 ..< A.rows { // Iterate over what will be columns after transpose
+		for i in 0 ..< mat.rows { // Iterate over what will be columns after transpose
 			// Access elements in flattened arrays as if the matrix were transposed
-			a_elem := A.data[i * A.columns + j];
+			a_elem := mat.data[i * mat.columns + j];
 			b_elem := B[i];
 			sum += a_elem * b_elem;
 		}
 		result[j] = sum;  // Result has A.columns elements (since A^T has A.columns rows)
 	}
-
-	return result;
 }
 
 

@@ -205,12 +205,11 @@ Feedforward_network :: struct {
 	input_size : int, //"nodes", but not really because there is no activation function and no bias.
 	layers : []Layer,
 	activation : Activation_function,
-	//opmizer : Optimizer,
 }
 
 Layer :: struct {
-	weights : Matrix,
-	biases : []Bias,
+	weights : Matrix, //Rows is the number of neurons in the layer, columns is the number of neurons in the previous layer
+	biases : []Bias, //length is the same as the number of neurons in the layer
 }
 
 Feedforward_activations :: struct {
@@ -230,7 +229,6 @@ make_layer :: proc (input_layer_dim : int, layer_dim : int) -> Layer {
 		make([]Bias, layer_dim)
 	};
 }
-
 
 make_feedforward :: proc (input_dim, output_layer_dim : int, hidden_dims : []int, opmizer : Optimizer, activation : Activation_function) -> ^Feedforward_network {
 	
@@ -295,20 +293,14 @@ destroy_feedforward_activations :: proc (activations : Feedforward_activations) 
 // Initialize batch activations
 init_batch_activations :: proc (network : ^Feedforward_network, batch_size : int) -> Feedforward_batch_activations {
 	activations := make([]Tensor, len(network.layers) + 1);
-	temp_gradients := make([]Tensor, len(network.layers));
-	temp_matrices := make([]Matrix, len(network.layers));
 	
 	// Preallocate the activations for batch
 	activations[0] = utils.tensor_make(Float, batch_size, network.input_size);
 	for l, i in network.layers {
 		activations[i+1] = utils.tensor_make(Float, batch_size, l.weights.rows);
-		// temp_gradients should have the same dimensions as the input to this layer
-		// For layer i, the input comes from activations[i] which has l.weights.columns dimensions
-		temp_gradients[i] = utils.tensor_make(Float, batch_size, l.weights.columns);
-		temp_matrices[i] = utils.matrix_make(l.weights.rows, l.weights.columns, Weight);
 	}
 	
-	return {activations, temp_gradients, temp_matrices};
+	return {activations};
 }
 
 // Destroy batch activations
@@ -316,15 +308,7 @@ destroy_feedforward_batch_activations :: proc (activations : Feedforward_batch_a
 	for a in activations.activations {
 		utils.tensor_destroy(a);
 	}
-	for t in activations.temp_gradients {
-		utils.tensor_destroy(t);
-	}
-	for m in activations.temp_matrices {
-		utils.matrix_destroy(m);
-	}
 	delete(activations.activations);
-	delete(activations.temp_gradients);
-	delete(activations.temp_matrices);
 }
 
 feedforward_activations :: proc (network : ^Feedforward_network, activations : Feedforward_activations, data : []Float, loc := #caller_location) {
@@ -601,7 +585,7 @@ backprop_feedforward_batch :: proc (using network : ^Feedforward_network, activa
 	
 	// Initialize gradient with ∂C/∂a^L (gradient of loss w.r.t. final output)
 	dcda := get_loss_gradient_batch(predictions, answer, func); //This is ∂C/∂a^L 
-	defer utils.tensor_destroy(dcda);
+	//defer utils.tensor_destroy(dcda); //dcda get deleted in the loop (yes that works without leaks)
 	
 	//For the last layer (output layer)
 	G := dcda; //the gradient is the cost function with respect to the activation
@@ -670,10 +654,23 @@ backprop_feedforward_batch :: proc (using network : ^Feedforward_network, activa
 			}
 		}
 		
-		// Compute gradient for previous layer: ∂L/∂a^(l-1) = (W^l)^T * ∂L/∂z^l
+		// Compute gradient for previous layer: ∂C/∂a^(l-1) = (W^l)^T * ∂C/∂z^l
 		// This propagates the error back to the previous layer's activations
-		G = utils.matrix_transposed_vec_mul(l.weights, G); // ∂L/∂a^(l-1)
-		// G now contains ∂L/∂a^(l-1) for next iteration
+		//w^L: rows is the number of neurons in the layer, columns is the number of neurons in the previous layer
+		//G is size {batch_size, out_dim}, where out_dim is the number of neurons in this layer
+		next_layer_grad : Tensor = utils.tensor_make(Float, G.dims[0], l.weights.columns); //this is ∂C/∂a^(l-1) for the next/last layer (depending on which way is last and next, we are in reverse or forward)
+		for i in 0..<G.dims[0] {
+			//get the row for this batch from dcdb
+			dcdb_row := utils.matrix_get_row_values(dcdb, i); //not a copy just a view
+			
+			//multiply the weights by the dcdb_row to get the activations_grad
+			layer_grad := utils.tensor_get_sub_vector(next_layer_grad, {i}) // Get a view into the tensor, this will provide a vector to store this layers gradients.
+			utils.matrix_transposed_vec_mul_at(l.weights, dcdb_row, layer_grad); // Multiply the transposed weights by the dcdb_row and place the result in layer_grad
+		}
+
+		utils.tensor_destroy(G); //delete the gradient for this layer a new G will take its place (cannot be resued as they are different sizes)
+		G = next_layer_grad;
+		// G now contains ∂C/∂a^(l-1) for next iteration
 	}
 }
 
