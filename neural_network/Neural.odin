@@ -133,6 +133,7 @@ apply_activation_function_gradient :: proc (arr : []$T, A : Activation_function)
 		case .silu:
 			for &a in arr {
 				a = silu_gradient(a);
+				panic("TODO incorrect");
 			}
 		case .hyper_tan:
 			for &a in arr {
@@ -220,8 +221,6 @@ Feedforward_activations :: struct {
 // Batch activations structure
 Feedforward_batch_activations :: struct {
 	activations : []Tensor,
-	temp_gradients : []Tensor, // Temporary gradient tensors for backprop
-	temp_matrices : []Matrix, // Temporary matrices for gradient computation
 }
 
 make_layer :: proc (input_layer_dim : int, layer_dim : int) -> Layer {
@@ -273,7 +272,6 @@ destroy_feedforward :: proc (network : ^Feedforward_network) {
 	free(network);
 }
 
-
 init_activations :: proc (network : ^Feedforward_network) -> Feedforward_activations {
 
 	activations := make([][]Float, len(network.layers) + 1);
@@ -293,7 +291,6 @@ destroy_feedforward_activations :: proc (activations : Feedforward_activations) 
 	}
 	delete(activations.activations);
 }
-
 
 // Initialize batch activations
 init_batch_activations :: proc (network : ^Feedforward_network, batch_size : int) -> Feedforward_batch_activations {
@@ -329,7 +326,6 @@ destroy_feedforward_batch_activations :: proc (activations : Feedforward_batch_a
 	delete(activations.temp_gradients);
 	delete(activations.temp_matrices);
 }
-
 
 feedforward_activations :: proc (network : ^Feedforward_network, activations : Feedforward_activations, data : []Float, loc := #caller_location) {
 	
@@ -415,6 +411,7 @@ feed_feedforward :: proc (using network : ^Feedforward_network, data : []Float, 
 	for l, i in layers {
 		//l.weights could be called w^(L)
 		a := utils.matrix_vec_mul(l.weights, prediction, loc);
+
 		//l.biases could be called  b^(L)
 		add_to_slice(a, l.biases);			//Applies it inplace, so that the new_res gets l.nodes added to it per element.
 		apply_activation_function(a, network.activation); 	//Does it inplace
@@ -528,32 +525,32 @@ backprop_feedforward :: proc (using network : ^Feedforward_network, activations 
 		
 		// Convert ∂L/∂y^l to ∂L/∂z^l by multiplying by activation derivative
 		// G currently holds ∂L/∂y^l, we need ∂L/∂z^l = ∂L/∂y^l ⊙ σ'(y^l)
-		// For most activation functions, we can compute σ'(z) from the output y = σ(z)
+		// For most activation functions, we can compute ∂a/∂z from the output y = σ(z)
 		y_curr := activations.activations[i + 1]; // Current layer's activations (output of this layer)
 		
 		#partial switch activation {
 			case .none:
-				// Identity: σ'(z) = 1, so ∂L/∂z = ∂L/∂y
+				// Identity: ∂a/∂z = 1, so ∂L/∂z = ∂L/∂y
 				// G remains unchanged
 			case .sigmoid:
-				// For sigmoid: σ'(z) = y(1-y) where y = σ(z)
+				// For sigmoid: ∂a/∂z = y(1-y) where y = σ(z)
 				for &g, idx in G {
 					g *= y_curr[idx] * (1.0 - y_curr[idx]);
 				}
 			case .relu:
-				// For ReLU: σ'(z) = 1 if y > 0, else 0
+				// For ReLU: ∂a/∂z = 1 if y > 0, else 0
 				for &g, idx in G {
 					if y_curr[idx] <= 0.0 {
 						g = 0.0;
 					}
 				}
 			case .hyper_tan:
-				// For tanh: σ'(z) = 1 - y² where y = tanh(z)
+				// For tanh: ∂a/∂z = 1 - y² where y = tanh(z)
 				for &g, idx in G {
 					g *= (1.0 - y_curr[idx] * y_curr[idx]);
 				}
 			case .silu:
-				// For SiLU: σ'(z) = σ(z)(1 + z(1-σ(z)))
+				// For SiLU: ∂a/∂z = σ(z)(1 + z(1-σ(z)))
 				// This is complex to compute from output alone, would need input z
 				// For now, fall back to approximation or store z values
 				panic("SiLU gradient needs pre-activation values - not implemented");
@@ -565,16 +562,11 @@ backprop_feedforward :: proc (using network : ^Feedforward_network, activations 
 		// This is an outer product: each element (i,j) = (∂L/∂z^l)_i * (a^(l-1))_j
 		// Results in matrix same size as W^l
 		dcdw : Matrix = utils.vec_columb_vec_row_mul(G, X); // ∂L/∂W^l
-			
+		defer utils.matrix_destroy(dcdw);
+
 		// Compute bias gradients: ∂L/∂b^l = ∂L/∂z^l
 		// Bias gradient is identical to pre-activation gradient
 		dcdb : []Float = G; // ∂L/∂b^l
-		
-		// Compute gradient for previous layer: ∂L/∂a^(l-1) = (W^l)^T * ∂L/∂z^l
-		// This propagates the error back to the previous layer's activations
-		G_new := utils.matrix_transposed_vec_mul(l.weights, G); // ∂L/∂a^(l-1)
-		
-
 		
 		// Gradient descent parameter updates:
 		// W^l ← W^l - η * ∂L/∂W^l
@@ -593,16 +585,96 @@ backprop_feedforward :: proc (using network : ^Feedforward_network, activations 
 			}
 		}
 		
-		// Clean up current layer gradients and prepare for next iteration
-		utils.matrix_destroy(dcdw);
-		delete(G);
-		G = G_new; // G now contains ∂L/∂a^(l-1) for next iteration
+		// Compute gradient for previous layer: ∂L/∂a^(l-1) = (W^l)^T * ∂L/∂z^l
+		// This propagates the error back to the previous layer's activations
+		G= utils.matrix_transposed_vec_mul(l.weights, G); // ∂L/∂a^(l-1)
+		// G now contains ∂L/∂a^(l-1) for next iteration
 	}
 }
 
 // Batch backpropagation
 backprop_feedforward_batch :: proc (using network : ^Feedforward_network, activations : Feedforward_batch_activations, answer : Tensor, func : Loss_function, learning_rate : Float, loc := #caller_location) {
-	TODO BY A HUMAN
+	
+	// Get the final output prediction (y^L where L is the last layer)
+	predictions := get_batch_prediction(activations);
+	assert(predictions.dims[0] == answer.dims[0], "The prediction and awnser lengths does not match", loc);
+	
+	// Initialize gradient with ∂C/∂a^L (gradient of loss w.r.t. final output)
+	dcda := get_loss_gradient_batch(predictions, answer, func); //This is ∂C/∂a^L 
+	defer utils.tensor_destroy(dcda);
+	
+	//For the last layer (output layer)
+	G := dcda; //the gradient is the cost function with respect to the activation
+
+	fmt.assertf(len(activations.activations) == len(layers) + 1, "Expect one more activations then layers, expect %v activations, got: %v", len(layers) + 1, len(activations.activations));
+	
+	// Backpropagate through each layer in reverse order
+	// If there are 10 layers then there is 11 activations.
+	//The goal of this operation is to go from G -> da_L -> dz_L -> (dw_l, da_(L-1) or db_L)
+	// da/dz * dG/da (G=C for output layer) is used to compute dw_l, da_(L-1) and db_L, so we start by computing that.
+	// ∂C/∂a^L is tradionally the cost, but I use it here to describe just the gradient for the output of the current layer.
+	#reverse for l, i in layers {
+		
+		// Get input activations for this layer: a^(l-1)
+		// For layer i, activations[i] contains the input to that layer, because it is 0 indexed
+		X := activations.activations[i]; //same as a^(l-1)
+		
+		// Next we want to convert ∂L/∂y^l to ∂L/∂z^l by multiplying by activation derivative
+		// For this we need the derivitive of the activation function (which is σ'(y^l))
+		// G currently holds ∂L/∂y^l, we need ∂L/∂z^l = ∂L/∂y^l ⊙ σ'(y^l)
+		a_L := activations.activations[i + 1]; // Current layer's activations (output of this layer) //at this point it is a_L
+		
+		// For most activation functions, we can compute ∂a/∂z from the output y = σ(z)
+		// The activations memeory is overwritten by the gradient, we reuse the memory for speed.
+		apply_activation_function_gradient_tensor(a_L, network.activation); //Here it becomes ∂a/∂z instead of a_L
+		dadz := a_L; //rename for consistentcy
+
+		//Now we have da_L/dz_L and G where (G = dC/daL for output layer)
+		//Calculate dcdz since it is used in the 3 other computations
+		utils.tensor_elem_wise_multiply_inplace(dadz, G); //operation is inplace dadz becomes dcdz
+		dcdz := dadz; //rename for consistentcy
+		
+		// Bias gradient is identical to dcdz //∂C/∂b^l = ∂L/∂z^l
+		dcdb : Matrix = utils.tensor_as_matrix(dcdz); //does not copy, just a different way to view.
+
+		// Compute weight gradients: ∂C/∂W^l = ∂C/∂z^l ⊗ a^(l-1)
+		// This is an outer product: each element (i,j) = (∂L/∂z^l)_i * (a^(l-1))_j
+		// Results in matrix same size as W^l
+		// These weights are the weights on the output
+		dcdw : Tensor = utils.outer_prodcut(G, X); // ∂L/∂W^l shape is [batch_size, out_dim, in_dim]
+		defer utils.tensor_destroy(dcdw);
+		
+		// Gradient descent parameter updates:
+		// W^l ← W^l - η * ∂L/∂W^l
+		// b^l ← b^l - η * ∂L/∂b^l
+		{
+			batches := dcdb.rows;
+			rate := learning_rate / f32(batches);
+
+			// Update biases: b^l = b^l - η * ∂L/∂b^l
+			assert(dcdb.columns == len(l.biases), "Incorrect biases length");
+			for i in 0..<batches { //dcdb.dims[0] = number of batches
+				bias_grad := utils.matrix_get_row_values(dcdb, i); //not a copy just a view
+				for &b, j in l.biases {
+					b -= rate * bias_grad[j]; //TODO we could move the *rate out of the loop by accumulating the result first and then dividing and then applying
+				}
+			}
+			
+			// Update weights: W^l = W^l - η * ∂L/∂W^l  
+			assert(len(l.weights.data) == len(dcdw.data), "Incorrect weights length");
+			for i in 0..<batches { //dcdb.dims[0] = number of batches
+				wg := utils.tensor_get_sub_matrix(dcdw, {i})
+				for &w, j in l.weights.data {
+					w -= rate * wg.data[j];
+				}
+			}
+		}
+		
+		// Compute gradient for previous layer: ∂L/∂a^(l-1) = (W^l)^T * ∂L/∂z^l
+		// This propagates the error back to the previous layer's activations
+		G = utils.matrix_transposed_vec_mul(l.weights, G); // ∂L/∂a^(l-1)
+		// G now contains ∂L/∂a^(l-1) for next iteration
+	}
 }
 
 feed :: proc {feed_feedforward, feed_feedforward_batch}

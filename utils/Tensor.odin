@@ -46,12 +46,12 @@ tensor_destroy :: proc (m : Tensor($T), loc := #caller_location) {
 
 ///////////////////////////// Indexing, columns and rows /////////////////////////////
 
-tensor_get :: #force_inline proc (m : Tensor($T), dims: []int, indices: []int) -> T {
-	return #force_inline get_array(m.data, dims, indices)
+tensor_get :: #force_inline proc (m : Tensor($T), indices: []int) -> T {
+	return #force_inline get_array(m.data, m.dims, indices)
 }
 
-tensor_set :: #force_inline proc (m : Tensor($T), value : T, dims: []int, indices: []int) {
-	#force_inline set_array_xy(m.data, value, dims, indices);
+tensor_set :: #force_inline proc (m : Tensor($T), value : T, indices: []int) {
+	#force_inline set_array_xy(m.data, value, m.dims, indices);
 }
 
 // Copy tensor data from src to dest
@@ -132,8 +132,8 @@ tensor_subtract_inplace :: proc(A: Tensor($T), B: Tensor(T), loc := #caller_loca
 	}
 }
 
-// Element-wise multiplication inplace
-tensor_multiply_inplace :: proc(A: Tensor($T), B: Tensor(T), loc := #caller_location) {
+// Element-wise multiplication inplace, the result is placed in A
+tensor_elem_wise_multiply_inplace :: proc(A: Tensor($T), B: Tensor(T), loc := #caller_location) {
 	assert(len(A.data) == len(B.data), "Tensor sizes must match for multiplication", loc);
 	for i in 0..<len(A.data) {
 		A.data[i] *= B.data[i];
