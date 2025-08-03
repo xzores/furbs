@@ -14,8 +14,8 @@ Float :: f32;
 Weight :: Float;
 Bias :: Float;
 
-Matrix 			:: utils.Matrix(Weight);
-Tensor 			:: utils.Tensor(Weight);
+Matrix 			:: utils.Matrix(Float);
+Tensor 			:: utils.Tensor(Float);
 
 Activation_function :: enum {
 	none,
@@ -118,44 +118,73 @@ apply_activation_function :: proc (arr : []$T, A : Activation_function) {
 	}
 }
 
-//replaces the values, by the gradient of the activation_function.
-apply_activation_function_gradient :: proc (arr : []$T, A : Activation_function) {
-	#partial switch A {
+//replaces the values in G, by the gradient of the activation_function.
+apply_activation_function_gradient :: proc (G : []Float, arr : []Float, A : Activation_function) {
+	assert(len(G) == len(arr), "The number of activations does not match the number of gradients");
+	switch A {
 		case .none:
-			// No activation function - gradient is 1 (identity)
-			for &a in arr {
-				a = 1.0;
+			// Identity: ∂a/∂z = 1, so ∂L/∂z = ∂L/∂y
+			// G remains unchanged
+		case .sigmoid:
+			// For sigmoid: ∂a/∂z = y(1-y) where y = σ(z)
+			for &g, idx in G {
+				g *= arr[idx] * (1.0 - arr[idx]);
 			}
 		case .relu:
-			for &a in arr {
-				a = relu_gradient(a);
-			}
-		case .silu:
-			for &a in arr {
-				a = silu_gradient(a);
-				panic("TODO incorrect");
+			// For ReLU: ∂a/∂z = 1 if y > 0, else 0
+			for &g, idx in G {
+				if arr[idx] <= 0.0 {
+					g = 0.0;
+				}
 			}
 		case .hyper_tan:
-			for &a in arr {
-				a = hyper_tan_gradient(a);
+			// For tanh: ∂a/∂z = 1 - y² where y = tanh(z)
+			for &g, idx in G {
+				g *= (1.0 - arr[idx] * arr[idx]);
 			}
-		case .sigmoid:
-			for &a in arr {
-				a = sigmoid_gradient(a);
-			}
+		case .silu:
+			// For SiLU: ∂a/∂z = σ(z)(1 + z(1-σ(z)))
+			// This is complex to compute from output alone, would need input z
+			// For now, fall back to approximation or store z values
+			panic("SiLU gradient needs pre-activation values - not implemented");
 		case:
-			panic("not implemented");
+			panic("Activation function gradient not implemented");
 	}
 }
 
-// Apply activation function to tensor (batch operation)
-apply_activation_function_tensor :: proc (tensor : Tensor, A : Activation_function) {
-	apply_activation_function(tensor.data, A);
-}
+//size of G is [batchsize, neurons_in_layer] for feedforward, and for others?
+apply_activation_function_gradient_tensor :: proc(G : Tensor, arr : Tensor, A : Activation_function) {
+	assert(utils.tensor_same_shape(G, arr), "Gradient and activation tensor shapes must match");
 
-// Apply activation function gradient to tensor (batch operation)
-apply_activation_function_gradient_tensor :: proc (tensor : Tensor, A : Activation_function) {
-	apply_activation_function_gradient(tensor.data, A);
+	count := len(G.data);
+
+	switch A {
+		case .none:
+			// ∂a/∂z = 1 → ∂C/∂z = ∂C/∂a, no change
+			// Do nothing
+		case .sigmoid:
+			// ∂a/∂z = σ(z)(1 - σ(z)) — use arr for σ(z)
+			for i in 0..<count {
+				G.data[i] *= arr.data[i] * (1.0 - arr.data[i]);
+			}
+		case .relu:
+			// ∂a/∂z = 1 if z > 0 else 0 — use arr as output
+			for i in 0..<count {
+				if arr.data[i] <= 0.0 {
+					G.data[i] = 0.0;
+				}
+			}
+		case .hyper_tan:
+			// ∂a/∂z = 1 - tanh²(z) — arr holds tanh(z)
+			for i in 0..<count {
+				G.data[i] *= 1.0 - arr.data[i] * arr.data[i];
+			}
+		case .silu:
+			// ∂a/∂z = σ(z)(1 + z(1 - σ(z))) — can't compute from output alone
+			panic("SiLU gradient requires pre-activation z values — not implemented");
+		case:
+			panic("Activation function gradient not implemented");
+	}
 }
 
 @(require_results)
@@ -219,7 +248,7 @@ Feedforward_activations :: struct {
 
 // Batch activations structure
 Feedforward_batch_activations :: struct {
-	activations : []Tensor,
+	activations : []Tensor, //one tensor for each layer
 }
 
 make_layer :: proc (input_layer_dim : int, layer_dim : int) -> Layer {
@@ -343,13 +372,15 @@ feedforward_activations :: proc (network : ^Feedforward_network, activations : F
 feedforward_batch_activations :: proc (network : ^Feedforward_network, activations : Feedforward_batch_activations, data : Tensor, loc := #caller_location) {
 	
 	// Check if input data dimensions match network input size
-	fmt.assertf(len(data.dims) >= 2 && data.dims[1] == network.input_size, 
-		"The input data dimensions (%v) do not match the network input size %v", data.dims, network.input_size, loc = loc)
+	fmt.assertf(len(data.dims) >= 2 && data.dims[1] == network.input_size, "The input data dimensions (%v) do not match the network input size %v", data.dims, network.input_size, loc = loc)
+	fmt.assertf(len(activations.activations[0].data) == len(data.data), "The input data dimensions (%v) do not match the network input size %v", data.dims, network.input_size, loc = loc)
 	
 	batch_size := data.dims[0];
 	
 	// Copy input data to initial activation
-	utils.tensor_copy(activations.activations[0], data);
+	// activations.activations is an array of tensors, one tensor for each layer
+	// Data is a tensor
+	utils.tensor_copy(activations.activations[0], data); //Copy data into the first layer
 	
 	// Loop through each layer to compute activations
 	for l, i in network.layers {
@@ -363,7 +394,7 @@ feedforward_batch_activations :: proc (network : ^Feedforward_network, activatio
 		utils.tensor_add_bias_inplace(next_activation, l.biases);
 		
 		// Apply activation function to the result
-		apply_activation_function_tensor(next_activation, network.activation);
+		apply_activation_function(next_activation.data, network.activation); //This does not care about dimensions, it simply applied to every entry in the tensor
 	}
 	
 	return;
@@ -379,60 +410,6 @@ get_prediction :: proc (activations : Feedforward_activations, loc := #caller_lo
 // Get prediction from batch activations
 get_batch_prediction :: proc (activations : Feedforward_batch_activations, loc := #caller_location) -> (prediction : Tensor) {
 	
-	prediction = activations.activations[len(activations.activations)-1];
-	
-	return prediction;
-}
-
-@(require_results)
-feed_feedforward :: proc (using network : ^Feedforward_network, data : []Float, loc := #caller_location) -> (prediction : []Float) {
-	
-	fmt.assertf(len(data) == input_size, "The input data (%v) does not match the length of the input %v", len(data), input_size, loc = loc)
-	
-	//This could also be called a^(L-1)
-	prediction = slice.clone(data);
-	
-	for l, i in layers {
-		//l.weights could be called w^(L)
-		a := utils.matrix_vec_mul(l.weights, prediction, loc);
-
-		//l.biases could be called  b^(L)
-		add_to_slice(a, l.biases);			//Applies it inplace, so that the new_res gets l.nodes added to it per element.
-		apply_activation_function(a, network.activation); 	//Does it inplace
-		
-		delete(prediction);
-		prediction = a;
-	}
-	
-	return;
-}
-
-// Batch feedforward
-@(require_results)
-feed_feedforward_batch :: proc (using network : ^Feedforward_network, activations : Feedforward_batch_activations, data : Tensor, loc := #caller_location) -> (prediction : Tensor) {
-	
-	fmt.assertf(len(data.dims) >= 2 && data.dims[1] == input_size, 
-		"The input data dimensions (%v) do not match the network input size %v", data.dims, input_size, loc = loc)
-	
-	batch_size := data.dims[0];
-	output_size := layers[len(layers)-1].weights.rows;
-	
-	// Copy input data to initial activation
-	utils.tensor_copy(activations.activations[0], data);
-	
-	// Process through all layers
-	for l, i in layers {
-		// Matrix-tensor multiplication
-		utils.tensor_matrix_mul_inplace(activations.activations[i+1], activations.activations[i], l.weights, loc);
-		
-		// Add biases (broadcast across batch)
-		utils.tensor_add_bias_inplace(activations.activations[i+1], l.biases);
-		
-		// Apply activation function
-		apply_activation_function_tensor(activations.activations[i+1], network.activation);
-	}
-	
-	// Return the final activation as prediction
 	prediction = activations.activations[len(activations.activations)-1];
 	
 	return prediction;
@@ -512,36 +489,8 @@ backprop_feedforward :: proc (using network : ^Feedforward_network, activations 
 		// For most activation functions, we can compute ∂a/∂z from the output y = σ(z)
 		y_curr := activations.activations[i + 1]; // Current layer's activations (output of this layer)
 		
-		#partial switch activation {
-			case .none:
-				// Identity: ∂a/∂z = 1, so ∂L/∂z = ∂L/∂y
-				// G remains unchanged
-			case .sigmoid:
-				// For sigmoid: ∂a/∂z = y(1-y) where y = σ(z)
-				for &g, idx in G {
-					g *= y_curr[idx] * (1.0 - y_curr[idx]);
-				}
-			case .relu:
-				// For ReLU: ∂a/∂z = 1 if y > 0, else 0
-				for &g, idx in G {
-					if y_curr[idx] <= 0.0 {
-						g = 0.0;
-					}
-				}
-			case .hyper_tan:
-				// For tanh: ∂a/∂z = 1 - y² where y = tanh(z)
-				for &g, idx in G {
-					g *= (1.0 - y_curr[idx] * y_curr[idx]);
-				}
-			case .silu:
-				// For SiLU: ∂a/∂z = σ(z)(1 + z(1-σ(z)))
-				// This is complex to compute from output alone, would need input z
-				// For now, fall back to approximation or store z values
-				panic("SiLU gradient needs pre-activation values - not implemented");
-			case:
-				panic("Activation function gradient not implemented");
-		}
-		
+		apply_activation_function_gradient(G, y_curr, network.activation);
+
 		// Compute weight gradients: ∂L/∂W^l = ∂L/∂z^l ⊗ a^(l-1)
 		// This is an outer product: each element (i,j) = (∂L/∂z^l)_i * (a^(l-1))_j
 		// Results in matrix same size as W^l
@@ -610,7 +559,7 @@ backprop_feedforward_batch :: proc (using network : ^Feedforward_network, activa
 		
 		// For most activation functions, we can compute ∂a/∂z from the output y = σ(z)
 		// The activations memeory is overwritten by the gradient, we reuse the memory for speed.
-		apply_activation_function_gradient_tensor(a_L, network.activation); //Here it becomes ∂a/∂z instead of a_L
+		apply_activation_function_gradient_tensor(G, a_L, network.activation); //Here it becomes ∂a/∂z instead of a_L //Applies to all entures in G
 		dadz := a_L; //rename for consistentcy
 
 		//Now we have da_L/dz_L and G where (G = dC/daL for output layer)
@@ -645,7 +594,7 @@ backprop_feedforward_batch :: proc (using network : ^Feedforward_network, activa
 			}
 			
 			// Update weights: W^l = W^l - η * ∂L/∂W^l  
-			assert(len(l.weights.data) == len(dcdw.data), "Incorrect weights length");
+			assert(len(l.weights.data) * batches == len(dcdw.data), "Incorrect weights length");
 			for i in 0..<batches { //dcdb.dims[0] = number of batches
 				wg := utils.tensor_get_sub_matrix(dcdw, {i})
 				for &w, j in l.weights.data {
@@ -674,7 +623,6 @@ backprop_feedforward_batch :: proc (using network : ^Feedforward_network, activa
 	}
 }
 
-feed :: proc {feed_feedforward, feed_feedforward_batch}
 backprop :: proc {backprop_feedforward, backprop_feedforward_batch}
 destroy :: proc {destroy_feedforward}
 
