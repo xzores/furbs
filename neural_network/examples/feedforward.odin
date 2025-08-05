@@ -128,7 +128,8 @@ entry_single :: proc () {
 	fmt.printf("Samples processed: %d\n", dataset.sample_count * 10);
 }
 
-entry :: proc () {
+//not working
+entry_multi :: proc () {
 	
 	config := nn.Dataset_Config{
 		max_samples = 1000,

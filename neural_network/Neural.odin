@@ -534,7 +534,7 @@ backprop_feedforward_batch :: proc (using network : ^Feedforward_network, activa
 	
 	// Initialize gradient with ∂C/∂a^L (gradient of loss w.r.t. final output)
 	dcda := get_loss_gradient_batch(predictions, answer, func); //This is ∂C/∂a^L 
-	//defer utils.tensor_destroy(dcda); //dcda get deleted in the loop (yes that works without leaks)
+	// defer utils.tensor_destroy(dcda); //dcda get deleted in the loop (yes that works without leaks)
 	
 	//For the last layer (output layer)
 	G := dcda; //the gradient is the cost function with respect to the activation
@@ -559,6 +559,7 @@ backprop_feedforward_batch :: proc (using network : ^Feedforward_network, activa
 		
 		// For most activation functions, we can compute ∂a/∂z from the output y = σ(z)
 		// The activations memeory is overwritten by the gradient, we reuse the memory for speed.
+		//TODO THIS seems incorrect, this is not correct. Something is wrong, why do we apply to G?
 		apply_activation_function_gradient_tensor(G, a_L, network.activation); //Here it becomes ∂a/∂z instead of a_L //Applies to all entures in G
 		dadz := a_L; //rename for consistentcy
 
@@ -688,9 +689,3 @@ destroy_batch_data :: proc(batch_inputs: []Tensor, batch_answers: []Tensor) {
 	delete(batch_inputs);
 	delete(batch_answers);
 }
-
-
-
-
-
-
