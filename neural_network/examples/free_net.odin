@@ -41,7 +41,7 @@ entry :: proc () {
 			
 			loss := nn.calculate_loss(prediction, awnser, .MSE);
 			loss_grad := nn.get_loss_gradient(prediction, awnser, .MSE);
-			nn.net_backprop(net, loss_grad, act_his, b_his);
+			nn.net_backprop(net, loss_grad, act_his, b_his, 0.1);
 			
 			pick := -1;
 			last_p : f32 = math.inf_f32(-1);

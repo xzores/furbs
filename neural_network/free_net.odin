@@ -150,14 +150,14 @@ net_inference :: proc (net : ^Net, input : []Float, max_iterrations : int) -> (o
 }
 
 //What is the error here? the gradient
-net_backprop :: proc (net : ^Net, error_grad : []Float, activations_history : [dynamic][dynamic]Activation, b_values_history : [dynamic][]Float, learning_rate : f32) {
+net_backprop :: proc (net : ^Net, error_grad : []Float, activations_history : [dynamic][dynamic]Activation, a_L_values_history : [dynamic][]Float, learning_rate : f32) {
 	//Notes:
 	//We want to go from the gradient from the A value of the "to" neuron to the B value of the "from" neuron
 	//The gradients we get in is the "to" neurons desired gradient change (at the A value place) since the output does not get any bias or activation funtion
-	assert(len(activations_history) == len(b_values_history), "B history and activations history not the same");
+	assert(len(activations_history) == len(a_L_values_history), "B history and activations history not the same");
 	
 	//This is A node gradients
-	grad := error_grad;
+	grad_of_C := error_grad;
 	neurons_in_this_layer := make(map[int]int); //this is an index into the gradient vector from the neuron index.
 	
 	//Make a sorted list of which neuron corrrisponds to which gradient.
@@ -165,11 +165,16 @@ net_backprop :: proc (net : ^Net, error_grad : []Float, activations_history : [d
 		neurons_in_this_layer[o] = i; //add it to the set mapping from neuron id to gradient index
 	}
 
+	//convert to gradient of a_L
+	//TODO
+	grad := grad_of_C; //For now. 
+
+	/*
 	#reverse for activations, his_i in activations_history {
 		//activations is a list of neurons getting fired in this step
 		//The overall goal of this loop is to update the weight and bias and then provide the gradient for the next activations layer/step.
 		//We do this by looking at the activations in this activations layer, these will 
-		assert(len(grad) == len(neurons_in_this_layer), "internal error");
+		assert(len(grad_of_C) == len(neurons_in_this_layer), "internal error");
 
 		//The infomation i need is the "current" neuron layer, which is all the neurons which we currently know the gradient for and the known gradients
 		//For the first layer that is the error_grad, and then i need a list which tell me what neurons that corrispond to.
@@ -208,6 +213,12 @@ net_backprop :: proc (net : ^Net, error_grad : []Float, activations_history : [d
 		next_grads := make([dynamic]Float);
 		next_neurons_in_this_layer := make([dynamic]int)
 	}
+	*/
+}
+
+backprop_step :: proc (gradients : []Float, neurons_a_L : []^Neuron, neurons_a_L_1 : []^Neuron) {
+
+
 }
 
 activation_function_gradient :: proc (g : Float, a : Float, A : Activation_function) -> Float {
