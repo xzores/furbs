@@ -1,4 +1,4 @@
-package nerual_network;
+package neural_network
 
 import "base:runtime"
 import "base:intrinsics"
