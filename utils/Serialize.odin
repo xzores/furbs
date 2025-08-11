@@ -111,8 +111,8 @@ is_trivial_copied :: proc(t : typeid) -> bool {
 };
 
 Serialization_error :: enum {
-	uknown,
 	ok,
+	uknown,
 	type_not_supported,
 	value_too_big,
 	custom_type_invalid_data,
@@ -299,7 +299,7 @@ deserialize_from_bytes_any :: proc(as_type : typeid, data : []u8, alloc : mem.Al
 		return {}, err;
 	}
 	
-	return Raw_Any{ptr, as_type}, nil;
+	return any{ptr, as_type}, nil;
 }
 
 deserialize_from_bytes :: proc {deserialize_from_bytes_static, deserialize_from_bytes_any};

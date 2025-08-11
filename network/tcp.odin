@@ -1,8 +1,11 @@
 package furbs_network
 
+import "core:debug/pe"
+import "core:math"
 import "base:runtime"
 
 import "core:net"
+import "core:time"
 import "core:container/queue"
 import "core:thread"
 import "core:mem"
@@ -20,9 +23,8 @@ import "../utils"
 Client_tcp_base :: struct {
 	//Data
 	current_bytes_recv  : queue.Queue(u8),	  	//This fills up and must be handled somehow
-	recv_commands	   : ^queue.Queue(Command),	//This should be handle in the main thread
-	recv_mutex 			: ^sync.Mutex,
-	to_clean : [dynamic]Command,
+	events	   			: ^queue.Queue(Event),	//This should be handle in the main thread
+	event_mutex 		: ^sync.Mutex,
 	
 	sock : net.TCP_Socket,
 	user_data : rawptr, //this is used by the server to figure out which client recived the command.
@@ -32,55 +34,59 @@ Client_tcp_base :: struct {
 	mutex : sync.Mutex, //lock everything
 }
 
-init_tcp_base :: proc (user_data : rawptr) -> Client_tcp_base {
+init_tcp_base :: proc (user_data : rawptr, loc := #caller_location) -> Client_tcp_base {
 	client : Client_tcp_base
-	queue.init(&client.current_bytes_recv);
-	client.to_clean = make([dynamic]Command);
+	queue.init(&client.current_bytes_recv, loc = loc);
 	client.user_data = user_data;
 	return client;
 }
 
 destroy_tcp_base :: proc (client : ^Client_tcp_base) {
-	
 	queue.destroy(&client.current_bytes_recv);
-	delete(client.to_clean);
 }
 
 recv_tcp_parse_loop :: proc(client : ^Client_tcp_base, params : Network_commands, buffer_size := 4*4096, loc := #caller_location) {
-	
+
 	client.did_open = true;
 	
 	new_data_buffer := make([]u8, buffer_size); //The max number of bytes that can be recived at a time (can still recive messages larger then this)
+	defer delete(new_data_buffer);
 
 	for !client.should_close {
 		bytes_recv, err := net.recv(client.sock, new_data_buffer[:]);
-		
-		if (err == net.TCP_Recv_Error.Connection_Closed) && client.should_close {
+
+		if bytes_recv == 0 {
+			break;
+		}
+		if (err == net.TCP_Recv_Error.Connection_Closed || err == net.TCP_Recv_Error.Interrupted) && client.should_close {
+			log.warnf("Breakout of recv : %v", loc);
 			continue;
 		}
-		else if (err == net.TCP_Recv_Error.Connection_Closed) {
-			log.warnf("Warning : a connection was close without should_close being set true. Automagicly closing now\n Caller : %v\n", loc);
+		else if (err == net.TCP_Recv_Error.Connection_Closed || err == net.TCP_Recv_Error.Interrupted) {
+			log.warnf("Warning : a connection was close without should_close being set true. Automagicly closing now\n Caller : %v", loc);
 			client.should_close = true;
 			continue;
 		}
 		else if err != nil {
-			log.errorf("failed recv, err : %v called from : %v\n", err, loc);
-			continue;
+			log.errorf("failed recv, err : %v called from : %v", err, loc);
+			sync.lock(client.event_mutex);
+			queue.append(client.events, Event{client.user_data, time.now(), Event_error{}});
+			sync.unlock(client.event_mutex);
+			break;
 		}
 
 		sync.lock(&client.mutex);
-		for d in new_data_buffer[:bytes_recv] {
-			queue.append(&client.current_bytes_recv, d); //TODO this is very slow, copy all at once
-		}
+		queue.append_elems(&client.current_bytes_recv, ..new_data_buffer[:bytes_recv]);
 		sync.unlock(&client.mutex);
 		
 		for parse_message(client, params, loc) {}; //Parses all messages...
 		
 		free_all(context.temp_allocator);
 	}
-	
-	sync.lock(&client.mutex);
-	defer sync.unlock(&client.mutex);
+
+	sync.lock(client.event_mutex);
+	queue.append(client.events, Event{client.user_data, time.now(), Event_disconnected{}});
+	sync.unlock(client.event_mutex);
 
 	free_all(context.temp_allocator);
 }
@@ -97,22 +103,22 @@ send_tcp_message_constant_size :: proc(socket : net.TCP_Socket, using params : N
 	command_id : Message_id_type = commands_inverse[data.id];
 	
 	to_send : []u8 = make([]u8, bytes_to_send_cnt);
+	assert(len(to_send) == bytes_to_send_cnt, "did not allocate");
 	defer delete(to_send);
-
+	
 	runtime.mem_copy(&to_send[0], &command_id, size_of(Message_id_type));
 	if command_size > 0 {
 		runtime.mem_copy(&to_send[size_of(Message_id_type)], data.data, command_size);
 	}
 	
-	log.debugf("Sending : %v\n", to_send);
 	bytes_send, serr := net.send_tcp(socket, to_send);
 
 	if serr != nil {
-		log.errorf("Failed to send, recived err %v\n", serr);
+		log.errorf("Failed to send, recived err %v", serr);
 		return serr;
 	}
 	if bytes_send != bytes_to_send_cnt {
-		log.errorf("Failed to send all bytes, tried to send %i, but only sent %i\n", command_size, bytes_send);
+		log.errorf("Failed to send all bytes, tried to send %i, but only sent %i", command_size, bytes_send);
 		return .Unknown;
 	}
 
@@ -168,7 +174,7 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 		
 		if utils.is_trivial_copied(message_typeid) {
 			command.is_constant_size = true;
-			log.debugf("Parsing trivical message : %v\n", message_typeid);
+			//log.debugf("Parsing trivical message : %v", message_typeid);
 
 			command_size : int = reflect.size_of_typeid(message_typeid);
 			total_size : int = size_of(Message_id_type) + command_size;
@@ -177,15 +183,15 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 				return false;
 			}
 			
-			command_data, err := mem.alloc_bytes(command_size, allocator = command.alloc);
+			command_data, err := mem.alloc_bytes(math.max(1, command_size), allocator = command.alloc); //Forced to allocate at least 1 byte to have a non-nil any value (TODO rethink this, might not want to use any)
 			if err != nil { panic("Unable to allocate!!?!?"); }
 			
 			for i : int = 0; i < cast(int)command_size; i += 1 {
 				command_data[i] = queue.get(&current_bytes_recv, i + size_of(Message_id_type));
 			}
 			
-			command.value = {data = raw_data(command_data), id = message_typeid};
-			log.debugf("Recived : %v\n", command);
+			command.value = any{data = raw_data(command_data), id = message_typeid};
+			//log.debugf("Recived : %v : %v : %v : %v", raw_data(command_data), command.value, command_size, total_size);
 
 			queue.consume_front(&client.current_bytes_recv, total_size);
 		}
@@ -259,7 +265,7 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 	if message_id in params.commands {
 		//Yes, a valid message
 		command : Command;
-
+		
 		command.arena_alloc = new(mem.Dynamic_Arena);
 		mem.dynamic_arena_init(command.arena_alloc);
 		command.alloc = mem.dynamic_arena_allocator(command.arena_alloc);
@@ -270,12 +276,10 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 
 		if did_parse_message {
 			//Add command to command queue.
-			sync.lock(client.recv_mutex)
-			queue.append(client.recv_commands, command);
-			sync.unlock(client.recv_mutex)
-
-			log.debugf("command value : %v\n", command.value);
-
+			sync.lock(client.event_mutex) //TODO look at if these mutexs are even needed? could we just have 1?
+			queue.append(client.events, Event{client.user_data, time.now(), Event_msg{command}});
+			sync.unlock(client.event_mutex)
+			
 			return true;
 		}
 

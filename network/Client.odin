@@ -5,16 +5,22 @@ import "core:container/queue"
 import "core:thread"
 import "core:sync"
 import "core:mem"
+import "core:time"
 import "core:log"
 
 import "../utils"
+
+//////////////////////////////////////////////////////////////
+// 				This is a singled threaded API				//
+//////////////////////////////////////////////////////////////
 
 //All members are private
 Client :: struct {
 	
 	//owned by this client 
-    recv_commands       : queue.Queue(Command),     //This should be handle in the main thread
-	recv_mutex 			: sync.Mutex,
+    events       : queue.Queue(Event),     //This should be handle in the main thread
+	event_mutex 			: sync.Mutex,
+	to_clean : [dynamic]Event,
 
 	interface : union {
 		Client_tcp_base,
@@ -23,10 +29,11 @@ Client :: struct {
 	params : Network_commands,
 
     //threading stuff used internally
-	handeling_commands : bool,
+	handeling_events : bool,
     recive_thread : ^thread.Thread,
 }
 
+@(require_results)
 client_create :: proc (commands_map : map[Message_id_type]typeid) -> ^Client {
 
 	client := new(Client)
@@ -34,27 +41,53 @@ client_create :: proc (commands_map : map[Message_id_type]typeid) -> ^Client {
 	client^ = {
 		interface = init_tcp_base(nil), //TODO, when supporting other this should be moved into connect as it is connect which determines the interface type
 		params = make_commands(commands_map),
-		handeling_commands = false,
+		handeling_events = false,
 		recive_thread = nil,
 	}
 
-	queue.init(&client.recv_commands);
-
+	queue.init(&client.events);
+	client.to_clean = make([dynamic]Event);
+	
 	return client;
 }
 
-client_connect :: proc (client : ^Client, target : Host_or_endpoint) -> (err : Network_Error) {
-
+@(require_results)
+client_connect :: proc (client : ^Client, target : Host_or_endpoint, thread_logger : Maybe(log.Logger) = nil, thread_allocator : Maybe(mem.Allocator) = nil,) -> (err : Network_Error) {
+	
 	when ODIN_OS == .JS || ODIN_OS == .WASI {
 		panic("When target is WASM or WASI you cannot connect via the odin interface, this must happen in the Javascript and then you can pass the data to the client by calling ");
 	}
 
+	Client_logger_allocator :: struct {
+		client : ^Client,
+		logger : Maybe(log.Logger),
+		allocator : Maybe(mem.Allocator),
+	}
+
 	client_recive_loop : thread.Thread_Proc : proc(t : ^thread.Thread) {
 		
-		client : ^Client = cast(^Client)t.data;
+		cla : ^Client_logger_allocator = cast(^Client_logger_allocator)t.data;
+		client : ^Client = cla.client;
+		
+		this_logger := context.logger;
+		this_allocator := context.allocator;
+
+		if l, ok := cla.logger.?; ok {
+			this_logger = l;
+		}
+
+		if a, ok := cla.allocator.?; ok {
+			this_allocator = a;
+		}
+		
+		context.logger = this_logger;
+		context.allocator = this_allocator;
+		
+		free(cla);
 		
 		switch &base in client.interface { 
 			case Client_tcp_base: {
+				log.debugf("begining client tcp parse loop")
 				recv_tcp_parse_loop(&base, client.params);
 			}
 		}
@@ -66,25 +99,38 @@ client_connect :: proc (client : ^Client, target : Host_or_endpoint) -> (err : N
 			
 			sock, s_err := net.dial_tcp_from_host_or_endpoint(target);
 			err = s_err;
+			base.user_data = client;
 			base.sock = sock;
-			
+			base.events = &client.events;
+			base.event_mutex = &client.event_mutex;
+			 
 			if err != nil {
 				log.errorf("Failed to connect to server got error : %v", err);
 				return err;
 			}
-
-			lock(client); //are these needed?... not really
-			defer unlock(client);
 			
-			queue.clear(&base.current_bytes_recv);
-			queue.clear(&client.recv_commands);
+			log.infof("Client connected to server");
 
-			assert(net.set_blocking(sock, false) == nil); //We want it to be blocking
+			queue.clear(&base.current_bytes_recv);
+			queue.clear(&client.events);
+
+			assert(net.set_blocking(sock, true) == nil); //We want it to be blocking
+			//assert(net.set_option(base.sock, .Linger, time.Second) == nil);
+			//assert(net.set_option(base.sock, .Keep_Alive, true) == nil);
 			//TODO a timeout is needed (and maybe keep alive settings?)
 			
+			cla := new(Client_logger_allocator);
+			cla^ = {
+				client,
+				thread_logger,
+				thread_allocator,
+			}
+
 			client.recive_thread = thread.create(client_recive_loop);
-			client.recive_thread.data = client;
+			client.recive_thread.data = cla;
 			
+			queue.append(&client.events, Event{nil, time.now(), Event_connected{}});
+
 			thread.start(client.recive_thread);
 		}
 	}
@@ -92,72 +138,73 @@ client_connect :: proc (client : ^Client, target : Host_or_endpoint) -> (err : N
 	return nil;
 }
 
-//This will just ready the client to recive input by client_recived_data 
-client_websocket :: proc (client : ^Client) {
-	//TODO
-}
-
-client_recived_data :: proc (client : ^Client, data : []u8) {
-	
-
-}
-
 //locks the mutex and return the current commands, the data must not be copied
-client_begin_handle_commands :: proc (client : ^Client, loc := #caller_location) {
-	assert(client.handeling_commands == false, "you must call end_handle_commands before calling begin_handle_commands twice", loc);
-
-	lock(client);
-	sync.lock(&client.recv_mutex);
-	client.handeling_commands = true;
+client_begin_handle_events :: proc (client : ^Client, loc := #caller_location) {
+	assert(client.handeling_events == false, "you must call client_end_handle_events before calling client_begin_handle_events twice", loc);
+	sync.lock(&client.event_mutex);
+	client.handeling_events = true;
 }
 
-client_get_next_command :: proc (client : ^Client, loc := #caller_location) -> any {
-	assert(client.handeling_commands == true, "you must call begin_handle_commands first", loc)
+@(require_results)
+client_get_next_event :: proc (client : ^Client, loc := #caller_location) -> (e : Event, done : bool) {
+	assert(client.handeling_events == true, "you must call client_begin_handle_events first", loc)
 
-	switch &base in client.interface {
-		case Client_tcp_base: {
-			
-			c := queue.pop_front(&client.recv_commands);
-			
-			append(&base.to_clean, c);
-			return c;
-		}
+	if queue.len(client.events) == 0 {
+		return {}, true;
 	}
 
-	unreachable();
+	c := queue.pop_front(&client.events);
+	append(&client.to_clean, c);
+	return c, false;
 }
 
 //Frees the mutex and frees the data (all the commands which you have just recived)
-client_end_handle_commands :: proc (client : ^Client, loc := #caller_location) {
-	assert(client.handeling_commands == true, "you must call begin_handle_commands first", loc)
+client_end_handle_events :: proc (client : ^Client, loc := #caller_location) {
+	assert(client.handeling_events == true, "you must call client_begin_handle_events first", loc)	
+	client.handeling_events = false;
+	sync.unlock(&client.event_mutex);
 
-	switch &base in client.interface {
-		case Client_tcp_base: {
-			for c in base.to_clean {
-				mem.free_all(c.alloc);
-				mem.dynamic_arena_destroy(c.arena_alloc);
-			}
-
-			clear(&base.to_clean);
-		}
-	}
-	
-	sync.unlock(&client.recv_mutex);
-    unlock(client);
+	clean_up_events(&client.to_clean, _client_destroy);
 }
 
-client_send :: proc (client : ^Client, value : any, loc := #caller_location) -> (err : Error) {
+@(require_results)
+client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sleep_time := time.Microsecond, loc := #caller_location) -> (event : Event, timedout : bool) {
 
+	start_time := time.now();
+	
+	for timeout == 0 || !(time.diff(start_time, time.now()) >= timeout) {
+		{
+			client_begin_handle_events(client);
+			defer client_end_handle_events(client);
+			e, done := client_get_next_event(client);
+			if !done {
+				//There is a message for us
+				return e, false;
+			}
+		}
+
+		time.sleep(100 * time.Microsecond);
+	}
+
+	log.warnf("client_wait_for_event timed out");
+	return {}, true;
+}
+
+@(require_results)
+client_send :: proc (client : ^Client, value : any, loc := #caller_location) -> (err : Error) {
+	
+	log.debugf("Client sending : %v", value);
 	switch base in client.interface {
 		case Client_tcp_base: {
 			return send_tcp_message_commands(base.sock, client.params, value, loc);
 		}
 	}
-	
+		
 	unreachable();
 }
 
 //Will disconnect, but there might still be unhanded commands in the buffer these can be handled before calling destroy
+@(require_results)
 client_disconnect :: proc (client : ^Client) -> net.Shutdown_Error {
 	
 	switch &base in client.interface {
@@ -166,45 +213,32 @@ client_disconnect :: proc (client : ^Client) -> net.Shutdown_Error {
 			
 			base.should_close = true;
 			
-			err := net.shutdown(base.sock, net.Shutdown_Manner.Both)  // disable send/recv
+			err := net.shutdown(base.sock, .Send)  // disable send/recv
 			net.close(base.sock)                             // free the socket
 
 			return err;
 		}
 	}
-
-	//Join the recive thread
-	thread.join(client.recive_thread);
-
+	
 	return nil;
 }
 
-client_destroy :: proc (client : ^Client, loc := #caller_location) {
-	//assert(client.is_connected == false, "disconnect first", loc);
+@(private)
+_client_destroy :: proc (client : rawptr) {
+	client : ^Client = auto_cast client;
 	
+	//Join the recive thread
+	thread.destroy(client.recive_thread); //also joins
+
 	switch &base in client.interface {
 		case Client_tcp_base: {
 			assert(base.should_close == true, "recive thread should have been signaled to close");
 			destroy_tcp_base(&base);
 		}
 	}
-
+	
+	delete(client.to_clean);
 	delete_commands(&client.params);
-	queue.destroy(&client.recv_commands);
-}
-
-@(private="file")
-lock :: proc (client : ^Client) {
-	switch &base in client.interface {
-		case Client_tcp_base:
-			sync.lock(&base.mutex);
-	}
-}
-
-@(private="file")
-unlock :: proc (client : ^Client) {
-	switch &base in client.interface {
-		case Client_tcp_base:
-			sync.unlock(&base.mutex);
-	}
+	queue.destroy(&client.events);
+	free(client);	
 }

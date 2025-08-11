@@ -10,6 +10,7 @@ import "core:fmt"
 import "core:log"
 import "core:reflect"
 import "core:sync"
+import "core:time"
 
 import "../utils"
 
@@ -34,8 +35,34 @@ Command :: struct {
 	alloc :	mem.Allocator,
 	value : any,
 	is_constant_size : bool,
+}
 
-	user_data : rawptr, //used by server to indicate which client it recived this message from.
+Event_connected :: struct {
+	//TODO error msg	
+}
+
+Event_error :: struct {
+	//TODO error msg
+}
+
+Event_msg :: struct {
+	//client : ^Server_side_client,
+	commad : Command,
+}
+
+Event_disconnected :: struct {
+	//TODO error msg
+}
+
+Event :: struct {
+	user_data : rawptr,
+	timestamp : time.Time,
+	type : union {
+		Event_connected,
+		Event_error,
+		Event_msg,
+		Event_disconnected,
+	}
 }
 
 Message_id_type :: distinct u32;
@@ -70,3 +97,29 @@ delete_commands :: proc(using params : ^Network_commands) {
 	delete(commands);
 	delete(commands_inverse);
 }
+
+clean_up_events :: proc (to_clean : ^[dynamic]Event, client_clean : proc(c : rawptr), loc := #caller_location) {
+	
+	for e in to_clean {
+		#partial switch b in e.type {
+			case Event_connected: {
+				//nothing to free
+			}
+			case Event_msg: {
+				mem.free_all(b.commad.alloc);
+				mem.dynamic_arena_destroy(b.commad.arena_alloc);
+				mem.free(b.commad.arena_alloc);
+			}
+			case Event_disconnected: {
+				//nothing to free
+				client_clean(e.user_data);
+			}
+			case: {
+				unreachable();
+			}
+		}
+	}
+
+	clear(to_clean);
+}
+
