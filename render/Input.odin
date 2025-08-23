@@ -212,9 +212,9 @@ is_key_triggered :: proc(key : Key_code) -> bool {
 @require_results
 recive_next_input :: proc () -> (char : rune, done : bool) {
 
-	done = queue.len(state.char_input) != 0;
+	done = queue.len(state.char_input) == 0;
 	
-	if done {
+	if !done {
 		char = queue.pop_front(&state.char_input);
 	}
 	
@@ -296,7 +296,7 @@ scroll_delta :: proc () -> [2]f32 {
 //Called by begin_frame
 @(private)
 input_begin :: proc(loc := #caller_location) {
-
+	
 	assert(queue.len(state.key_release_input_events) == 0, "state.key_release_input_events is not zero, did  you forget to call end_inputs?", loc = loc);
 
 	sync.lock(&input_events_mutex);
@@ -402,7 +402,77 @@ input_end :: proc(loc := #caller_location) {
 
 }
 
-
-
-
 //TODO is_cursor_on_screen
+
+
+
+
+
+is_shift :: proc () -> bool {
+	return is_key_down(.shift_left) || is_key_down(.shift_right);
+}
+
+is_control :: proc () -> bool {
+	return is_key_down(.control_left) || is_key_down(.control_right);
+}
+
+is_alt :: proc () -> bool {
+	return is_key_down(.alt_left) || is_key_down(.alt_right);
+}
+
+is_super :: proc () -> bool {
+	return is_key_down(.super_left) || is_key_down(.super_right);
+}
+
+import win32 "core:sys/windows"
+
+// PLATFORM SPECIFIC CALLS //
+
+is_caps_lock :: proc () -> bool {
+	when ODIN_OS == .Windows {
+		return (win32.GetKeyState(win32.VK_CAPITAL) & 0x0001) != 0
+	}
+	else when ODIN_OS == .Darwin {
+		panic("TODO");
+	}
+	else when ODIN_OS == .Linux {
+		panic("TODO");
+	}
+}
+
+is_insert :: proc () -> bool {
+	when ODIN_OS == .Windows {
+		// Insert is a true OS-level toggle on Windows
+		return (win32.GetKeyState(win32.VK_INSERT) & 0x0001) != 0
+	}
+	else when ODIN_OS == .Darwin {
+		panic("TODO");
+	}
+	else when ODIN_OS == .Linux {
+		panic("TODO");
+	}
+}
+
+is_num_lock :: proc () -> bool {
+	when ODIN_OS == .Windows {
+		return (win32.GetKeyState(win32.VK_NUMLOCK) & 0x0001) != 0
+	}
+	else when ODIN_OS == .Darwin {
+		panic("TODO");
+	}
+	else when ODIN_OS == .Linux {
+		panic("TODO");
+	}
+}
+
+is_scroll_lock :: proc () -> bool {
+	when ODIN_OS == .Windows {
+		return (win32.GetKeyState(win32.VK_SCROLL) & 0x0001) != 0
+	}
+	else when ODIN_OS == .Darwin {
+		panic("TODO");
+	}
+	else when ODIN_OS == .Linux {
+		panic("TODO");
+	}
+}

@@ -363,7 +363,7 @@ frame_buffer_recreate :: proc (dst : ^Frame_buffer, src : Frame_buffer, loc := #
 	assert(dst^ == {}, "dst must be empty", loc);
 
 	dst_id := gl.gen_frame_buffer(gl.get_frame_buffer_label(auto_cast src.id));
-	fmt.printf("get_frame_buffer_label : %v\n", gl.get_frame_buffer_label(auto_cast src.id));
+	//fmt.printf("get_frame_buffer_label : %v\n", gl.get_frame_buffer_label(auto_cast src.id));
 	
 	for ca,i in src.color_attachments {
 		

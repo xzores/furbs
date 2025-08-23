@@ -78,7 +78,7 @@ glfw_error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstrin
 
 //uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [Attribute_location]Attribute_info,
 init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc) = nil, required_gl_verion : Maybe(GL_version) = nil, render_context := context, pref_warn := true, loc := #caller_location) -> ^Window {
-	
+
 	using gl;
 
 	window : ^Window = nil;
@@ -119,6 +119,7 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	//SHOULD THIS BE A THING? glfw.WindowHint(glfw.REFRESH_RATE, glfw.DONT_CARE);
 
 	if required_verion, ok := required_gl_verion.?; ok {
+		assert(required_verion >= .opengl_3_3, "version below opengl 3.3 is not supported");
 		if required_verion != nil {
 			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, auto_cast get_major(required_verion));
 			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, auto_cast get_minor(required_verion));

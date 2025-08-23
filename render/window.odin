@@ -182,6 +182,7 @@ Fullscreen_mode :: enum {
 	windowed,
 }
 
+@(require_results)
 window_make :: proc(width, height : i32, title : string, resize_behavior : Resize_behavior = .allow_resize, antialiasing : Antialiasing = .none, loc := #caller_location) -> (window : ^Window){
 	
 	desc : Window_desc = {
@@ -195,6 +196,7 @@ window_make :: proc(width, height : i32, title : string, resize_behavior : Resiz
 	return window_make_desc(desc, loc);
 }
 
+@(require_results)
 window_make_desc :: proc(desc : Window_desc, loc := #caller_location) -> (window : ^Window) {
 	
 	assert(state.is_init == true, "You must call init_render", loc = loc)

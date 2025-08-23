@@ -8,6 +8,7 @@ import "core:reflect"
 import "core:strings"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:time"
 import "core:slice"
 import "core:log"
@@ -1459,9 +1460,9 @@ Filtermode :: enum {
 
 GL_version :: enum {
 	invalid = 0,
-	opengl_3_0,
-	opengl_3_1,
-	opengl_3_2,
+	opengl_3_0, //not supported
+	opengl_3_1, //not supported
+	opengl_3_2, //not supported
 	opengl_3_3,
 	opengl_4_0,
 	opengl_4_1,
@@ -4364,7 +4365,17 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [4]f64, loc := #caller_l
 		clear_color := clear_color;
 		t : gl.GLenum = upload_format_gl_type(upload_format_from_internal_format(format));
 		upload_format : gl.GLenum = internal_format_gl_channel_format(format);
-		gl.ClearTexImage(auto_cast tex, 0, upload_format, t, &clear_color[0]);
+		assert(upload_format == .R || upload_format == .RG || upload_format == .RGB || upload_format == .RGBA, "TODO only R/RG/RGB/RGBA supported");
+		
+		#partial switch t {
+			case .UNSIGNED_BYTE: {
+				clear_data : [4]u8 = linalg.array_cast(clear_color * 255, u8);
+				gl.ClearTexImage(auto_cast tex, 0, upload_format, t, &clear_data[0]);
+			}
+			case: {
+				fmt.panicf("TODO unimplemented %v", t);
+			}
+		}
 	}
 	else {
 		width, height : i32;

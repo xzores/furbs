@@ -109,7 +109,9 @@ text_destroy :: proc () {
 	fs.font_destroy(&state.font_context); state.font_context = {};
 
 	mesh_destroy_single(&state.char_mesh); state.char_mesh = {};
-	texture2D_destroy(state.font_texture); state.font_texture = {};
+	if state.font_texture != {} {
+		texture2D_destroy(state.font_texture); state.font_texture = {};
+	}
 }
 
 get_default_fonts :: proc (loc := #caller_location) -> Fonts {

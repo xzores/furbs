@@ -348,7 +348,7 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 		gl.write_texure_data_2D(id, 0, 0, 0, width, height, upload_format, data, loc);
 	}
 
-	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
+	if mipmaps { //If there is no data, then it makes no sense to generate mipmaps
 		gl.generate_mip_maps_2D(id);
 	}
 	
@@ -364,7 +364,7 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 
 texture2D_upload_data :: proc(tex : ^Texture2D, upload_format : gl.Pixel_format_upload, pixel_offset : [2]i32, pixel_cnt : [2]i32, data : []$T, loc := #caller_location) {
 	
-	gl.write_texure_data_2D(tex.id, 0, pixel_offset.x, pixel_offset.y, pixel_cnt.x, pixel_cnt.y, upload_format, data, loc);
+	gl.write_texure_data_2D(tex.id, 0, pixel_offset.x, pixel_offset.y, pixel_cnt.x, pixel_cnt.y, upload_format, slice.reinterpret([]u8, data), loc);
 	
 	if (tex.mipmaps) {
 		gl.generate_mip_maps_2D(tex.id);
