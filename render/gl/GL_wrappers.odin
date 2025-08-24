@@ -4860,3 +4860,17 @@ get_attribute_location :: proc(shader_id : Shader_program_id, attrib_name : stri
 get_uniform_location :: proc(shader_id : Shader_program_id, uniform_name : string) -> i32 {
 	return gl.GetUniformLocation(auto_cast shader_id, fmt.ctprintf(uniform_name));
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+//TODO set the state if is it enabled or not.
+//Also enables the test 
+set_scissor_test :: proc (#any_int x, y, w, h : i32) {
+	gl.Enable(.SCISSOR_TEST);
+	gl.Scissor(x, y, w, h);
+}
+
+disable_scissor_test :: proc ()  {
+	gl.Disable(.SCISSOR_TEST);
+}

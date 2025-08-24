@@ -18,7 +18,6 @@ Fonts :: struct {
 	italic_bold : Font,
 }
 
-
 font_norm_data 	:= #load("font/LinLibertine_R.ttf", []u8);
 font_RB_data 	:= #load("font/LinLibertine_RB.ttf", []u8);
 font_RI_data 	:= #load("font/LinLibertine_RI.ttf", []u8);
@@ -27,6 +26,7 @@ font_RBI_data 	:= #load("font/LinLibertine_RBI.ttf", []u8);
 @(private)
 text_init :: proc (loc := #caller_location) {
 	
+
 	state.font_context = fs.font_init(8192, loc = loc);	//TODO 1,1 for w and h is might not be the best idea, what should we do instead?
 
 	//If we want fontstash to handle loading the font
@@ -98,6 +98,8 @@ text_init :: proc (loc := #caller_location) {
 	defer indices_delete(indices);
 	state.char_mesh = mesh_make_single(verts, indices, .static_use, .triangles, instance_desc, "Text Quad", loc);
 	
+	state.font_texture = texture2D_make(false, .repeat, .nearest, .R8, 1, 1, .no_upload, nil, label = "Text texture");
+	
 	log.info("Text initialized!");
 }
 
@@ -155,6 +157,30 @@ text_get_lowest_point :: proc(text : string, size : f32, font : Font = state.def
 }
 
 @(require_results)
+text_get_ascender :: proc(font : Font, size : f32, use_EM := false) -> f32 {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(use_EM, size);
+	
+	return fs.get_ascent(&state.font_context);
+}
+
+@(require_results)
+text_get_descender :: proc(font : Font, size : f32, use_EM := false) -> f32 {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(use_EM, size);
+	
+	return fs.get_descent(&state.font_context);
+}
+
+@(require_results)
 text_get_max_height :: proc(font : Font, size : f32, use_EM := false) -> f32 {
 	using state;
 	
@@ -165,7 +191,6 @@ text_get_max_height :: proc(font : Font, size : f32, use_EM := false) -> f32 {
 	
 	return fs.get_max_height(&state.font_context);
 }
-
 
 @(require_results)
 text_get_size_from_max_height :: proc(font : Font, max_height : f32) -> f32 {
@@ -222,16 +247,16 @@ Text_backdrop :: struct {
 //Has its own pipeline call outisde of a pipeline, but inside a target.
 //This will be drawn in pixel space.
 text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : [4]f32 = {1,1,1,1}, backdrop : Text_backdrop = {},
-							font : Font = state.default_fonts.normal, rotation : f32 = 0, shader := state.default_text_shader, loc := #caller_location) {
+							font : Font = state.default_fonts.normal, rotation : f32 = 0, shader := state.default_text_shader, camera : Maybe(Camera) = nil, flip_y := false, loc := #caller_location) {
 	
 	assert(shader != nil, "shader may not be nil", loc);
 	assert(state.current_pipeline == {}, "A pipeline is already bound, text must be drawn outside of pipeline begin/end.", loc);
 	assert(state.current_target != nil, "A render target is not bound.", loc);
 	
-	instance_data : [dynamic]Default_instance_data = text_get_draw_instance_data(text, position, size, rotation, font);
+	instance_data : [dynamic]Default_instance_data = text_get_draw_instance_data(text, position, size, rotation, flip_y, font);
 	defer delete(instance_data);
 	
-	pipeline := pipeline_make(shader, .blend, false, false, .fill, culling = .back_cull);
+	pipeline := pipeline_make(shader, .blend, false, false, .fill, culling = .no_cull);
 	defer pipeline_destroy(pipeline);
 	
 	if i_data, ok := state.char_mesh.instance_data.?; ok {
@@ -243,8 +268,12 @@ text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : 
 		panic("!?!?!");
 	}
 	
-	cam := camera_get_pixel_space(state.current_target);
-
+	cam : Camera = camera_get_pixel_space(state.current_target); 
+	
+	if c, ok := camera.?; ok {
+		cam = c;
+	}
+	
 	pipeline_begin(pipeline, cam);
 	set_texture(.texture_diffuse, state.font_texture);
 	
@@ -273,12 +302,12 @@ text_draw_simple :: proc (text : string, position : [2]f32, size : f32, color : 
 	pipeline_end();
 }
 
-text_draw :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, color : [4]f32 = {0,0,0,1}, backdrop : Text_backdrop = {}, font : Fonts = state.default_fonts, rotation : f32 = 0, shader := state.default_text_shader, loc := #caller_location) {
+text_draw :: proc (text : string, position : [2]f32, size : f32, bold, italic : bool, color : [4]f32 = {0,0,0,1}, backdrop : Text_backdrop = {}, font : Fonts = state.default_fonts, rotation : f32 = 0, shader := state.default_text_shader, camera : Maybe(Camera) = nil, flip_y : bool = false, loc := #caller_location) {
 	stored := store_pipeline();
 	defer restore_pipeline(stored);
 	//TODO WE SHOULD ALSO STORE THE TEXTURE!
 	font := text_get_font_from_fonts(bold, italic, font);
-	text_draw_simple(text, position, size, color, backdrop, font, rotation, shader, loc);
+	text_draw_simple(text, position, size, color, backdrop, font, rotation, shader, camera, flip_y, loc);
 }
 
 font_tex_desc :: Texture_desc {
@@ -290,7 +319,7 @@ font_tex_desc :: Texture_desc {
 
 //used internally
 @require_results
-text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, rotation : f32, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
+text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, rotation : f32, flip_y : bool, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
 	using state;
 	
 	fs.push_font(&font_context, font);
@@ -302,9 +331,7 @@ text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f3
 	
 	if new_size, ok := fs.requires_reupload(&font_context); ok {
 		log.logf(.Debug, "reuploading font texture : %v\n", new_size);
-		if state.font_texture != {} {
-			texture2D_destroy(state.font_texture);
-		}
+		texture2D_destroy(state.font_texture);
 		state.font_texture = texture2D_make(false, .repeat, .nearest, .R8, new_size.x, new_size.y, .R8, fs.get_bitmap(&font_context), label = "Text texture");
 	}
 	
@@ -324,16 +351,27 @@ text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f3
 	instance_data = make([dynamic]Default_instance_data);
 	
 	for q, coords in fs.font_iter_next(&font_context, &iter) {
-	
-		rot_mat := linalg.matrix2_rotate_f32(rotation / 180 * math.PI);
-		pos := rot_mat * q.xy; 
 		
-		append(&instance_data, Default_instance_data {
-			instance_position 	= {pos.x + position.x, pos.y + position.y, 0},
-			instance_scale 		= {q.z, q.w, 1},
-			instance_rotation 	= {0, 0, rotation}, //Euler rotation
-			instance_tex_pos_scale 	= coords,
-		});
+		rot_mat := linalg.matrix2_rotate_f32(rotation / 180 * math.PI);
+		pos := rot_mat * q.xy;
+		
+		if flip_y {
+			append(&instance_data, Default_instance_data {
+				//What should be here?
+				instance_position 	= {position.x + pos.x, position.y - pos.y + size, 0},
+				instance_scale 		= {q.z, q.w, 1},
+				instance_rotation 	= {0, 0, rotation}, //Euler rotation
+				instance_tex_pos_scale 	= {coords.x, coords.y + coords.w, coords.z, -coords.w},
+			});
+		}
+		else {
+			append(&instance_data, Default_instance_data {
+				instance_position 	= {position.x + pos.x, position.y + pos.y, 0},
+				instance_scale 		= {q.z, q.w, 1},
+				instance_rotation 	= {0, 0, rotation}, //Euler rotation
+				instance_tex_pos_scale 	= coords,
+			});
+		}
 	}
 	
 	if i_data, ok := char_mesh.instance_data.?; ok {

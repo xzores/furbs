@@ -647,6 +647,7 @@ make_mesh_cone :: proc(offset : [3]f32, height, diameter : f32, sectors : int, u
 }
 
 //direction will be normalized
+@(require_results)
 generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cyl, diameter_cone : f32, sectors : int, use_index_buffer : bool, up : [3]f32 = {0,1,0}) -> (verts : []Default_vertex, indices : Indices) {
 	using linalg;
 
@@ -713,3 +714,26 @@ make_mesh_arrow :: proc(direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 
 	return;
 }
+
+generate_triangle :: proc (a, b, c : [3]f32, use_index_buffer : bool) -> (verts : []Default_vertex, indices : Indices) {
+
+	verts = make([]Default_vertex, 3);
+	indices = nil;
+	
+	verts[0] = Default_vertex{a, {0,0}, {0,0,-1}};
+	verts[1] = Default_vertex{b, {1,0}, {0,0,-1}};
+	verts[2] = Default_vertex{c, {1,1}, {0,0,-1}};
+	
+	if use_index_buffer {
+		_indices := make([]u32, 3);
+		_indices[0] = 0;
+		_indices[1] = 1;
+		_indices[2] = 2;
+		indices = _indices;
+	}
+	
+	return;
+	
+}
+
+

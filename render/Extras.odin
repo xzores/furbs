@@ -32,7 +32,9 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 		near 			= -1,
 		far 			= 2,
 	}
-
+	
+	stored := store_target()
+	
 	target_begin(&state.arrow_fbo, [4]f32{0,0,0,0});
 		pipeline_begin(state.shapes_pipeline, overlay_camera);
 			set_texture(.texture_diffuse, texture2D_get_white());
@@ -41,6 +43,8 @@ get_coordinate_overlay_texture :: proc(camera : Camera3D, texture_size : [2]i32 
 			draw_arrow({0,0,0}, {0,0,1},  [4]f32{0.1, 0.1, 0.8, 1});
 		pipeline_end();
 	target_end();
+	
+	restore_target(stored);
 
 	return frame_buffer_color_attach_as_texture(&state.arrow_fbo, 0);
 	//return arrow_fbo.depth_attachment.(Texture2D);

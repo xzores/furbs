@@ -127,6 +127,10 @@ Shader :: struct {
 }
 
 Uniform_odin_type :: union {
+	bool,
+	[2]bool,
+	[3]bool,
+	[4]bool,
 	f32,
 	[2]f32,
 	[3]f32,
@@ -235,6 +239,16 @@ set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : Unifor
 	u_loc : i32 = cast(i32) shader.uniform_locations[uniform].location;
 	
 	switch &v in value {
+	
+		case bool:
+			Uniform1i(u_loc, cast(i32)v);
+		case [2]bool:
+			Uniform2i(u_loc, cast(i32)v.x, cast(i32)v.y);
+		case [3]bool:
+			Uniform3i(u_loc, cast(i32)v.x, cast(i32)v.y, cast(i32)v.z);
+		case [4]bool:
+			Uniform4i(u_loc, cast(i32)v.x, cast(i32)v.y, cast(i32)v.z, cast(i32)v.w);
+		
 		case f32:
 			Uniform1f(u_loc, v);
 		case [2]f32:

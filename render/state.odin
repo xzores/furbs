@@ -29,7 +29,6 @@ is_init :: proc () -> bool {
 	return state.is_init;
 }
 
-@(private)
 Camera_matrices :: struct {
 	prj_mat 		: matrix[4,4]f32,
 	inv_prj_mat 	: matrix[4,4]f32,
@@ -60,13 +59,15 @@ State :: struct {
 	
 	key_input_events : queue.Queue(Key_input_event),
 	key_release_input_events : queue.Queue(Key_input_event),
+	key_input_buffer : [dynamic]Key_input_event,
 	
 	char_input_buffer : queue.Queue(rune),
 	char_input : queue.Queue(rune),
 
 	button_input_events : queue.Queue(Mouse_input_event),
 	button_release_input_events : queue.Queue(Mouse_input_event),
-
+	mouse_input_buffer : [dynamic]Mouse_input_event,
+	
 	scroll_input_event : queue.Queue([2]f32),
 
 	old_mouse_pos : [2]f32,
@@ -91,6 +92,8 @@ State :: struct {
 	shape_sphere : [2]int,
 	shape_cone : [2]int,
 	shape_arrow : [2]int,
+	shape_right_triangle : [2]int,
+	shape_equilateral_triangle : [2]int,
 	
 	//Extra stuff
 	fps_measurement : f32,

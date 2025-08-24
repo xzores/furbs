@@ -178,9 +178,9 @@ make_signal :: proc (x_axis, y_axis : []f64, x_label := "", y_label := "", name 
 	sig : Signal = {
 		strings.clone(name, loc = loc),
 		strings.clone(y_label, loc = loc),
-		y_axis, //y-coordinate
+		slice.clone(y_axis), //y-coordinate
 		strings.clone(x_label, loc = loc),
-		x_axis, //x-coordinate
+		slice.clone(x_axis), //x-coordinate
 	}
 	
 	return sig;
@@ -285,16 +285,22 @@ destroy_signals :: proc (signals : []Signal, loc := #caller_location) {
 
 //Will not create a window, it will jst return the xy_plot struct
 make_xy_plot :: proc (signals : []Signal, x_label : Maybe(string) = nil, y_label : Maybe(string) = nil, title : Maybe(string) = nil, x_range : Maybe([2]f64) = nil, y_range : Maybe([2]f64) = nil, x_log : Log_style = .no_log, y_log : Log_style = .no_log, loc := #caller_location) -> Plot_xy {
-	assert(len(signals) != 0, "No signals given", loc);
+	//assert(len(signals) != 0, "No signals given", loc);
 	
 	traces := make([]Trace, len(signals));
 	xlow, xhigh : f64 = max(f64), min(f64);
 	ylow, yhigh : f64 = max(f64), min(f64);
 	
-	_x_label := signals[0].abscissa_label;
-	_y_label := signals[0].ordinate_label;
-	_title := signals[0].name;
+	_x_label : string;
+	_y_label : string;
+	_title : string; 
 	
+	if len(signals) != 0 {
+		_x_label = signals[0].abscissa_label;
+		_y_label = signals[0].ordinate_label;
+		_title = signals[0].name;
+	}
+		
 	for signal, i in signals {
 		
 		span_pos : []f64 = abscissa_to_array(signal.abscissa);

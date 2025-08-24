@@ -46,19 +46,7 @@ Camera :: union {
 
 //////////////////////////////////////////////////////////////////////////////////
 
-//Z space is -1 to 1
-camera_get_pixel_space :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
-
-	w, h : f32;
-	
-	switch t in target {
-		case nil:
-			panic("!?!?");
-		case ^Frame_buffer:
-			w, h = cast(f32)t.width, cast(f32)t.height;
-		case ^Window:
-			w, h = cast(f32)t.width, cast(f32)t.height;
-	}
+camera_get_pixel_space_w_h :: proc(w, h : f32, loc := #caller_location) -> (cam : Camera2D) {
 	
 	aspect := w / h;
 
@@ -74,6 +62,61 @@ camera_get_pixel_space :: proc(target : Render_target, loc := #caller_location) 
 
 	return cam;
 }
+
+//Z space is -1 to 1
+camera_get_pixel_space_render_target :: proc(target : Render_target, loc := #caller_location) -> (cam : Camera2D) {
+
+	w, h : f32;
+	
+	switch t in target {
+		case nil:
+			panic("!?!?");
+		case ^Frame_buffer:
+			w, h = cast(f32)t.width, cast(f32)t.height;
+		case ^Window:
+			w, h = cast(f32)t.width, cast(f32)t.height;
+	}
+	
+	return camera_get_pixel_space_w_h(w, h);
+}
+
+camera_get_pixel_space :: proc {camera_get_pixel_space_render_target, camera_get_pixel_space_w_h}
+
+camera_get_pixel_space_flipped_w_h :: proc(w, h : f32, loc := #caller_location) -> (Camera) {
+	
+	prj_mat := linalg.matrix_ortho3d_f32(0, w, h, 0, -1, 1);
+	view_mat := linalg.MATRIX4F32_IDENTITY //linalg.matrix4_translate_f32({1,1,0}) * linalg.matrix4_scale_f32({0.5, 0.5, 1});
+	
+	mats : Camera_matrices = {
+		prj_mat = prj_mat,
+		inv_prj_mat = linalg.inverse(prj_mat),
+		view_mat = view_mat,
+		inv_view_mat = linalg.inverse(view_mat),
+		view_prj_mat = view_mat * prj_mat,
+		inv_view_prj_mat = linalg.inverse(view_mat * prj_mat),
+	};
+	
+	return mats;
+}
+
+camera_get_pixel_space_flipped_render_target :: proc(target : Render_target, loc := #caller_location) -> (Camera) {
+	//opengl goes from -1 to 1, but we want it to go from 0 to 1 where 0 is top left and 1 is bottom right
+	
+	w, h : f32;
+	
+	switch t in target {
+		case nil:
+			panic("!?!?");
+		case ^Frame_buffer:
+			w, h = cast(f32)t.width, cast(f32)t.height;
+		case ^Window:
+			w, h = cast(f32)t.width, cast(f32)t.height;
+	}
+
+	return camera_get_pixel_space_flipped_w_h(w, h);
+}
+
+camera_get_pixel_space_flipped :: proc {camera_get_pixel_space_flipped_w_h, camera_get_pixel_space_flipped_render_target};
 
 ///////////////////////////////////////////
 

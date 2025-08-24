@@ -130,8 +130,8 @@ lex :: proc (s : ^Shader_context) {
 	//inserts, replaces and removes tokens
 	preproces :: proc (s : ^Shader_context) {
 		
-		to_load := make([dynamic]token.File_load);
-		defer delete(to_load);
+		scene_to_load := make([dynamic]token.File_load);
+		defer delete(scene_to_load);
 		
 		for source_file, &source in s.sources {
 			
@@ -141,15 +141,15 @@ lex :: proc (s : ^Shader_context) {
 				source.stage = .preprocessed;
 				
 				for l in new_loads {
-					append(&to_load, l);
+					append(&scene_to_load, l);
 				}
 			}
 		}
 		
-		if len(to_load) != 0 {
+		if len(scene_to_load) != 0 {
 			//load new files and tokenize and preprocess them.
 			
-			for l in to_load {
+			for l in scene_to_load {
 				
 				if l.collection == "" {
 					

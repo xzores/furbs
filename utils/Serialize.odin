@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:reflect"
 import "core:mem"
 import "base:runtime"
+import "core:log"
 
 Header_size_type :: u32;
 
@@ -110,8 +111,8 @@ is_trivial_copied :: proc(t : typeid) -> bool {
 };
 
 Serialization_error :: enum {
-	uknown,
 	ok,
+	uknown,
 	type_not_supported,
 	value_too_big,
 	custom_type_invalid_data,
@@ -119,12 +120,30 @@ Serialization_error :: enum {
 }
 
 //Handels trivial, structs and unions, but does include the size as a u32, so only use for non-trivial structs or unions.
-serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_location) -> Serialization_error { //The header includes itself, and is the size type of Header_size_type
+@(require_results)
+serialize_to_bytes_res :: proc(value : any, loc := #caller_location) -> ([]u8, Serialization_error) { //The header includes itself, and is the size type of Header_size_type
+	using runtime;
+	
+	data := make([dynamic]u8);
+	
+	err := serialize_to_bytes_append(value, &data, loc);
+	
+	if err != nil {
+		delete(data);
+		return nil, err;
+	}
+	
+	return data[:], .ok;
+}
+
+//Handels trivial, structs and unions, but does include the size as a u32, so only use for non-trivial structs or unions.
+@(require_results)
+serialize_to_bytes_append :: proc(value : any, data : ^[dynamic]u8, loc := #caller_location) -> (Serialization_error) { //The header includes itself, and is the size type of Header_size_type
 	using runtime;
 	
 	header_index := len(data);
 	resize(data, len(data) + size_of(Header_size_type));
-
+	
 	res := _serialize_to_bytes(value, data, loc);
 	if res != .ok {
 		return res;
@@ -141,6 +160,9 @@ serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loca
 	return .ok;
 }
 
+serialize_to_bytes :: proc {serialize_to_bytes_res, serialize_to_bytes_append}
+
+@(private, require_results)
 _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_location) -> Serialization_error { //The header includes itself, and is the size type of Header_size_type
 	using runtime;
 	
@@ -179,7 +201,7 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 			//TODO case : union
 			case Type_Info_Dynamic_Array:
 				length : int = reflect.length(value);
-				length_bytes := length * ti.variant.(Type_Info_Dynamic_Array).elem_size;
+				length_bytes := length * info.elem_size;
 				append_type_to_data(length, data);
 
 				//fmt.printf("length_bytes : %v\n", length_bytes);
@@ -194,8 +216,43 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 				if length_bytes != 0 {
 					mem.copy(&data[data_len], value_raw_data, length_bytes);
 				}
-
+			
+			case Type_Info_Array:
+				length : int = reflect.length(value);
+				length_bytes := length * info.elem_size;
+				append_type_to_data(length, data);
+				
+				data_len := len(data); //before the resize
+				
+				runtime.resize(data, data_len + length_bytes);
+				//fmt.printf("data_len : %v, length_bytes : %v\n data : %v\n", data_len, length_bytes, len(data));
+				value_raw_data, valid := reflect.as_raw_data(value);
+				assert(valid);
+				
+				if length_bytes != 0 {
+					mem.copy(&data[data_len], value_raw_data, length_bytes);
+				}
+			
+			case runtime.Type_Info_Slice:
+				length : int = reflect.length(value);
+				length_bytes := length * info.elem_size;
+				append_type_to_data(length, data);
+				
+				fmt.printf("length_bytes : %v\n", length_bytes);
+				
+				data_len := len(data); //before the resize
+				
+				runtime.resize(data, data_len + length_bytes);
+				//fmt.printf("data_len : %v, length_bytes : %v\n data : %v\n", data_len, length_bytes, len(data));
+				value_raw_data, valid := reflect.as_raw_data(value);
+				assert(valid);
+				
+				if length_bytes != 0 {
+					mem.copy(&data[data_len], value_raw_data, length_bytes);
+				}
+			
 			case:
+				log.errorf("type_not_supported : %v", ti);
 				return .type_not_supported;
 		}
 	}
@@ -204,27 +261,50 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 }
 
 //One would have to free the memory with free(...) if one does not use a temp allocator.
-deserialize_from_bytes :: proc(to_type : typeid, data : []u8, alloc : mem.Allocator, loc := #caller_location) -> (value : any, err : Serialization_error) {
+@(require_results)
+deserialize_from_bytes_static :: proc($To_type : typeid, data : []u8, alloc : mem.Allocator, loc := #caller_location) -> (value : To_type, err : Serialization_error) {
 	using runtime;
-
-	context.allocator = mem.nil_allocator();
+	
+	context.allocator = mem.panic_allocator();
 
 	used_bytes : u32 = size_of(Header_size_type);
 
-	value_data : rawptr;
-	a_err : runtime.Allocator_Error;
-	value_data, a_err = mem.alloc(reflect.size_of_typeid(to_type), DEFAULT_ALIGNMENT, alloc, loc);
-	if a_err != nil {
-		err = .allocation_error;
-		return;
+	value_data : To_type;
+	
+	err = _deserialize_from_bytes(To_type, data, &used_bytes, &value_data, alloc, loc);
+	
+	if err != nil {
+		return {}, err;
 	}
 
-	err = _deserialize_from_bytes(to_type, data, &used_bytes, value_data, alloc, loc);
-	value = {data = value_data, id = to_type};
-
-	return;
+	return value_data, nil;
 }
 
+//One would have to free the memory with free(...) if one does not use a temp allocator.
+@(require_results)
+deserialize_from_bytes_any :: proc(as_type : typeid, data : []u8, alloc : mem.Allocator, loc := #caller_location) -> (value : any, err : Serialization_error) {
+	using runtime;
+	
+	context.allocator = mem.panic_allocator();
+
+	used_bytes : u32 = size_of(Header_size_type);
+	
+	ptr, alloc_err := mem.alloc(reflect.size_of_typeid(as_type), mem.DEFAULT_ALIGNMENT, alloc, loc);
+
+	fmt.assertf(alloc_err == nil, "failed to allocate : %v", alloc_err);
+
+	err = _deserialize_from_bytes(as_type, data, &used_bytes, ptr, alloc, loc);
+	
+	if err != nil {
+		return {}, err;
+	}
+	
+	return any{ptr, as_type}, nil;
+}
+
+deserialize_from_bytes :: proc {deserialize_from_bytes_static, deserialize_from_bytes_any};
+
+@(private, require_results)
 _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Header_size_type, value_data : rawptr, alloc : mem.Allocator, loc := #caller_location) -> Serialization_error {
 	using runtime;
 
@@ -287,10 +367,11 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				return .type_not_supported;
 		}
 	}
-
+	
 	return .ok;
 }
 
+@(require_results)
 to_type :: proc(data : []u8, $new_type : typeid) -> new_type {
 	
 	if len(data) < size_of(new_type){
@@ -300,8 +381,10 @@ to_type :: proc(data : []u8, $new_type : typeid) -> new_type {
 	data_ptr : ^new_type = transmute(^new_type)&data[0];
 	
 	return data_ptr^;
+
 }
 
+@(private)
 to_type_at :: proc(dst : rawptr, data : []u8, new_type : typeid) {
 	
 	if len(data) < reflect.size_of_typeid(new_type){
@@ -313,6 +396,7 @@ to_type_at :: proc(dst : rawptr, data : []u8, new_type : typeid) {
 }
 
 //Only works for trivial copies.
+@(require_results, private)
 from_type :: proc(field : any, alloc := context.allocator) -> []u8 {
 	
 	assert(is_trivial_copied(field.id));
@@ -325,7 +409,8 @@ from_type :: proc(field : any, alloc := context.allocator) -> []u8 {
 	return data;
 }
 
-append_type_to_data :: proc (field : any, append_to : ^[dynamic]u8) -> rawptr {
+@(private)
+append_type_to_data :: proc (field : any, append_to : ^[dynamic]u8) {
 
 	assert(is_trivial_copied(field.id));
 
@@ -338,6 +423,4 @@ append_type_to_data :: proc (field : any, append_to : ^[dynamic]u8) -> rawptr {
 
 	//Copy the data.
 	mem.copy(dst, field.data, size);
-
-	return dst;
 }

@@ -164,3 +164,6 @@ target_end :: proc (loc := #caller_location) {
 	state.current_target = {};
 }
 
+
+set_scissor_test :: gl.set_scissor_test;
+disable_scissor_test :: gl.disable_scissor_test;

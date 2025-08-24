@@ -239,7 +239,7 @@ destroy :: proc (loc := #caller_location) {
 	state.old_mouse_pos	= {};
 	state.mouse_delta		= {};
 	state.scroll_delta		= {};
-
+	
 	//Extras
 	state.fps_measurement	= {};
 	if state.overlay_init {
@@ -300,10 +300,12 @@ destroy :: proc (loc := #caller_location) {
 
 	queue.destroy(&state.key_input_events);
 	queue.destroy(&state.key_release_input_events);
+	delete(state.key_input_buffer);  state.key_input_buffer = {};
 	queue.destroy(&state.char_input_buffer);
 	queue.destroy(&state.char_input);
 	queue.destroy(&state.button_input_events);
 	queue.destroy(&state.button_release_input_events);
+	delete(state.mouse_input_buffer); state.mouse_input_buffer = {};
 	queue.destroy(&state.scroll_input_event);
 
 	state.key_input_events				= {};
@@ -489,4 +491,9 @@ get_render_target_size :: proc (target : Render_target) -> (w, h : i32){
 	}
 
 	unreachable();
+}
+
+
+get_current_render_target :: proc () -> Render_target {
+	return state.current_target;
 }

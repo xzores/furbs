@@ -304,8 +304,8 @@ input_begin :: proc(loc := #caller_location) {
 	
 	//This is for getting the delta mouse position, this is because the delta is window independent. 
 	mx, my := glfw.GetCursorPos(state.owner_context);
-	new_mouse_pos := [2]f32{auto_cast mx, auto_cast my};
-	state.mouse_delta = new_mouse_pos - state.old_mouse_pos;
+	new_mouse_pos := [2]f32{auto_cast mx, auto_cast -my};
+	state.mouse_delta = new_mouse_pos - state.old_mouse_pos; //This is one frame delayed i belive as we are using the delta from last to this frame, not this to next as it is unknown 
 	state.old_mouse_pos = new_mouse_pos;
 	
 	for queue.len(state.char_input_buffer) != 0 {
@@ -318,6 +318,8 @@ input_begin :: proc(loc := #caller_location) {
 	
 	for queue.len(state.button_input_events) != 0 {
 		event := queue.pop_front(&state.button_input_events);
+		
+		append(&state.mouse_input_buffer, event);
 		
 		switch event.action {
 			case .press:
@@ -333,6 +335,8 @@ input_begin :: proc(loc := #caller_location) {
 
 	for queue.len(state.key_input_events) != 0 {
 		event := queue.pop_front(&state.key_input_events);
+		
+		append(&state.key_input_buffer, event);
 		
 		switch event.action {
 			case .press:
@@ -355,10 +359,13 @@ input_end :: proc(loc := #caller_location) {
 	defer sync.unlock(&input_events_mutex);
 	
 	state.scroll_delta = [2]f32{0,0};
-
+	
+	clear(&state.key_input_buffer);
+	clear(&state.mouse_input_buffer);
+	
 	for queue.len(state.button_release_input_events) != 0 {
 		event := queue.pop_front(&state.button_release_input_events);
-
+		
 		if event.action == .release {
 			state.button_down[event.button] = false;
 		}
@@ -366,7 +373,7 @@ input_end :: proc(loc := #caller_location) {
 			panic("Only release buttons in state.button_release_input_events");
 		}
 	}
-
+	
 	for queue.len(state.key_release_input_events) != 0 {
 		event := queue.pop_front(&state.key_release_input_events);
 
@@ -404,9 +411,13 @@ input_end :: proc(loc := #caller_location) {
 
 //TODO is_cursor_on_screen
 
+key_events :: proc () -> []Key_input_event {
+	return state.key_input_buffer[:];
+}
 
-
-
+mouse_events :: proc () -> []Mouse_input_event {
+	return state.mouse_input_buffer[:];
+}
 
 is_shift :: proc () -> bool {
 	return is_key_down(.shift_left) || is_key_down(.shift_right);
