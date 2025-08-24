@@ -72,6 +72,17 @@ key_callback : glfw.KeyProc : proc "c" (glfw_window : glfw.WindowHandle, key : i
 	queue.append(&state.key_input_events, event);
 }
 
+input_callback : glfw.CharModsProc : proc "c" (glfw_window : glfw.WindowHandle, codepoint: rune, mods : i32) {
+	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
+
+	context = runtime.default_context();
+
+	sync.lock(&input_events_mutex);
+	defer sync.unlock(&input_events_mutex);
+	
+	queue.append(&state.char_input_buffer, codepoint);
+}
+
 button_callback : glfw.MouseButtonProc : proc "c" (glfw_window : glfw.WindowHandle, button, action, mods : i32) {
 	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
 
@@ -101,16 +112,6 @@ scroll_callback : glfw.ScrollProc : proc "c" (glfw_window : glfw.WindowHandle, x
 	queue.append(&state.scroll_input_event, [2]f32{auto_cast xoffset, auto_cast yoffset});
 }
 
-input_callback : glfw.CharModsProc : proc "c" (glfw_window : glfw.WindowHandle, codepoint: rune, mods : i32) {
-	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
-
-	context = runtime.default_context();
-
-	sync.lock(&input_events_mutex);
-	defer sync.unlock(&input_events_mutex);
-	
-	queue.append(&state.char_input_buffer, codepoint);
-}
 
 window_focus_callback : glfw.WindowFocusProc : proc "c" (glfw_window : glfw.WindowHandle, focused : c.int) {
 	window : ^Window = cast(^Window)glfw.GetWindowUserPointer(glfw_window);
@@ -247,10 +248,9 @@ setup_window_no_backbuffer :: proc(desc : Window_desc, window : ^Window) {
 
 	//glfw.SetCursorPosCallback(window.glfw_window, mouse_pos_callback);
 	glfw.SetKeyCallback(window.glfw_window, key_callback);
+	glfw.SetCharModsCallback(window.glfw_window, input_callback);
 	glfw.SetMouseButtonCallback(window.glfw_window, button_callback);
 	glfw.SetScrollCallback(window.glfw_window, scroll_callback);
-	glfw.SetCharModsCallback(window.glfw_window, input_callback);
-	glfw.SetInputMode(window.glfw_window, glfw.STICKY_KEYS, 1);
 	glfw.SetWindowFocusCallback(window.glfw_window, window_focus_callback);
 
 	glfw.SetWindowUserPointer(window.glfw_window, window);
@@ -597,12 +597,13 @@ monitor_get_infos :: proc () -> []Monitor_info {
 	//glfw.GetMonitorPhysicalSize
 
 	//glfwGetMonitorPos(monitor, &xpos, &ypos);
-
-	return {};
+	
+	panic("TODO");
+	//return {};
 }
 
 monitor_destroy_infos :: proc ([]Monitor_info) {
-
+	panic("TODO");
 }
 
 /////////////////// OS stuff ///////////////////
