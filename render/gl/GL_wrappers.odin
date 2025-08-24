@@ -4365,7 +4365,7 @@ clear_texture_2D :: proc (tex : Tex2d_id, clear_color : [4]f64, loc := #caller_l
 		clear_color := clear_color;
 		t : gl.GLenum = upload_format_gl_type(upload_format_from_internal_format(format));
 		upload_format : gl.GLenum = internal_format_gl_channel_format(format);
-		assert(upload_format == .R || upload_format == .RG || upload_format == .RGB || upload_format == .RGBA, "TODO only R/RG/RGB/RGBA supported");
+		fmt.assertf(upload_format == .R || upload_format == .RED || upload_format == .RG || upload_format == .RGB || upload_format == .RGBA, "TODO only R/RED/RG/RGB/RGBA supported, got %v", upload_format);
 		
 		#partial switch t {
 			case .UNSIGNED_BYTE: {

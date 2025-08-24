@@ -10,24 +10,22 @@ import "vendor:glfw"
 
 input_events_mutex : sync.Mutex;
 
-Input_modifier_enum :: enum i32 {
-	none = 0,
-	
-	shift	 = 1,
-	control   = 2,
-	alt	   = 4,
-	super	 = 8,
-	caps_lock = 16,
-	//num_lock  = 32, //TODO this does not fit
+Input_modifier_enum :: enum u32 {
+	shift = 0,
+	control = 1,
+	alt = 2,
+	super = 3,
+	caps_lock = 4,
+	num_lock = 5,
 }
+
+Input_modifier :: bit_set[Input_modifier_enum; u32];
 
 Input_state :: enum {
 	release = glfw.RELEASE,
 	press 	= glfw.PRESS,
 	repeat 	= glfw.REPEAT,
 }
-
-Input_modifier :: bit_set[Input_modifier_enum; i32];
 
 ////////// Keys //////////
 
@@ -182,6 +180,12 @@ Key_input_event :: struct {
 	mods : Input_modifier,
 }
 
+Char_input_event :: struct {
+	window : ^Window,
+	codepoint : rune,
+	mods : Input_modifier,
+}
+
 @(private="file")
 pasted : bool;
 
@@ -207,18 +211,6 @@ is_key_released :: proc(key : Key_code) -> bool {
 @require_results
 is_key_triggered :: proc(key : Key_code) -> bool {
 	return state.keys_triggered[key];
-}
-
-@require_results
-recive_next_input :: proc () -> (char : rune, done : bool) {
-
-	done = queue.len(state.char_input) == 0;
-	
-	if !done {
-		char = queue.pop_front(&state.char_input);
-	}
-	
-	return;
 }
 
 //This a view, don't delete it.
@@ -411,26 +403,37 @@ input_end :: proc(loc := #caller_location) {
 
 //TODO is_cursor_on_screen
 
+@require_results
+char_inputs :: proc () -> []Char_input_event {
+	return state.char_input.data[state.char_input.offset:state.char_input.offset + state.char_input.len];
+}
+
+@require_results
 key_events :: proc () -> []Key_input_event {
 	return state.key_input_buffer[:];
 }
 
+@require_results
 mouse_events :: proc () -> []Mouse_input_event {
 	return state.mouse_input_buffer[:];
 }
 
+@require_results
 is_shift :: proc () -> bool {
 	return is_key_down(.shift_left) || is_key_down(.shift_right);
 }
 
+@require_results
 is_control :: proc () -> bool {
 	return is_key_down(.control_left) || is_key_down(.control_right);
 }
 
+@require_results
 is_alt :: proc () -> bool {
 	return is_key_down(.alt_left) || is_key_down(.alt_right);
 }
 
+@require_results
 is_super :: proc () -> bool {
 	return is_key_down(.super_left) || is_key_down(.super_right);
 }
@@ -439,6 +442,7 @@ import win32 "core:sys/windows"
 
 // PLATFORM SPECIFIC CALLS //
 
+@require_results
 is_caps_lock :: proc () -> bool {
 	when ODIN_OS == .Windows {
 		return (win32.GetKeyState(win32.VK_CAPITAL) & 0x0001) != 0
@@ -451,6 +455,7 @@ is_caps_lock :: proc () -> bool {
 	}
 }
 
+@require_results
 is_insert :: proc () -> bool {
 	when ODIN_OS == .Windows {
 		// Insert is a true OS-level toggle on Windows
@@ -464,6 +469,7 @@ is_insert :: proc () -> bool {
 	}
 }
 
+@require_results
 is_num_lock :: proc () -> bool {
 	when ODIN_OS == .Windows {
 		return (win32.GetKeyState(win32.VK_NUMLOCK) & 0x0001) != 0
@@ -476,6 +482,7 @@ is_num_lock :: proc () -> bool {
 	}
 }
 
+@require_results
 is_scroll_lock :: proc () -> bool {
 	when ODIN_OS == .Windows {
 		return (win32.GetKeyState(win32.VK_SCROLL) & 0x0001) != 0

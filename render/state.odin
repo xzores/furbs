@@ -61,8 +61,8 @@ State :: struct {
 	key_release_input_events : queue.Queue(Key_input_event),
 	key_input_buffer : [dynamic]Key_input_event,
 	
-	char_input_buffer : queue.Queue(rune),
-	char_input : queue.Queue(rune),
+	char_input_buffer : queue.Queue(Char_input_event),
+	char_input : queue.Queue(Char_input_event),
 
 	button_input_events : queue.Queue(Mouse_input_event),
 	button_release_input_events : queue.Queue(Mouse_input_event),

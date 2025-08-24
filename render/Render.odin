@@ -8,6 +8,7 @@ import "core:strings"
 import "core:reflect"
 import "core:log"
 import "core:container/queue"
+import "core:math"
 
 import "core:os"
 import "core:time"
@@ -79,6 +80,13 @@ glfw_error_callback : glfw.ErrorProc : proc "c" (error: i32, description: cstrin
 //uniform_spec : [Uniform_location]Uniform_info, attribute_spec : [Attribute_location]Attribute_info,
 init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc) = nil, required_gl_verion : Maybe(GL_version) = nil, render_context := context, pref_warn := true, loc := #caller_location) -> ^Window {
 
+	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.shift) == auto_cast 0x1, "incorrect glfw shift mapping, was %v should be %v", math.pow2_f32(cast(f32)Input_modifier.shift), 0x1);
+	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.control) == auto_cast 0x2, "incorrect glfw control mapping");
+	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.alt) == auto_cast 0x4, "incorrect glfw alt mapping, was %v should be %v", cast(int)Input_modifier.alt, 0x4);
+	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.super) == auto_cast 0x8, "incorrect glfw super mapping");
+	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.caps_lock) == auto_cast 0x10, "incorrect glfw caps_lock mapping");
+	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.num_lock) == auto_cast 0x20, "incorrect glfw num_lock mapping, was %v should be %v", cast(int)Input_modifier.num_lock, 0x20);
+	
 	using gl;
 
 	window : ^Window = nil;
@@ -310,7 +318,7 @@ destroy :: proc (loc := #caller_location) {
 
 	state.key_input_events				= {};
 	state.key_release_input_events		= {};
-	state.char_input_buffer			= {};
+	state.char_input_buffer				= {};
 	state.char_input					= {};
 	state.button_input_events			= {};
 	state.button_release_input_events	= {};

@@ -7,6 +7,8 @@ import "core:sync"
 import "core:container/queue"
 import "core:c"
 
+import win32 "core:sys/windows"
+
 import "vendor:glfw"
 
 import "gl"
@@ -79,8 +81,14 @@ input_callback : glfw.CharModsProc : proc "c" (glfw_window : glfw.WindowHandle, 
 
 	sync.lock(&input_events_mutex);
 	defer sync.unlock(&input_events_mutex);
-	
-	queue.append(&state.char_input_buffer, codepoint);
+
+	event : Char_input_event = {
+		window = window,
+		codepoint = auto_cast codepoint,
+		mods =  transmute(Input_modifier) mods,
+	}
+
+	queue.append(&state.char_input_buffer, event);
 }
 
 button_callback : glfw.MouseButtonProc : proc "c" (glfw_window : glfw.WindowHandle, button, action, mods : i32) {
