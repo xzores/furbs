@@ -12,14 +12,17 @@ import nn ".."
 
 //@(test) load_safetensor_1 :: proc (t : ^testing.T) {
 
-/*
+
 entry :: proc() {
 	
 	//nn.load_safetensors_from_filename("tiny_model/model.safetensors");
+
+	tokenizer, ok := nn.load_tokenizer("examples/tiny_model/vocab.json", "examples/tiny_model/merges.txt",  "examples/tiny_model/special_tokens_map.json");
+	assert(ok, "failed to load tokenizer");
 	
 	// Time tokenization
 	start_tokenize := time.now()
-	tokens := nn.tokenize_string("This is my string", "tiny_model");
+	tokens := nn.tokenize(tokenizer, "This is my sample text, please say hi");
 	tokenize_duration := time.diff(start_tokenize, time.now())
 	log.infof("Tokenization took: %v", tokenize_duration)
 	
@@ -44,8 +47,6 @@ entry :: proc() {
 	fmt.printf("output :%v", string(s))
 	
 }
-
-*/
 
 main :: proc () {
 	

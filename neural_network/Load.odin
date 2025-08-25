@@ -19,6 +19,18 @@ import "core:strconv"
 
 import "../utils"
 
+Any_tensor :: struct {
+	data_type : string,
+	shape : []int,
+	data  : []u8, // raw bytes; you can cast this later based on dtype
+}
+
+tensor_as_f32 :: proc(t: Any_tensor) -> utils.Tensor(f32) {
+	assert(t.data_type == "F32" || t.data_type == "f32")
+	return utils.Tensor(f32){t.shape, slice.reinterpret([]f32, t.data)};
+}
+
+
 ModelConfig :: struct {
     activation_function        		: string,   // e.g. "gelu_new"
     attention_probs_dropout_prob	: f32,     // e.g. 0.1
@@ -54,7 +66,7 @@ ModelConfig :: struct {
 }
 
 Safe_tensor :: struct {
-	
+	tensors: map[string]Tensor,
 }
 
 load_configuration_from_content :: proc (content : []byte) -> ModelConfig {
@@ -77,7 +89,6 @@ load_configuration_from_filename :: proc (file_name : string) -> ModelConfig {
 load_configuration :: proc{load_configuration_from_content, load_configuration_from_filename};
 
 load_safetensors_from_filehandle :: proc(file : os.Handle) -> Safe_tensor {
-	
 	s := os.stream_from_handle(file);
 	cnt : int;
 	err : io.Error;
@@ -95,47 +106,63 @@ load_safetensors_from_filehandle :: proc(file : os.Handle) -> Safe_tensor {
 	header_bytes := make([]u8, int(header_size))
 	cnt, err = io.read(s, header_bytes[:])
 	if err != nil {
+		log.error("failed to read headder json");
 		return {} // handle error properly
 	}
 	
 	header_json := string(header_bytes[:])
 	header_data, jerr := json.parse(header_bytes)
 	if jerr != nil {
-		return {}// handle JSON parse error
+		log.error("failed to parse headder json");
+		return {} // handle JSON parse error
 	}
 	
-	fmt.printf("header_data : %#v\n", header_data);
+	log.debugf("header_data : %#v\n", header_data);
+
+	tensors := make(map[string]Tensor)
 	
-	/*
-	// Example access to tensors
-	for key, value in header_data {
-		if key == "__metadata__" {
+	for entry in header_val.object {
+		name := entry.key
+		if name == "__metadata__" {
 			continue
 		}
-		/*
-		tensor_info := value.(map[string]interface{})
-		dtype := tensor_info["dtype"].(string)
-		shape := tensor_info["shape"].([]interface{})
-		data_offsets := tensor_info["data_offsets"].([]interface{})
 
-		start := strconv.atoi(data_offsets[0].(string))  // or cast directly if numeric
-		end := strconv.atoi(data_offsets[1].(string))
+		tensor_info := entry.value.object
+
+		dtype_val := tensor_info["dtype"]
+		shape_val := tensor_info["shape"]
+		offsets_val := tensor_info["data_offsets"]
+
+		dtype := dtype_val.string
+		shape := make([]int, len(shape_val.array))
+		for i, dim in shape_val.array {
+			shape[i] = int(dim.integer)
+		}
+
+		start := int(offsets_val.array[0].integer)
+		end := int(offsets_val.array[1].integer)
 
 		size := end - start
 		data := make([]u8, size)
 
-		file.seek(int(start), os.SeekStart)
-		_, err = file.read(data)
+		_, err := os.seek(file, start, os.SeekStart)
 		if err != nil {
-			return // handle error properly
+			log.printfln("Seek failed: %v", err)
+			return {}
 		}
-		*/
-		
-		// Now `data` holds the raw bytes of the tensor
-		// You would interpret them based on `dtype` and `shape`
+		n, err := os.read(file, data)
+		if err != nil || n != size {
+			log.printfln("Failed to read tensor %v: %v", name, err)
+			return {}
+		}
+
+		tensors[name] = Tensor{
+			data_type = dtype,
+			shape = shape,
+			data  = data,
+		}
 	}
-	*/
-	
+
 	return {};
 }
 

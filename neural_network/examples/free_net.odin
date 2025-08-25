@@ -16,7 +16,7 @@ import nn ".."
 Feedforward :: proc (t : ^testing.T) {
 */
 
-entry :: proc () {
+entry_free_net :: proc () {
 
 	config := nn.Dataset_Config{
 		max_samples = 20,
