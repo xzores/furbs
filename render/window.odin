@@ -3,14 +3,17 @@ package render;
 import "core:fmt"
 import "base:runtime"
 import "core:slice"
+import "core:strings"
 import "core:sync"
 import "core:container/queue"
 import "core:c"
 
 import win32 "core:sys/windows"
+//import darwin "core:sys/darwin"
 
 import "vendor:glfw"
 
+import "../utils"
 import "gl"
 
 Mouse_mode :: enum {
@@ -444,8 +447,14 @@ window_set_decorations :: proc "contextless" (window : ^Window, decorations : bo
 	}
 }
 
+@(require_results)
 window_should_close :: proc "contextless" (window : ^Window, loc := #caller_location) -> bool {
 	return auto_cast glfw.WindowShouldClose(window.glfw_window);
+}
+
+//Clears the should close flag
+window_set_should_close :: proc (window : ^Window, value : bool) {
+	glfw.SetWindowShouldClose(window.glfw_window, cast(b32)value);
 }
 
 window_maximize :: proc "contextless" (window : ^Window) {
@@ -528,18 +537,34 @@ window_get_cursor_position :: proc "contextless" (window : ^Window) -> (w, h : f
 	return glfw.GetCursorPos(window.glfw_window);
 }
 
+window_hide :: proc "contextless" (window : ^Window) {
+	glfw.HideWindow(window.glfw_window);
+}
+
+window_show :: proc "contextless" (window : ^Window) {
+	glfw.ShowWindow(window.glfw_window);
+}
+
+window_set_floating :: proc "contextless" (window : ^Window, value : bool) {
+	glfw.SetWindowAttrib(window.glfw_window, glfw.FLOATING, auto_cast value);
+}
+
+window_set_focus_on_show :: proc "contextless" (window : ^Window, value : bool) {
+	glfw.SetWindowAttrib(window.glfw_window, glfw.FOCUS_ON_SHOW, auto_cast value);
+} 
+
 /////////////////// Cursor stuff ///////////////////
 
 Cursor_type :: enum {
 	arrow				= 0x00036001, //normal
-	Ibeam         		= 0x00036002, //Text edit
-	crosshair     		= 0x00036003,
+	Ibeam		 		= 0x00036002, //Text edit
+	crosshair	 		= 0x00036003,
 	pointing_hand 		= 0x00036004,
-	resize_east_west    = 0x00036005,
+	resize_east_west	= 0x00036005,
 	resize_north_south  = 0x00036006,
 	resize_NWSE   		= 0x00036007,
 	resize_NESW   		= 0x00036008,
-	resize_all    		= 0x00036009,
+	resize_all			= 0x00036009,
 	not_allowed   		= 0x0003600A,
 }
 
@@ -583,7 +608,7 @@ Monitor_info :: struct {
 	physical_width 			: Maybe([2]i32), // in milimeters
 
 	virtual_position 		: [2]f32,
-	work_area 				: [2]f32,
+	work_area_rect 			: [4]f32,
 
 	red_bits				: i32,
 	green_bits				: i32,
@@ -592,26 +617,109 @@ Monitor_info :: struct {
 	refresh_rate			: i32,
 }
 
-monitor_get_infos :: proc () -> []Monitor_info {
+monitor_info_from_handle :: proc (m : Monitor) -> Monitor_info {
 
-	monitors := glfw.GetMonitors();
-	
-	//glfwGetPrimaryMonitor();
+	// Base
+	info : Monitor_info;
+	info.handle = m;
 
-	//GLFWvidmode* modes = glfwGetVideoModes(monitor, &count);
+	// Name (GLFW returns UTF-8 cstring)
+	info.name = strings.clone(glfw.GetMonitorName(m));
 
-	//const char* name = glfwGetMonitorName(monitor);
+	// Primary?
+	primary := glfw.GetPrimaryMonitor();
+	info.is_primary_monitor = (m == primary);
 
-	//glfw.GetMonitorPhysicalSize
+	// Physical size in millimeters (may be 0 if unknown)
+	mm_w, mm_h:= glfw.GetMonitorPhysicalSize(m);
+	if mm_w > 0 && mm_h > 0 {
+		info.physical_width = [2]i32{mm_w, mm_h}; // your Maybe constructor
+	} else {
+		info.physical_width = nil;
+	}
 
-	//glfwGetMonitorPos(monitor, &xpos, &ypos);
-	
-	panic("TODO");
-	//return {};
+	// Virtual desktop position (top-left) in screen coordinates
+	x, y := glfw.GetMonitorPos(m);
+	info.virtual_position = [2]f32{cast(f32)x, cast(f32)y};
+
+	// Current video mode (resolution, bit depth, refresh)
+	mode := glfw.GetVideoMode(m); // ^GLFWvidmode
+	if mode != nil {
+		info.pixel_size   = [2]i32{mode.width, mode.height};
+		info.red_bits	 = mode.red_bits;
+		info.green_bits   = mode.green_bits;
+		info.blue_bits	= mode.blue_bits;
+		info.refresh_rate = mode.refresh_rate;
+	} else {
+		info.pixel_size   = [2]i32{0, 0};
+		info.refresh_rate = 0;
+	}
+
+	// Work area (area not covered by taskbar/docks): x,y,w,h → here we store width/height
+	wa_x, wa_y, wa_w, wa_h := glfw.GetMonitorWorkarea(m);
+	info.work_area_rect = {cast(f32)wa_x, cast(f32)wa_y, cast(f32)wa_w, cast(f32)wa_h};
+
+	return info;
 }
 
-monitor_destroy_infos :: proc ([]Monitor_info) {
-	panic("TODO");
+monitor_destroy_info :: proc (info : Monitor_info) {
+	delete(info.name);
+}
+
+monitor_get_infos :: proc () -> []Monitor_info {
+	// Get monitors
+	monitors := glfw.GetMonitors();
+	count := len(monitors);
+	if count == 0 {
+		return make([]Monitor_info, 0);
+	}
+
+	infos := make([]Monitor_info, count);
+
+	for m, i in monitors {
+		infos[i] = monitor_info_from_handle(m);
+	}
+
+	return infos;
+}
+
+monitor_destroy_infos :: proc (mi : []Monitor_info) {
+	for info in mi {
+		monitor_destroy_info(info)
+	}
+	delete(mi);
+}
+
+get_mouse_monitor :: proc () -> Monitor_info {
+
+	infos := monitor_get_infos();
+	defer monitor_destroy_infos(infos);
+
+	abs_mouse : [2]f32;
+
+	when ODIN_OS == .Windows {
+		imp : win32.POINT;
+		win32.GetCursorPos(&imp);
+		abs_mouse = {cast(f32)imp.x, cast(f32)imp.y}
+	}
+	else when ODIN_OS == .Darwin {
+		point := darwin.CGEventGetLocation(darwin.CGEventCreate(nil));
+		abs_mouse = {cast(f32)point.x, cast(f32)point.y};
+	}
+	when ODIN_OS == .Linux {
+		panic("TODO");
+	}
+	
+	for info in infos {
+		if utils.collision_point_rect(abs_mouse, info.work_area_rect) {
+			//clone the info
+			res := info;
+			res.name = strings.clone(info.name);
+			return res;
+		}
+	}
+
+	return {};
 }
 
 /////////////////// OS stuff ///////////////////
@@ -622,9 +730,26 @@ monitor_destroy_infos :: proc ([]Monitor_info) {
 //Do os explorerer pop-up
 
 
+get_os_bar_size :: proc () -> i32 {
+	when ODIN_OS == .Windows {
+		return win32.GetSystemMetrics(win32.SM_CYCAPTION);
+	}
+	else {
+		panic("TODO");
+	}
+}
 
+add_tray_icon :: proc (hWnd: win32.HWND, icon: win32.HICON, tooltip: string) {
+	data := win32.NOTIFYICONDATAW{
+		cbSize = size_of(win32.NOTIFYICONDATAW),
+		hWnd   = hWnd,
+		uID    = NOTIFY_ICON_ID,
+		uFlags = win32.NIF_MESSAGE | win32.NIF_ICON | win32.NIF_TIP,
+		uCallbackMessage = win32.WM_TRAYICON,
+		hIcon  = icon,
+	}
+	
+	copy_string_to_wide_array(data.szTip[:], tooltip);
 
-
-
-
-
+	win32.Shell_NotifyIconW(win32.NIM_ADD, &data);
+}
