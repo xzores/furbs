@@ -11,13 +11,13 @@ import "core:os"
 import "core:sync"
 import "core:path/filepath"
 import "core:dynlib"
-import win32 "core:sys/windows"
+import "core:sys/windows"
 import "core:unicode/utf16"
 
 import "base:intrinsics"
 import "base:runtime"
 
-import cef "Odin_CEF/CEF_bindings"
+import cef "CEF_bindings"
 
 //setup the hash, required in newer versions of CEF
 //Must be called before anything else
@@ -32,9 +32,9 @@ pre_init_cef :: proc () -> (args : cef.Main_args, is_main : bool) {
 
 	log.infof("Starting thread %v", os.current_thread_id());
 	// 1) Get hInstance and exe dir
-	hinstance := win32.GetModuleHandleW(nil);
+	hinstance := windows.GetModuleHandleW(nil);
 	if hinstance == nil {
-		check_win32_error("Failed to get module handle");
+		check_windows_error("Failed to get module handle");
 	}
 
 	// 2) Main args
@@ -50,8 +50,8 @@ pre_init_cef :: proc () -> (args : cef.Main_args, is_main : bool) {
 		//we are the browser (main)
 		log.infof("Starting browser thread...");
 		when ODIN_WINDOWS_SUBSYSTEM == .Windows && ODIN_DEBUG {
-			if !win32.AllocConsole() {
-				check_win32_error("Failed to create console");
+			if !windows.AllocConsole() {
+				check_windows_error("Failed to create console");
 			}
 		}
 		is_main = true;
@@ -66,6 +66,10 @@ cef_allocator : mem.Allocator;
 set_allocator :: proc (alloc := context.allocator) {
 	cef_allocator = alloc;
 	log.debugf("setting allocator : %v", alloc)
+}
+
+get_cef_allocator :: proc () -> mem.Allocator {
+	return cef_allocator;
 }
 
 @(private)
@@ -109,9 +113,28 @@ to_cef_str_ptr :: proc (str : string, alloc := context.allocator, loc := #caller
 	return res;
 }
 
+from_cef_str :: proc (s: cef.cef_string, loc := #caller_location) -> string {
+	if s.str == nil || s.length == 0 {
+		return "";
+	}
+
+	src   := s.str
+	slen  := s.length
+	
+	buf := make([]u8, slen * 2, loc = loc)
+	written := utf16.decode_to_utf8(buf, src[:slen]);
+	
+	// Build an Odin string from the bytes (no extra copy).
+	return string(buf[:written])
+}
+
 destroy_cef_string :: proc (str : cef.cef_string) {
 	str := str;
 	cef.cef_string_utf16_clear(&str);
+}
+
+destroy_cef_string_ptr :: proc (str : ^cef.cef_string) {
+	cef.cef_string_utf16_clear(str);
 }
 
 utf16_str :: proc (str : string, alloc := context.allocator) -> []u16 {
@@ -125,7 +148,7 @@ On_before_command_line_processing :: #type proc "system" (self: ^cef.App, proces
 On_register_custom_schemes :: #type proc "system" (self: ^cef.App, registrar: ^cef.Scheme_registrar);
 
 make_application :: proc (on_cmd_process : On_before_command_line_processing, on_reg_schemes : On_register_custom_schemes, loc := #caller_location) -> ^cef.App {
-	app := alloc_cef_object(cef.App, nil, loc);
+	app := alloc_cef_object(cef.App, nil, loc = loc);
 
 	assert(reflect.struct_field_by_name(cef.App, "base").offset == 0);
 
@@ -149,7 +172,6 @@ release_application :: proc (app : ^cef.App) {
 	log.debugf("releasing application");
 	release(auto_cast app);
 }
-
 
 // CEF settings
 make_cef_settings :: proc(
@@ -291,3 +313,46 @@ destroy_cef_settings :: proc (settings : cef.Settings) {
 	destroy_cef_string(settings.chrome_policy_id);
 }
 
+
+Os_window_handle :: union {
+	windows.HWND,
+}
+
+//make_client_callback is called from WM_CREATE (during window creation) is whould return a struct with a cef_client field which should be of type ^cef.Client
+make_os_window :: proc (hinstance : windows.HMODULE, window_name_str : string, class_name_str : string, window_callback : windows.WNDPROC, l_param_data : rawptr) -> Os_window_handle { //Use windows to register a window class
+	
+	ex_style :: 0;
+	style : u32 : windows.CS_HREDRAW | windows.CS_VREDRAW;
+	
+	class_name := utf16_str(class_name_str, context.temp_allocator);
+	window_name := utf16_str(window_name_str, context.temp_allocator);
+	log.debugf("creating %v with title %v", class_name, window_name);
+
+	wcex : windows.WNDCLASSEXW;
+	wcex.cbSize = size_of(windows.WNDCLASSEXW);
+	wcex.style = style;
+	
+	wcex.lpfnWndProc = window_callback;
+	
+	wcex.hInstance = auto_cast hinstance;
+	wcex.lpszClassName = raw_data(class_name);
+	if windows.RegisterClassExW(&wcex) == 0 {
+		check_windows_error("failed to register class");
+	}
+	
+	browser_window := windows.CreateWindowExW(ex_style, wcex.lpszClassName, raw_data(window_name), windows.WS_OVERLAPPEDWINDOW | windows.WS_CLIPCHILDREN | windows.WS_CLIPSIBLINGS | windows.WS_VISIBLE,
+												windows.CW_USEDEFAULT, windows.CW_USEDEFAULT, windows.CW_USEDEFAULT, windows.CW_USEDEFAULT, nil, nil, auto_cast hinstance, l_param_data);
+	
+	if browser_window == nil {
+		check_windows_error("failed to create window");
+	}
+
+	if !windows.ShowWindow(browser_window, windows.SW_SHOWDEFAULT) {
+		check_windows_error("failed to show window");
+	}
+	if !windows.UpdateWindow(browser_window) {
+		check_windows_error("failed to update window");
+	}
+	
+	return browser_window;
+}

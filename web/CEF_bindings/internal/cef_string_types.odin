@@ -15,19 +15,19 @@ when ODIN_OS == .Windows {
 /// When reusing an existing string, call `dtor` for the old value before
 /// assigning new `str`/`dtor` values. Static strings will have a nil `dtor`.
 cef_string_wide :: struct {
-	str:   ^c.wchar_t,
+	str:   [^]c.wchar_t,
 	length: c.size_t,
 	dtor:  proc "system" (str: ^c.wchar_t),
 }
 
 cef_string_utf8 :: struct {
-	str:   ^u8,
+	str:   [^]u8,
 	length: c.size_t,
 	dtor:  proc "system" (str: ^u8),
 }
 
 cef_string_utf16 :: struct {
-	str:   ^u16,
+	str:   [^]u16,
 	length: c.size_t,
 	dtor:  proc "system" (str: ^u16),
 }

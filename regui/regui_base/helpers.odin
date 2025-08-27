@@ -375,8 +375,8 @@ update_text_base :: proc (e : Base_text_info, is_selected : bool, style : Style,
 			}
 		}
 		
-		for codepoint in render.recive_next_input() {
-			append(e.runes, codepoint);
+		for ki in render.char_inputs() {
+			append(e.runes, ki.codepoint);
 		}
 	}
 	

@@ -9,19 +9,20 @@ import "core:mem"
 import "base:intrinsics"
 import "base:runtime"
 
-import cef "Odin_CEF/CEF_bindings"
+import cef "CEF_bindings"
 
 @private
 Super :: struct(T : typeid) {
 	obj : T,
 	ref_cnt : i32,
 	user_data : rawptr,
+	on_free : proc "contextless" (self: ^cef.base_ref_counted, user_data : rawptr, alloc_location : runtime.Source_Code_Location),
 	alloc_location : runtime.Source_Code_Location,
 }
 
 //Must be called when creating a cef object.
 @(require_results)
-alloc_cef_object_outplace :: proc ($T : typeid, user_data : rawptr, loc := #caller_location) -> ^T where intrinsics.type_has_field(T, "base") {
+alloc_cef_object_outplace :: proc ($T : typeid, user_data : rawptr, on_free : proc "contextless" (self: ^cef.base_ref_counted, user_data : rawptr, alloc_location : runtime.Source_Code_Location) = nil, loc := #caller_location) -> ^T where intrinsics.type_has_field(T, "base") {
 	assert(cef_allocator != {}, "You must call set_cef_allocator first", loc);
 
 	log.debugf("allocating %v", type_info_of(T), location = loc);
@@ -42,6 +43,11 @@ alloc_cef_object_outplace :: proc ($T : typeid, user_data : rawptr, loc := #call
 			//free the object
 			if freed {
 				assert(super.ref_cnt == 0);
+
+				if super.on_free != nil {
+					super.on_free(self, super.user_data, super.alloc_location);
+				}
+
 				log.debugf("freeing %v", type_info_of(T), location = super.alloc_location);
 				mem.free(super, cef_allocator);
 				super = {};
@@ -73,8 +79,8 @@ alloc_cef_object_outplace :: proc ($T : typeid, user_data : rawptr, loc := #call
 	return &super.obj;
 }
 
-alloc_cef_object_inplace :: proc (obj : ^^$T, user_data : rawptr, loc := #caller_location) where intrinsics.type_has_field(T, "base") {
-	obj^ = alloc_cef_object_outplace(T, user_data, loc);
+alloc_cef_object_inplace :: proc (obj : ^^$T, user_data : rawptr, on_free : proc "contextless" (self: ^cef.base_ref_counted, user_data : rawptr, alloc_location : runtime.Source_Code_Location) = nil, loc := #caller_location) where intrinsics.type_has_field(T, "base") {
+	obj^ = alloc_cef_object_outplace(T, user_data, on_free, loc);
 }
 
 alloc_cef_object :: proc {alloc_cef_object_outplace, alloc_cef_object_inplace}

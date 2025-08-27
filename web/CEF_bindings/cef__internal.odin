@@ -134,3 +134,4 @@ Composition_underline :: internal.Composition_underline;
 State :: internal.State;
 Runtime_style :: internal.Runtime_style;
 Key_event_type :: internal.Key_event_type;
+Scheme_options :: internal.Scheme_options;

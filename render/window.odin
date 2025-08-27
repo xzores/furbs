@@ -738,18 +738,3 @@ get_os_bar_size :: proc () -> i32 {
 		panic("TODO");
 	}
 }
-
-add_tray_icon :: proc (hWnd: win32.HWND, icon: win32.HICON, tooltip: string) {
-	data := win32.NOTIFYICONDATAW{
-		cbSize = size_of(win32.NOTIFYICONDATAW),
-		hWnd   = hWnd,
-		uID    = NOTIFY_ICON_ID,
-		uFlags = win32.NIF_MESSAGE | win32.NIF_ICON | win32.NIF_TIP,
-		uCallbackMessage = win32.WM_TRAYICON,
-		hIcon  = icon,
-	}
-	
-	copy_string_to_wide_array(data.szTip[:], tooltip);
-
-	win32.Shell_NotifyIconW(win32.NIM_ADD, &data);
-}
