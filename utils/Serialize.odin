@@ -178,7 +178,7 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 		}
 
 		#partial switch info in ti.variant {
-			case Type_Info_Struct:
+			case Type_Info_Struct: {
 				
 				fields := reflect.struct_fields_zipped(ti.id);
 
@@ -198,8 +198,9 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 						}
 					}
 				}
+			}
 			//TODO case : union
-			case Type_Info_Dynamic_Array:
+			case Type_Info_Dynamic_Array: {
 				length : int = reflect.length(value);
 				length_bytes := length * info.elem_size;
 				append_type_to_data(length, data);
@@ -208,7 +209,7 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 				
 				data_len := len(data);
 
-				runtime.resize(data, data_len + length_bytes);
+				resize(data, data_len + length_bytes);
 				//fmt.printf("data_len : %v, length_bytes : %v\n data : %v\n", data_len, length_bytes, len(data));
 				value_raw_data, valid := reflect.as_raw_data(value);
 				assert(valid);
@@ -216,7 +217,7 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 				if length_bytes != 0 {
 					mem.copy(&data[data_len], value_raw_data, length_bytes);
 				}
-			
+			}/*
 			case Type_Info_Array:
 				length : int = reflect.length(value);
 				length_bytes := length * info.elem_size;
@@ -231,18 +232,17 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 				
 				if length_bytes != 0 {
 					mem.copy(&data[data_len], value_raw_data, length_bytes);
-				}
-			
-			case runtime.Type_Info_Slice:
+			}*/
+			case runtime.Type_Info_Slice: {
 				length : int = reflect.length(value);
 				length_bytes := length * info.elem_size;
 				append_type_to_data(length, data);
 				
-				fmt.printf("length_bytes : %v\n", length_bytes);
+				//fmt.printf("length_bytes : %v\n", length_bytes);
 				
 				data_len := len(data); //before the resize
 				
-				runtime.resize(data, data_len + length_bytes);
+				resize(data, data_len + length_bytes);
 				//fmt.printf("data_len : %v, length_bytes : %v\n data : %v\n", data_len, length_bytes, len(data));
 				value_raw_data, valid := reflect.as_raw_data(value);
 				assert(valid);
@@ -250,6 +250,7 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 				if length_bytes != 0 {
 					mem.copy(&data[data_len], value_raw_data, length_bytes);
 				}
+			}
 			
 			case:
 				log.errorf("type_not_supported : %v", ti);
@@ -308,7 +309,7 @@ deserialize_from_bytes :: proc {deserialize_from_bytes_static, deserialize_from_
 _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Header_size_type, value_data : rawptr, alloc : mem.Allocator, loc := #caller_location) -> Serialization_error {
 	using runtime;
 
-	if is_trivial_copied(as_type) {
+	if is_trivial_copied(as_type) { //First see if we can just copy the memory, if yes then we do that.
 		to_type_at(value_data, data[used_bytes^:], as_type);
 		used_bytes^ += cast(u32)reflect.size_of_typeid(as_type);
 	}
@@ -322,7 +323,7 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 		}
 
 		#partial switch info in ti.variant {
-			case Type_Info_Struct:
+			case Type_Info_Struct: {
 				
 				fields := reflect.struct_fields_zipped(ti.id);
 
@@ -347,10 +348,11 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 						}
 					}
 				}
-			case Type_Info_Dynamic_Array:
+			}
+			case Type_Info_Dynamic_Array: {
 				length : int = to_type(data[used_bytes^:], int);
 				used_bytes^ += size_of(int);
-				elem_size := ti.variant.(Type_Info_Dynamic_Array).elem_size;
+				elem_size := info.elem_size;
 				length_bytes := length * elem_size;
 
 				context.allocator = alloc;
@@ -361,6 +363,21 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 					mem.copy(arr.data, &data[used_bytes^], length_bytes);
 				}
 				used_bytes^ += u32(length_bytes);
+			}
+			case runtime.Type_Info_Slice: {
+				length : int = to_type(data[used_bytes^:], int);
+				used_bytes^ += size_of(int);
+				elem_size := info.elem_size;
+				length_bytes : int = length * info.elem_size
+
+				context.allocator = alloc;
+				arr_bytes, err := mem.alloc(length_bytes);
+				assert(err == nil);
+				arr := runtime.Raw_Slice {arr_bytes, length};
+				
+				mem.copy(arr.data, &data[used_bytes^], length_bytes);
+				used_bytes^ += u32(length_bytes);
+			}
 
 			//TODO case : union
 			case:

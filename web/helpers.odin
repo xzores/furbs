@@ -28,7 +28,7 @@ api_hash_setup :: proc () {
 }
 
 //call this before initilizing cef.
-pre_init_cef :: proc () -> (args : cef.Main_args, is_main : bool) {
+pre_init_cef :: proc (app : ^cef.App) -> (args : cef.Main_args, is_main : bool) {
 
 	log.infof("Starting thread %v", os.current_thread_id());
 	// 1) Get hInstance and exe dir
@@ -40,7 +40,8 @@ pre_init_cef :: proc () -> (args : cef.Main_args, is_main : bool) {
 	// 2) Main args
 	args = { hinstance };
 	
-	code := cef.execute_process(&args, nil, nil);
+	increment(app);
+	code := cef.execute_process(&args, app, nil);
 	if (code >= 0) {
 		//this is a child process
 		is_main = false;
@@ -146,25 +147,25 @@ utf16_str :: proc (str : string, alloc := context.allocator) -> []u16 {
 //CEF application
 On_before_command_line_processing :: #type proc "system" (self: ^cef.App, process_type: ^cef.cef_string, Command_line: ^cef.Command_line);
 On_register_custom_schemes :: #type proc "system" (self: ^cef.App, registrar: ^cef.Scheme_registrar);
+Get_resource_bundle_handler :: #type proc "system" (self: ^cef.App) -> ^cef.Resource_bundle_handler
+Get_browser_process_handler :: #type proc "system" (self: ^cef.App) -> ^cef.Browser_process_handler
+Get_render_process_handler :: #type proc "system" (self: ^cef.App) -> ^cef.Render_process_handler;
 
-make_application :: proc (on_cmd_process : On_before_command_line_processing, on_reg_schemes : On_register_custom_schemes, loc := #caller_location) -> ^cef.App {
+make_application :: proc (on_cmd_process : On_before_command_line_processing,
+							on_reg_schemes : On_register_custom_schemes,
+							get_resource_bundle_handler : Get_resource_bundle_handler,
+							get_browser_process_handler : Get_browser_process_handler,
+							get_render_process_handler : Get_render_process_handler, loc := #caller_location) -> ^cef.App {
 	app := alloc_cef_object(cef.App, nil, loc = loc);
 
 	assert(reflect.struct_field_by_name(cef.App, "base").offset == 0);
 
 	app.on_before_command_line_processing = on_cmd_process;
 	app.on_register_custom_schemes = on_reg_schemes;
-
-	app.get_resource_bundle_handler =  proc "system" (self: ^cef.App) -> ^cef.Resource_bundle_handler {
-		return nil;
-	}
-	app.get_browser_process_handler = proc "system" (self: ^cef.App) -> ^cef.Browser_process_handler {
-		return nil;
-	}
-	app.get_render_process_handler = proc "system" (self: ^cef.App) -> ^cef.Render_process_handler {
-		return nil;
-	}
-
+	app.get_resource_bundle_handler = get_resource_bundle_handler;
+	app.get_browser_process_handler = get_browser_process_handler;
+	app.get_render_process_handler = get_render_process_handler;
+	
 	return app;
 }
 

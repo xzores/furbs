@@ -199,7 +199,7 @@ client_send :: proc (client : ^Client, value : any, loc := #caller_location) -> 
 			return send_tcp_message_commands(base.sock, client.params, value, loc);
 		}
 	}
-		
+	
 	unreachable();
 }
 

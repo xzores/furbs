@@ -55,7 +55,7 @@ Event_disconnected :: struct {
 }
 
 Event :: struct {
-	user_data : rawptr,
+	user_data : rawptr, //Will be the client
 	timestamp : time.Time,
 	type : union {
 		Event_connected,
@@ -106,9 +106,9 @@ clean_up_events :: proc (to_clean : ^[dynamic]Event, client_clean : proc(c : raw
 				//nothing to free
 			}
 			case Event_msg: {
-				mem.free_all(b.commad.alloc);
+				mem.free_all(b.commad.alloc, loc);
 				mem.dynamic_arena_destroy(b.commad.arena_alloc);
-				mem.free(b.commad.arena_alloc);
+				mem.free(b.commad.arena_alloc, loc = loc);
 			}
 			case Event_disconnected: {
 				//nothing to free

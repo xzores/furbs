@@ -16,7 +16,7 @@ when ODIN_OS == .Windows {
 cef_value :: struct {
 	// Base structure.
 	base: base_ref_counted,
-
+	
 	// Returns 1 if the underlying data is valid (always true for simple types). For complex types
 	// the data may become invalid if owned by another object that is modified/destroyed. This
 	// value object can be re-used via Set*() even if data is invalid.

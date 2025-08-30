@@ -106,6 +106,9 @@ change_all_base_on_struct :: proc (parent : ^$T, add : bool) {
 
 		if tip, ok := field.type.variant.(runtime.Type_Info_Pointer); ok {
 			base_field := reflect.struct_field_by_name(tip.elem.id, "base");
+			if base_field == {} {
+				continue;
+			}
 			if base_field.type.id == cef.base_ref_counted {
 				assert(base_field.offset == 0);
 				

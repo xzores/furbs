@@ -36,7 +36,7 @@ Client_tcp_base :: struct {
 
 init_tcp_base :: proc (user_data : rawptr, loc := #caller_location) -> Client_tcp_base {
 	client : Client_tcp_base
-	queue.init(&client.current_bytes_recv, loc = loc);
+	queue.init(&client.current_bytes_recv);
 	client.user_data = user_data;
 	return client;
 }
@@ -45,7 +45,7 @@ destroy_tcp_base :: proc (client : ^Client_tcp_base) {
 	queue.destroy(&client.current_bytes_recv);
 }
 
-recv_tcp_parse_loop :: proc(client : ^Client_tcp_base, params : Network_commands, buffer_size := 4*4096, loc := #caller_location) {
+recv_tcp_parse_loop :: proc(client : ^Client_tcp_base, params : Network_commands, buffer_size := 4096, loc := #caller_location) {
 
 	client.did_open = true;
 	
@@ -79,8 +79,15 @@ recv_tcp_parse_loop :: proc(client : ^Client_tcp_base, params : Network_commands
 		queue.append_elems(&client.current_bytes_recv, ..new_data_buffer[:bytes_recv]);
 		sync.unlock(&client.mutex);
 		
-		for parse_message(client, params, loc) {}; //Parses all messages...
+		status := parse_message(client, params, loc)
+		for status == .finished {
+			status = parse_message(client, params, loc)
+		}; //Parses all messages...
 		
+		if status == .failed {
+			panic("TODO disconnect client");
+		}
+
 		free_all(context.temp_allocator);
 	}
 
@@ -143,7 +150,7 @@ send_tcp_message_variable_size :: proc (socket : net.TCP_Socket, using params : 
 	}
 	
 	bytes_send, serr := net.send_tcp(socket, to_send[:]);
-
+	
 	if serr != nil {
 		log.errorf("Failed to send, got err %v\n", serr);
 		return serr;
@@ -165,10 +172,17 @@ send_tcp_message_commands :: proc (socket : net.TCP_Socket, params : Network_com
 	}
 }
 
-//returns true if it did parse something
-parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc := #caller_location) -> bool {
+Msg_pass_result :: enum {
+	finished, 
+	not_done,
+	failed,
+}
 
-	try_parse :: proc(using client : ^Client_tcp_base, params : Network_commands, message_id : Message_id_type, command : ^Command, loc := #caller_location) -> bool{
+//returns true if it did parse something
+@require_results
+parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc := #caller_location) -> Msg_pass_result {
+
+	try_parse :: proc(using client : ^Client_tcp_base, params : Network_commands, message_id : Message_id_type, command : ^Command, loc := #caller_location) -> Msg_pass_result {
 
 		message_typeid : typeid = params.commands[message_id];		
 		
@@ -180,7 +194,7 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 			total_size : int = size_of(Message_id_type) + command_size;
 			
 			if queue.len(client.current_bytes_recv) < total_size {
-				return false;
+				return .not_done
 			}
 			
 			command_data, err := mem.alloc_bytes(math.max(1, command_size), allocator = command.alloc); //Forced to allocate at least 1 byte to have a non-nil any value (TODO rethink this, might not want to use any)
@@ -201,7 +215,7 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 
 			req_size := size_of(Message_id_type) + size_of(utils.Header_size_type);
 			if queue.len(client.current_bytes_recv) < req_size {
-				return false;
+				return .not_done;
 			}
 			
 			header_data : []u8 = make([]u8, size_of(utils.Header_size_type));
@@ -213,7 +227,7 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 			
 			total_size : int = size_of(Message_id_type) + cast(int)message_size;
 			if queue.len(client.current_bytes_recv) < total_size {
-				return false;
+				return .not_done;
 			}
 			
 			data : []u8 = make([]u8, message_size);
@@ -234,11 +248,12 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 				command.value = val;
 			}
 			else {
-				panic("Failed to deserialize_from_bytes!");
+				log.errorf("Failed to deserialize_from_bytes! for message type %v with error %v, data was:\n%v", message_typeid, err, data);
+				return .failed;
 			}
 		}
 
-		return true;
+		return .finished
 	}
 
 	{
@@ -247,7 +262,7 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 
 		//We want enough bytes to know the message_id, otherwise we know nothing.
 		if queue.len(client.current_bytes_recv) < size_of(Message_id_type) {
-			return false;
+			return .not_done;
 		}
 	}
 	
@@ -274,23 +289,27 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 		defer sync.unlock(&client.mutex);
 		did_parse_message := try_parse(client, params, message_id, &command, loc);
 
-		if did_parse_message {
+		if did_parse_message == .finished {
 			//Add command to command queue.
 			sync.lock(client.event_mutex) //TODO look at if these mutexs are even needed? could we just have 1?
 			queue.append(client.events, Event{client.user_data, time.now(), Event_msg{command}});
 			sync.unlock(client.event_mutex)
 			
-			return true;
+			return .finished;
 		}
 
 		//failed, free resources
 		free_all(command.alloc);
 		mem.dynamic_arena_destroy(command.arena_alloc);
 		free(command.arena_alloc);
+		
+		if did_parse_message == .failed {
+			return .failed;
+		}
 	}
 	else {
 		log.errorf("A none valid message %v was passed.\n params are : %#v.\n", message_id);
 	}
 	
-	return false;
+	return .not_done;
 }

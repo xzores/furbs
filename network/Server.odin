@@ -286,7 +286,7 @@ server_start_accepting :: proc (server : ^Server, thread_logger : Maybe(log.Logg
 
 //Stop accepecting and recving new clients and messages from clients (disconnects all clients), there might still be unhandeled messages, which can be handled before server_destroy.
 @(require_results)
-server_close :: proc(server : ^Server) -> Error{
+server_close :: proc(server : ^Server) -> Error {
 	
 	server_begin_handle_events(server);
 	for id, c in server.clients {
@@ -354,7 +354,7 @@ server_end_handle_events :: proc (server : ^Server, loc := #caller_location) {
 	server.handeling_events = false;
 	sync.unlock(&server.mutex);
 
-	clean_up_events(&server.to_clean, _server_destroy_client);
+	clean_up_events(&server.to_clean, _server_destroy_client, loc);
 }
 
 @(require_results)
@@ -396,6 +396,7 @@ server_disconnect_client :: proc (server : ^Server, client_id : client_id_type, 
 			log.error("shutting down the server side client");
 		}
 		case: {
+			//log.error("shutting down the server side client");
 			unreachable();
 		}
 	}

@@ -23,11 +23,12 @@ make_file_watcher :: proc () -> File_watcher {
 file_watcher_add_file :: proc (fw : ^File_watcher, file_path : string) -> (ok : bool) {
 
 	fs, err := os.stat(file_path);
+	defer os.file_info_delete(fs);
 	if err != nil {
 		log.errorf("failed to see file %v (%v)", filepath.abs(file_path));
 		return false;
 	}
-
+	
 	if fs.modification_time._nsec > fw.last_update._nsec {
 		fw.last_update = fs.modification_time;
 	}
@@ -64,12 +65,13 @@ file_watcher_add_folder :: proc (fw : ^File_watcher, dir_path : string, loc := #
 	return true;
 }
 
-update_file_watcher :: proc (fw : ^File_watcher) -> (any_change : bool) {
+update_file_watcher :: proc (fw : ^File_watcher, loc := #caller_location) -> (any_change : bool) {
 
 	any_change = false;
 
 	for file_path in fw.files_to_watch {
-		fs, err := os.stat(file_path);
+		fs, err := os.stat(file_path, loc = loc);
+		defer os.file_info_delete(fs);
 		if err != nil {
 			//likely the file is removed, so we should not watch it anymore or we could just ignore it?
 			continue;
@@ -77,6 +79,7 @@ update_file_watcher :: proc (fw : ^File_watcher) -> (any_change : bool) {
 
 		if fs.modification_time._nsec > fw.last_update._nsec {
 			any_change = true;
+			log.debug("file %v changed", fs.fullpath);
 			fw.last_update = fs.modification_time;
 		}
 	}
