@@ -8,6 +8,8 @@ import "core:mem"
 import "core:time"
 import "core:log"
 
+import "base:runtime"
+
 import "../utils"
 
 //////////////////////////////////////////////////////////////
@@ -168,7 +170,7 @@ client_end_handle_events :: proc (client : ^Client, loc := #caller_location) {
 }
 
 @(require_results)
-client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sleep_time := time.Microsecond, loc := #caller_location) -> (event : Event, timedout : bool) {
+client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sleep_time := 100 * time.Microsecond, loc := #caller_location) -> (timedout : bool) { 
 
 	start_time := time.now();
 	
@@ -176,27 +178,56 @@ client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sle
 		{
 			client_begin_handle_events(client);
 			defer client_end_handle_events(client);
-			e, done := client_get_next_event(client);
-			if !done {
-				//There is a message for us
-				return e, false;
+			if queue.len(client.events) != 0 {
+				return false;
 			}
 		}
 
-		time.sleep(100 * time.Microsecond);
+		time.sleep(sleep_time);
 	}
 
 	log.warnf("client_wait_for_event timed out");
-	return {}, true;
+	return true;
 }
 
 @(require_results)
 client_send :: proc (client : ^Client, value : any, loc := #caller_location) -> (err : Error) {
-	
-	log.debugf("Client sending : %v", value);
+
+	log.warnf("sending : %v", 123);
 	switch base in client.interface {
 		case Client_tcp_base: {
 			return send_tcp_message_commands(base.sock, client.params, value, loc);
+		}
+	}
+	
+	unreachable();
+}
+
+@(require_results)
+client_send_raw :: proc (client : ^Client, command_id : Message_id_type, value : []u8, loc := #caller_location) -> (err : Error) {
+	command_id := command_id;
+	
+	switch base in client.interface {
+		case Client_tcp_base: {
+			to_send := make([]u8, size_of(Message_id_type) + len(value));
+			defer delete(to_send);
+			runtime.mem_copy(&to_send[0], &command_id, size_of(Message_id_type));
+			if len(value) != 0 {
+				runtime.mem_copy(&to_send[size_of(Message_id_type)], &value[0], len(value));
+			}
+			
+			bytes_send, serr := net.send_tcp(base.sock, to_send[:]);
+			
+			if serr != nil {
+				log.errorf("Failed to send, got err %v\n", serr);
+				return serr;
+			}
+			if bytes_send != len(to_send) {
+				log.errorf("Failed to send all bytes, tried to send %i, but only sent %i\n", len(to_send), bytes_send);
+				return .Unknown;
+			}
+
+			return;
 		}
 	}
 	

@@ -6,6 +6,7 @@ import "core:net"
 import "core:container/queue"
 import "core:thread"
 import "core:mem"
+import vmem "core:mem/virtual"
 import "core:fmt"
 import "core:log"
 import "core:reflect"
@@ -13,6 +14,7 @@ import "core:sync"
 import "core:time"
 
 import "../utils"
+import "../serialize"
 
 Network_Error :: net.Network_Error;
 
@@ -31,9 +33,11 @@ IP6_Loopback :: net.IP6_Loopback;
 //////////////////////////////////////////////////////////////////////
 
 Command :: struct {
-	arena_alloc : ^mem.Dynamic_Arena, //hold the memory for value, free when done with value.
+	//arena_alloc : ^mem.Dynamic_Arena, //hold the memory for value, free when done with value.
+	arena_alloc : ^vmem.Arena,
 	alloc :	mem.Allocator,
 	value : any,
+	cmd_id : Message_id_type,
 	is_constant_size : bool,
 }
 
@@ -65,7 +69,30 @@ Event :: struct {
 	}
 }
 
-Message_id_type :: distinct u32;
+destroy_event :: proc (e : Event, loc := #caller_location) {
+	
+	switch b in e.type {
+		case Event_connected: {
+			//nothing to free
+		}
+		case Event_msg: {
+			vmem.arena_destroy(b.commad.arena_alloc);
+			free(b.commad.arena_alloc, loc = loc);
+		}
+		case Event_disconnected: {
+			//nothing to free
+
+		}
+		case Event_error: {
+			//nothing to free
+		}
+		case: {
+			unreachable();
+		}
+	}
+}
+
+Message_id_type :: u32;
 client_id_type :: int;
 
 Network_commands :: struct {
@@ -75,7 +102,7 @@ Network_commands :: struct {
 
 Error :: union {
 	net.TCP_Send_Error,
-	utils.Serialization_error,
+	serialize.Serialization_error,
 }
 
 //The values must be kept alive for the whole program, by the caller.
@@ -102,24 +129,17 @@ clean_up_events :: proc (to_clean : ^[dynamic]Event, client_clean : proc(c : raw
 	
 	for e in to_clean {
 		#partial switch b in e.type {
-			case Event_connected: {
-				//nothing to free
-			}
-			case Event_msg: {
-				mem.free_all(b.commad.alloc, loc);
-				mem.dynamic_arena_destroy(b.commad.arena_alloc);
-				mem.free(b.commad.arena_alloc, loc = loc);
-			}
 			case Event_disconnected: {
 				//nothing to free
 				client_clean(e.user_data);
 			}
-			case: {
-				unreachable();
-			}
 		}
+		destroy_event(e);
 	}
 
 	clear(to_clean);
 }
 
+begin_handle_events :: proc {client_begin_handle_events, server_begin_handle_events}
+end_handle_events :: proc {client_end_handle_events, server_end_handle_events}
+get_next_event :: proc {client_get_next_event, server_get_next_event}

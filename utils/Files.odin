@@ -47,7 +47,8 @@ ensure_path :: proc(path: string) -> (err: os.Error) {
 }
 
 
-
+//do not include the dot (.)
+//include_extension = true means that the name in the map is with the extension.
 load_all_in_dir_as_txt :: proc(directory_path : string, extension : string, include_extension : bool = false, alloc := context.allocator) -> (res : map[string]string) {
 
 	context.allocator = alloc;

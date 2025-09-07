@@ -49,7 +49,7 @@ alloc_cef_object_outplace :: proc ($T : typeid, user_data : rawptr, on_free : pr
 				}
 
 				log.debugf("freeing %v", type_info_of(T), location = super.alloc_location);
-				mem.free(super, cef_allocator);
+				mem.free(super, cef_allocator, loc = super.alloc_location);
 				super = {};
 			}
 			else {

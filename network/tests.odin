@@ -63,91 +63,126 @@ test_main :: proc () {
 		server_thread := thread.create(server_handle_func);
 		thread.start(server_thread);
 		
-		for  j : int = 0; j < 5; j += 1 {
+		for j: int = 0; j < 5; j += 1 {
 			/////////// Client ///////////
-			client := client_create(commands_map);
+			client := client_create(commands_map)
 
-			assert(client_connect(client, Endpoint{Default_game_ip, Default_game_port}, context.logger, context.allocator) == nil);
-			
+			assert(client_connect(client, Endpoint{Default_game_ip, Default_game_port}, context.logger, context.allocator) == nil)
+
+			// Connected
 			{
-				econ, tmoutcon := client_wait_for_event(client);
-				assert(!tmoutcon);
-				_, okcon := econ.type.(Event_connected);
+				tmoutcon := client_wait_for_event(client)
+				assert(!tmoutcon)
+				begin_handle_events(client)
+				defer end_handle_events(client)
+				econ, _ := get_next_event(client)
+				_, okcon := econ.type.(Event_connected)
 				assert(okcon)
 			}
 
+			// Hello echo 1
 			{
-				assert(client_send(client, Hello{}) == nil);
-				e1, tmout1 := client_wait_for_event(client);
-				assert(!tmout1);
-				msg1, ok1 := e1.type.(Event_msg);
+				assert(client_send(client, Hello{}) == nil)
+				tmout1 := client_wait_for_event(client)
+				assert(!tmout1)
+				begin_handle_events(client)
+				defer end_handle_events(client)
+				e1, _ := get_next_event(client)
+				msg1, ok1 := e1.type.(Event_msg)
 				assert(ok1)
 				assert(msg1.commad.value.id == Hello_from_server)
 			}
 
+			// Hello echo 2
 			{
-				e2, tmout2 := client_wait_for_event(client);
-				assert(!tmout2);
-				msg2, ok2 := e2.type.(Event_msg);
+				tmout2 := client_wait_for_event(client)
+				assert(!tmout2)
+				begin_handle_events(client)
+				defer end_handle_events(client)
+				e2, _ := get_next_event(client)
+				msg2, ok2 := e2.type.(Event_msg)
 				assert(ok2)
 				assert(msg2.commad.value.id == Hello_from_server)
 			}
-			
+
+			// Hello echo 3
 			{
-				e3, tmout3 := client_wait_for_event(client);
-				assert(!tmout3);
-				msg3, ok3 := e3.type.(Event_msg);
+				tmout3 := client_wait_for_event(client)
+				assert(!tmout3)
+				begin_handle_events(client)
+				defer end_handle_events(client)
+				e3, _ := get_next_event(client)
+				msg3, ok3 := e3.type.(Event_msg)
 				assert(ok3)
 				assert(msg3.commad.value.id == Hello_from_server)
 			}
 
-			_, tmtest := client_wait_for_event(client, 10 * time.Millisecond);
-			assert(tmtest);
-			
-			assert(client_send(client, Chat_message{"Yoyoyo this is client calling! 1"}) == nil);
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 2"}) == nil);
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 3"}) == nil);
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 4"}) == nil);
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 5"}) == nil);
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 6"}) == nil);
-			
-			assert(client_send(client, Version_check{1,2,3}) == nil);
-			ee, tmoute := client_wait_for_event(client);
-			assert(!tmoute);
-			msge, oke := ee.type.(Event_msg);
-			assert(oke)
-			fmt.assertf(msge.commad.value.id == Version_check_passed, "did not recive a version check passed : %v", msge.commad.value.id)
-			ver_passed, okvp := msge.commad.value.(Version_check_passed);
-			assert(okvp)
-			assert(ver_passed.was_passed == true)
-			
-			//Check both that the client can disconnect from the server and the server from the client
-			if i %% 2 == 0 || true { //TODO 
-				//Disconnect in the end.
-				assert(client_disconnect(client) == nil);
+			// Short-timeout probe (expect timeout, no handling)
+			{
+				tmtest := client_wait_for_event(client, 10 * time.Millisecond)
+				assert(tmtest)
+			}
+
+			// Batch chat sends
+			assert(client_send(client, Chat_message{"Yoyoyo this is client calling! 1"}) == nil)
+			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 2"}) == nil)
+			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 3"}) == nil)
+			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 4"}) == nil)
+			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 5"}) == nil)
+			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 6"}) == nil)
+
+			// Version check round-trip
+			assert(client_send(client, Version_check{1,2,3}) == nil)
+			{
+				tmoute := client_wait_for_event(client)
+				assert(!tmoute)
+				begin_handle_events(client)
+				defer end_handle_events(client)
+				ee, _ := get_next_event(client)
+				msge, oke := ee.type.(Event_msg)
+				assert(oke)
+				fmt.assertf(msge.commad.value.id == Version_check_passed, "did not recive a version check passed : %v", msge.commad.value.id)
+				ver_passed, okvp := msge.commad.value.(Version_check_passed)
+				assert(okvp)
+				assert(ver_passed.was_passed == true)
+			}
+
+			// Disconnect flows
+			if i %% 2 == 0 || true { // TODO keep your original condition
+				// Client-initiated disconnect
+				assert(client_disconnect(client) == nil)
 				{
-					ed, tmdis := client_wait_for_event(client);
-					assert(!tmdis);
-					msge, oke := ed.type.(Event_disconnected);
+					tmdis := client_wait_for_event(client)
+					assert(!tmdis)
+					begin_handle_events(client)
+					defer end_handle_events(client)
+					ed, _ := get_next_event(client)
+					_, oke := ed.type.(Event_disconnected)
 					assert(oke)
 				}
-			}
-			else {
-				log.warn("asking server to disconnect me");
-				assert(client_send(client, Disconnect_me{}) == nil);
-				disconnect_event, tmdce := client_wait_for_event(client);
-				assert(!tmdce);
-				_, ok := disconnect_event.type.(Event_disconnected);
-				assert(ok);
-				
-				//TODO, close has to be called from both sides, i think we should not have to do this as users,
-				//also we should be forced to cleanup disconnected clients form the server.
-				//Rethink how the close happens.
-				assert(client_disconnect(client) == nil);
+			} else {
+				// Server-initiated disconnect
+				log.warn("asking server to disconnect me")
+				assert(client_send(client, Disconnect_me{}) == nil)
 				{
-					ed, tmdis := client_wait_for_event(client);
-					assert(!tmdis);
-					msge, oke := ed.type.(Event_disconnected);
+					tmdce := client_wait_for_event(client)
+					assert(!tmdce)
+					begin_handle_events(client)
+					defer end_handle_events(client)
+					disconnect_event, _ := get_next_event(client)
+					_, ok := disconnect_event.type.(Event_disconnected)
+					assert(ok)
+				}
+
+				// Close locally as well (per your TODO notes)
+				assert(client_disconnect(client) == nil)
+				{
+					tmdis := client_wait_for_event(client)
+					assert(!tmdis)
+					begin_handle_events(client)
+					defer end_handle_events(client)
+					ed, _ := get_next_event(client)
+					_, oke := ed.type.(Event_disconnected)
 					assert(oke)
 				}
 			}
