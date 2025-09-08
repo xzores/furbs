@@ -1,6 +1,7 @@
 #+feature dynamic-literals
 package serialize;
 
+import "base:intrinsics"
 import "core:fmt"
 import "core:reflect"
 import "core:mem"
@@ -104,7 +105,7 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 					//log.errorf("TODO cstring not supported yet");
 					return .type_not_supported; //I think it is ok for serilzation, but it failes at deserizlize
 				}
-
+				
 				length : i64 = cast(i64)reflect.length(value);
 				append_type_to_data(length, data, loc); //write the length (header of the string)
 				
@@ -159,6 +160,27 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 					if seri_err != .ok {
 						return seri_err;
 					}
+				}
+			}
+			case runtime.Type_Info_Union: {
+
+				if info.no_nil {
+					log.errorf("unions without a nil is not supported : %v", ti);
+					return .type_not_supported;
+				}
+
+				if info.shared_nil {
+					panic("How to handle this?");
+				}
+				
+				a := reflect.get_union_variant(value);
+				tag_index : i64 = reflect.get_union_variant_raw_tag(value);
+				append_type_to_data(tag_index, data, loc);
+
+				seri_err := _serialize_to_bytes(a, data, loc);
+				
+				if seri_err != .ok {
+					return seri_err;
 				}
 			}
 			case:
@@ -256,13 +278,14 @@ is_trivial_copied :: proc(t : typeid, loc := #caller_location) -> bool {
 			}
 			return res;
 		case Type_Info_Union:
-			res : bool = true;
+			/*res : bool = true;
 			for t in info.variants {
 				if !is_trivial_copied(t.id) {
 					res = false;
 				}
 			}
-			return res;
+			return res;*/
+			return false;
 		case:
 			log.errorf("Unhandled type for ti.varient! type info was %v", info, location = loc);
 			fmt.panicf("Unhandled type for ti.varient! type info was %v", info, loc = loc);
@@ -400,8 +423,8 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				}
 				
 				// allocate backing storage
-				length_bytes : int = auto_cast (length * elem_size); // in bytesa
-				buf, err := mem.alloc(length_bytes, allocator = alloc);
+				length_bytes : i64 = auto_cast (length * elem_size); // in bytesa
+				buf, err := mem.alloc(auto_cast length_bytes, allocator = alloc);
 				if err != nil {
 					//can we allocate a smaller array?
 					_, err2 := mem.alloc(60000, allocator = alloc);
@@ -428,8 +451,30 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				}
 
 			}
+			case runtime.Type_Info_Union: {
+				
+				if info.no_nil {
+					log.errorf("unions without a nil is not supported : %v", ti);
+					return .type_not_supported;
+				}
 
-			//TODO case : union
+				if info.shared_nil {
+					panic("How to handle this?");
+				}
+ 
+				union_tag := to_type(data[used_bytes^:], i64, "union tag");
+				used_bytes^ += size_of(i64);
+				
+				union_any := any{data=value_data, id=as_type};
+				reflect.set_union_variant_raw_tag(union_any, union_tag);
+
+				union_typeid := info.variants[union_tag-1].id
+				seri_err := _deserialize_from_bytes(union_typeid, data, used_bytes, value_data, alloc);
+				
+				if seri_err != .ok {
+					return seri_err;
+				}
+			}
 			case:
 				return .type_not_supported;
 		}
@@ -441,9 +486,9 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 @(require_results)
 to_type :: proc(data : []u8, $new_type : typeid, debug_str := "", loc := #caller_location) -> new_type {
 	
-	fmt.assertf(len(data) >= size_of(new_type), "We cannot convert %v a slice to type that is longer then the slice, length was %v type was %v with length (%v), \ndata: %v", debug_str, len(data), typeid_of(new_type), size_of(new_type), data, loc = loc);
+	fmt.assertf(len(data) >= size_of(new_type), "to_type : We cannot convert %v a slice to type that is longer then the slice, length was %v type was %v with length (%v), \ndata: %v", debug_str, len(data), typeid_of(new_type), size_of(new_type), data, loc = loc);
 	if len(data) < size_of(new_type){
-		panic("We cannot convert a slice to type that is longer then the slice");
+		panic("to_type : We cannot convert a slice to type that is longer then the slice");
 	}
 	
 	data_ptr : ^new_type = transmute(^new_type)&data[0];
@@ -456,7 +501,7 @@ to_type :: proc(data : []u8, $new_type : typeid, debug_str := "", loc := #caller
 to_type_at :: proc(dst : rawptr, data : []u8, new_type : typeid, debug_str := "", loc := #caller_location) {
 	
 	if len(data) < reflect.size_of_typeid(new_type) {
-		fmt.panicf("We cannot convert %v a slice to type that is longer then the slice, the size of the data array is %v, the size if the type is %v for data: %v", debug_str, len(data), reflect.size_of_typeid(new_type), data, loc = loc);
+		fmt.panicf("to_type_at : We cannot convert %v a slice to type that is longer then the slice, the size of the data array is %v, the type is %v (with size : %v) for data: %v", debug_str, len(data), new_type, reflect.size_of_typeid(new_type), data, loc = loc);
 	}
 
 	if reflect.size_of_typeid(new_type) == 0 {
