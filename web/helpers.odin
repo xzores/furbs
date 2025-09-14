@@ -336,7 +336,7 @@ make_os_window :: proc (
     wcex.style = style
     wcex.lpfnWndProc = window_callback
     wcex.hInstance = auto_cast hinstance
-    wcex.lpszClassName = raw_data(class_name)
+    wcex.lpszClassName = auto_cast raw_data(class_name)
     if windows.RegisterClassExW(&wcex) == 0 { check_windows_error("failed to register class") }
 
     win_style: u32 = windows.WS_CLIPCHILDREN | windows.WS_CLIPSIBLINGS | windows.WS_VISIBLE
@@ -363,7 +363,7 @@ make_os_window :: proc (
     }
 
     browser_window := windows.CreateWindowExW(
-        ex_style, wcex.lpszClassName, raw_data(window_name), win_style,
+        ex_style, wcex.lpszClassName, auto_cast raw_data(window_name), win_style,
         x, y, w, h, nil, nil, auto_cast hinstance, l_param_data)
     if browser_window == nil { check_windows_error("failed to create window") }
 

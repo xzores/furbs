@@ -70,7 +70,7 @@ update_file_watcher :: proc (fw : ^File_watcher, loc := #caller_location) -> (an
 	any_change = false;
 
 	for file_path in fw.files_to_watch {
-		fs, err := os.stat(file_path, loc = loc);
+		fs, err := os.stat(file_path);
 		defer os.file_info_delete(fs);
 		if err != nil {
 			//likely the file is removed, so we should not watch it anymore or we could just ignore it?
