@@ -319,41 +319,56 @@ Os_window_handle :: union {
 	windows.HWND,
 }
 
-//make_client_callback is called from WM_CREATE (during window creation) is whould return a struct with a cef_client field which should be of type ^cef.Client
-make_os_window :: proc (hinstance : windows.HMODULE, window_name_str : string, class_name_str : string, window_callback : windows.WNDPROC, l_param_data : rawptr) -> Os_window_handle { //Use windows to register a window class
-	
-	ex_style :: 0;
-	style : u32 : windows.CS_HREDRAW | windows.CS_VREDRAW;
-	
-	class_name := utf16_str(class_name_str, context.temp_allocator);
-	window_name := utf16_str(window_name_str, context.temp_allocator);
-	log.debugf("creating %v with title %v", class_name, window_name);
+// decorations_off: true -> no frame/caption (borderless). false -> normal decorated window.
+// add a boolean to toggle decorations
+make_os_window :: proc (
+    hinstance: windows.HMODULE, window_name_str: string, class_name_str: string,
+    window_callback: windows.WNDPROC, l_param_data: rawptr, decorations_off: bool
+) -> Os_window_handle {
+    ex_style :: 0
+    style : u32 : windows.CS_HREDRAW | windows.CS_VREDRAW
 
-	wcex : windows.WNDCLASSEXW;
-	wcex.cbSize = size_of(windows.WNDCLASSEXW);
-	wcex.style = style;
-	
-	wcex.lpfnWndProc = window_callback;
-	
-	wcex.hInstance = auto_cast hinstance;
-	wcex.lpszClassName = raw_data(class_name);
-	if windows.RegisterClassExW(&wcex) == 0 {
-		check_windows_error("failed to register class");
-	}
-	
-	browser_window := windows.CreateWindowExW(ex_style, wcex.lpszClassName, raw_data(window_name), windows.WS_OVERLAPPEDWINDOW | windows.WS_CLIPCHILDREN | windows.WS_CLIPSIBLINGS | windows.WS_VISIBLE,
-												windows.CW_USEDEFAULT, windows.CW_USEDEFAULT, windows.CW_USEDEFAULT, windows.CW_USEDEFAULT, nil, nil, auto_cast hinstance, l_param_data);
-	
-	if browser_window == nil {
-		check_windows_error("failed to create window");
-	}
+    class_name := utf16_str(class_name_str, context.temp_allocator)
+    window_name := utf16_str(window_name_str, context.temp_allocator)
 
-	if !windows.ShowWindow(browser_window, windows.SW_SHOWDEFAULT) {
-		check_windows_error("failed to show window");
-	}
-	if !windows.UpdateWindow(browser_window) {
-		check_windows_error("failed to update window");
-	}
-	
-	return browser_window;
+    wcex: windows.WNDCLASSEXW
+    wcex.cbSize = size_of(windows.WNDCLASSEXW)
+    wcex.style = style
+    wcex.lpfnWndProc = window_callback
+    wcex.hInstance = auto_cast hinstance
+    wcex.lpszClassName = raw_data(class_name)
+    if windows.RegisterClassExW(&wcex) == 0 { check_windows_error("failed to register class") }
+
+    win_style: u32 = windows.WS_CLIPCHILDREN | windows.WS_CLIPSIBLINGS | windows.WS_VISIBLE
+
+    // defaults
+    x, y, w, h: i32
+    x = windows.CW_USEDEFAULT
+    y = windows.CW_USEDEFAULT
+    w = windows.CW_USEDEFAULT
+    h = windows.CW_USEDEFAULT
+
+    if decorations_off {
+        win_style |= windows.WS_POPUP
+        // CW_USEDEFAULT yields 0x0 for WS_POPUP; set a size and center it
+        w = 1280
+        h = 800
+        sw := windows.GetSystemMetrics(windows.SM_CXSCREEN)
+        sh := windows.GetSystemMetrics(windows.SM_CYSCREEN)
+        x = (sw - w) / 2
+        y = (sh - h) / 2
+        // ex_style |= windows.WS_EX_APPWINDOW // uncomment if you want a taskbar button
+    } else {
+        win_style |= windows.WS_OVERLAPPEDWINDOW
+    }
+
+    browser_window := windows.CreateWindowExW(
+        ex_style, wcex.lpszClassName, raw_data(window_name), win_style,
+        x, y, w, h, nil, nil, auto_cast hinstance, l_param_data)
+    if browser_window == nil { check_windows_error("failed to create window") }
+
+    if !windows.ShowWindow(browser_window, windows.SW_SHOWDEFAULT) { /* not an error: returns previous visibility */ }
+    if !windows.UpdateWindow(browser_window) { check_windows_error("failed to update window") }
+
+    return browser_window
 }

@@ -176,13 +176,38 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 				a := reflect.get_union_variant(value);
 				tag_index : i64 = reflect.get_union_variant_raw_tag(value);
 				append_type_to_data(tag_index, data, loc);
-
-				seri_err := _serialize_to_bytes(a, data, loc);
 				
-				if seri_err != .ok {
-					return seri_err;
+				if a != nil {
+					seri_err := _serialize_to_bytes(a, data, loc);
+					
+					if seri_err != .ok {
+						return seri_err;
+					}
+				}
+				else {
+					append_type_to_data(u8(241), data, loc); //special dummy data
 				}
 			}
+			case runtime.Type_Info_Map: {
+				
+				//we write the length, then they pairs of (key, value)
+				length : i64 = auto_cast reflect.length(value);
+				append_type_to_data(length, data, loc); //write the length (header of the string)
+
+				//Now place each key pair
+				it : int;
+				for k, v in reflect.iterate_map(value, &it) {
+					key_err := _serialize_to_bytes(k, data);
+					if key_err != nil {
+						return key_err;
+					}
+
+					val_err := _serialize_to_bytes(v, data);
+					if val_err != nil {
+						return val_err;
+					}
+				}
+			} 
 			case:
 				log.errorf("type_not_supported : %v", ti);
 				return .type_not_supported;
@@ -348,6 +373,8 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 	fmt.assertf(value_data != nil, "value_data for type %v is nil", as_type, loc = loc);
 	using runtime;
 
+	fmt.printfln("deserialize as %v current used_bytes(pre-deser) : %v", as_type, cast(i64)(used_bytes^));
+
 	if is_trivial_copied(as_type) { //First see if we can just copy the memory, if yes then we do that.
 		to_type_at(value_data, data[used_bytes^:], as_type, "trivial_copy", loc);
 		used_bytes^ += cast(u32)reflect.size_of_typeid(as_type);
@@ -388,7 +415,7 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				if str_len == 0 {
 					return .ok;
 				}
-
+				
 				context.allocator = alloc;
 				buf, err := mem.alloc(auto_cast str_len); //return a rawptr
 				mem.copy(buf, &data[used_bytes^], auto_cast str_len); //we copy out the data into our memory as the other data will be deleted.
@@ -467,13 +494,71 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				
 				union_any := any{data=value_data, id=as_type};
 				reflect.set_union_variant_raw_tag(union_any, union_tag);
-
-				union_typeid := info.variants[union_tag-1].id
-				seri_err := _deserialize_from_bytes(union_typeid, data, used_bytes, value_data, alloc);
 				
-				if seri_err != .ok {
-					return seri_err;
+				if union_tag == 0 {
+					//read 1 dummy byte and check it is 241
+					dummy := to_type(data[used_bytes^:], u8, "dummy byte");
+					assert(dummy == 241);
+					used_bytes^ += size_of(u8);
+					mem.zero(value_data, reflect.size_of_typeid(as_type));
 				}
+				else {
+					union_typeid := info.variants[union_tag-1].id
+					seri_err := _deserialize_from_bytes(union_typeid, data, used_bytes, value_data, alloc);
+					
+					if seri_err != .ok {
+						return seri_err;
+					}
+				}
+				
+			}
+			case runtime.Type_Info_Map: {
+				// Get key/value typeids
+				key_id := info.key.id
+				val_id := info.value.id
+				
+				// Read number of entries
+				count := to_type(data[used_bytes^:], i64, "map_length", loc)
+				used_bytes^ += size_of(i64)
+
+				if count == 0 {
+					// zero-initialized map is fine (empty)
+					// ensure the map value memory is zeroed
+					mem.zero(value_data, reflect.size_of_typeid(as_type))
+					return .ok
+				}
+				
+				// Any view onto the destination map
+				raw_map := runtime.Raw_Map{
+					0,
+					0,
+					alloc,
+				}
+				
+				// For each entry, deserialize key then value, then set
+				for i: i64 = 0; i < count; i += 1 {
+					key_ptr, alloc_err := mem.alloc(reflect.size_of_typeid(key_id), allocator = context.temp_allocator);
+					{
+						assert(alloc_err == nil);
+						key_err := _deserialize_from_bytes(key_id, data, used_bytes, key_ptr, alloc);
+						assert(key_err == nil);
+					}
+					value_ptr : rawptr;
+					if reflect.size_of_typeid(val_id) != 0 {
+						vp, v_alloc_err := mem.alloc(reflect.size_of_typeid(val_id), allocator = context.temp_allocator);
+						value_ptr = vp;
+						assert(v_alloc_err == nil);
+						val_err := _deserialize_from_bytes(val_id, data, used_bytes, value_ptr, alloc);
+						assert(val_err == nil);
+					}
+					
+					__dynamic_map_set_without_hash(&raw_map, info.map_info, key_ptr, value_ptr);
+				}
+				
+				assert(reflect.size_of_typeid(as_type) == size_of(Raw_Map), "raw_map and map size does not match");
+				mem.copy(value_data, &raw_map, size_of(Raw_Map));
+
+				return .ok
 			}
 			case:
 				return .type_not_supported;

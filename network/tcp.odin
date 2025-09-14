@@ -236,7 +236,7 @@ parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc
 			sync.unlock(client.event_mutex)
 			return .finished;
 		}
-
+		
 		//failed, free resources
 		free_all(command.alloc);
 		vmem.arena_destroy(command.arena_alloc);
