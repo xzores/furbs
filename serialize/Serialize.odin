@@ -15,7 +15,7 @@ import "core:log"
 //that is not great we get the worst of both worlds, so we could swap so the entire is 8 and sub is 4 or both are 8.
 //TODO!!! Implement this
 
-Header_size_type :: u32;
+Header_size_type :: i64;
 
 
 Serialization_error :: enum {
@@ -177,15 +177,16 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 				tag_index : i64 = reflect.get_union_variant_raw_tag(value);
 				append_type_to_data(tag_index, data, loc);
 				
-				if a != nil {
+				if a == nil {
+					//append nothing.
+					assert(tag_index == 0);
+				} 
+				else {
 					seri_err := _serialize_to_bytes(a, data, loc);
 					
 					if seri_err != .ok {
 						return seri_err;
 					}
-				}
-				else {
-					append_type_to_data(u8(241), data, loc); //special dummy data
 				}
 			}
 			case runtime.Type_Info_Map: {
@@ -207,7 +208,29 @@ _serialize_to_bytes :: proc(value : any, data : ^[dynamic]u8, loc := #caller_loc
 						return val_err;
 					}
 				}
-			} 
+			}
+			case runtime.Type_Info_Enum: {
+				
+				enum_index : i64 = -1;
+				if reflect.is_nil(value) {
+					enum_index = 0;
+				}
+				else {
+					name, ok := reflect.enum_name_from_value_any(value);
+					assert(ok);
+					
+					for ename, i in info.names {
+						if name == ename {
+							enum_index = auto_cast i;
+							break;
+						}
+					}
+				}
+				assert(enum_index != -1);
+
+				append_type_to_data(enum_index, data);
+
+			}
 			case:
 				log.errorf("type_not_supported : %v", ti);
 				return .type_not_supported;
@@ -240,6 +263,9 @@ is_trivial_copied :: proc(t : typeid, loc := #caller_location) -> bool {
 		case Type_Info_Named:
 			unreachable();
 		case Type_Info_Integer:
+			if ti.id == int {
+				log.warnf("serializeing as 'int' will differ between 32 and 64 bit systems, use i64 or i32 instead");
+			}
 			return true;
 		case Type_Info_Rune:
 			return true;
@@ -258,7 +284,7 @@ is_trivial_copied :: proc(t : typeid, loc := #caller_location) -> bool {
 		case Type_Info_Matrix:
 			return true;
 		case Type_Info_Enum:
-			return true;
+			return false;
 		case Type_Info_Parameters:
 			//TODO this might not allways be false, but I see no usecase for checking
 			return false;
@@ -373,11 +399,9 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 	fmt.assertf(value_data != nil, "value_data for type %v is nil", as_type, loc = loc);
 	using runtime;
 
-	fmt.printfln("deserialize as %v current used_bytes(pre-deser) : %v", as_type, cast(i64)(used_bytes^));
-
 	if is_trivial_copied(as_type) { //First see if we can just copy the memory, if yes then we do that.
 		to_type_at(value_data, data[used_bytes^:], as_type, "trivial_copy", loc);
-		used_bytes^ += cast(u32)reflect.size_of_typeid(as_type);
+		used_bytes^ += auto_cast reflect.size_of_typeid(as_type);
 	}
 	else {
 		
@@ -452,11 +476,6 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				// allocate backing storage
 				length_bytes : i64 = auto_cast (length * elem_size); // in bytesa
 				buf, err := mem.alloc(auto_cast length_bytes, allocator = alloc);
-				if err != nil {
-					//can we allocate a smaller array?
-					_, err2 := mem.alloc(60000, allocator = alloc);
-					log.infof("err2 : %v", err2); //This is fine
-				}
 				fmt.assertf(err == nil, "failed to allocate, err : %v, length in bytes : %v", err, length_bytes);
 				
 				// element-wise deserialize (handles string / non-POD via recursion)
@@ -488,7 +507,7 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				if info.shared_nil {
 					panic("How to handle this?");
 				}
- 
+				
 				union_tag := to_type(data[used_bytes^:], i64, "union tag");
 				used_bytes^ += size_of(i64);
 				
@@ -496,10 +515,6 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				reflect.set_union_variant_raw_tag(union_any, union_tag);
 				
 				if union_tag == 0 {
-					//read 1 dummy byte and check it is 241
-					dummy := to_type(data[used_bytes^:], u8, "dummy byte");
-					assert(dummy == 241);
-					used_bytes^ += size_of(u8);
 					mem.zero(value_data, reflect.size_of_typeid(as_type));
 				}
 				else {
@@ -559,6 +574,15 @@ _deserialize_from_bytes :: proc(as_type : typeid, data : []u8, used_bytes : ^Hea
 				mem.copy(value_data, &raw_map, size_of(Raw_Map));
 
 				return .ok
+			}
+			case runtime.Type_Info_Enum: {
+				
+				enum_index := to_type(data[used_bytes^:], i64, "enum values");
+				used_bytes^ += size_of(i64);
+
+				val, ok:= reflect.enum_from_name_any(as_type, info.names[enum_index]);
+				assert(ok, "invlalid enum index");
+				mem.copy(value_data, &val, reflect.size_of_typeid(as_type));
 			}
 			case:
 				return .type_not_supported;
