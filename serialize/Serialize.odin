@@ -9,14 +9,12 @@ import "base:runtime"
 import "core:log"
 
 
-
 //////////////////////////// TODO ////////////////////////
 //Currently we use 4 bytes for the entire message and 8 for sub elements (arrays and such)
 //that is not great we get the worst of both worlds, so we could swap so the entire is 8 and sub is 4 or both are 8.
 //TODO!!! Implement this
 
 Header_size_type :: i64;
-
 
 Serialization_error :: enum {
 	ok,
@@ -636,7 +634,6 @@ from_type :: proc(field : any, alloc := context.allocator) -> []u8 {
 	return data;
 }
 
-@(private)
 append_type_to_data :: proc (field : any, append_to : ^[dynamic]u8, loc := #caller_location) {
 
 	assert(is_trivial_copied(field.id));

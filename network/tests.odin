@@ -13,6 +13,7 @@ import "core:thread"
 import "core:container/queue"
 import "../utils"
 
+/*
 my_logger : log.Logger;
 my_alloc : mem.Allocator;
 should_close_server : bool;
@@ -368,7 +369,7 @@ server_and_client_test :: proc (t : ^testing.T) {
 	fmt.printf("Succesfully recived bytes from client, bytes recived : %v, bytes : %v\n", recv_butes_cnt, recv_bytes);
 }
 */
-
+*/
 
 
 

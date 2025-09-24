@@ -16,8 +16,6 @@ import "core:time"
 import "../utils"
 import "../serialize"
 
-Network_Error :: net.Network_Error;
-
 Host_or_endpoint :: net.Host_Or_Endpoint;
 Endpoint :: net.Endpoint;
 
@@ -32,26 +30,40 @@ IP6_Loopback :: net.IP6_Loopback;
 // 				This is only meant for internal use					//
 //////////////////////////////////////////////////////////////////////
 
-Command :: struct {
-	//arena_alloc : ^mem.Dynamic_Arena, //hold the memory for value, free when done with value.
-	arena_alloc : ^vmem.Arena,
-	alloc :	mem.Allocator,
-	value : any,
-	cmd_id : Message_id_type,
-	is_constant_size : bool,
+Interface_handle :: distinct i32;
+
+Server_interface :: struct {
+	server_data : rawptr,
+	
+	listen : proc (server : ^Server, interface_handle : Interface_handle, user_data : rawptr) -> Error, //listen data is given by the user who starts it.
+	send : proc (server : ^Server, user_data : rawptr, client : rawptr, data : any) -> Error,
+	disconnect : proc (server : ^Server, user_data : rawptr, client_data : rawptr) -> Error, //disconnect the client forcefully (cannot fail)
+	close : proc (server : ^Server, user_data : rawptr) -> Error, //Must stop accecpting and close all connections
+	destroy : proc (server : ^Server, user_data : rawptr), //removes the interface, the interface must free all its internal data.
+}
+
+Client_interface :: struct {
+	client_data : rawptr,
+
+	connect : proc (client : ^Client, user_data : rawptr) -> Error,
+	send : proc (client : ^Client, user_data : rawptr, data : any) -> Error,
+	disconnect : proc (client : ^Client, user_data : rawptr) -> Error,
+	destroy : proc (client : ^Client, user_data : rawptr)
 }
 
 Event_connected :: struct {
-	//TODO error msg	
+
 }
 
 Event_error :: struct {
-	//TODO error msg
+	err : Error,
 }
 
 Event_msg :: struct {
-	//client : ^Server_side_client,
-	commad : Command,
+	value : any,
+	
+	free_proc : proc (value : any, data : rawptr),
+	backing_data : rawptr, //For whatever thing
 }
 
 Event_disconnected :: struct {
@@ -59,8 +71,12 @@ Event_disconnected :: struct {
 }
 
 Event :: struct {
-	user_data : rawptr, //Will be the client
+	user_data : union {
+		^Server_side_client,
+		^Client,
+	},
 	timestamp : time.Time,
+	original_interface : Interface_handle,
 	type : union {
 		Event_connected,
 		Event_error,
@@ -76,8 +92,7 @@ destroy_event :: proc (e : Event, loc := #caller_location) {
 			//nothing to free
 		}
 		case Event_msg: {
-			vmem.arena_destroy(b.commad.arena_alloc);
-			free(b.commad.arena_alloc, loc = loc);
+			b.free_proc(b.value, b.backing_data);
 		}
 		case Event_disconnected: {
 			//nothing to free
@@ -92,46 +107,32 @@ destroy_event :: proc (e : Event, loc := #caller_location) {
 	}
 }
 
-Message_id_type :: u32;
-client_id_type :: int;
-
-Network_commands :: struct {
-    commands                    : map[Message_id_type]typeid,
-    commands_inverse            : map[typeid]Message_id_type,
+Error :: enum {
+	ok,
+	no_such_client,
+	not_connected,
+	already_open,
+	not_open,
+	refused,
+	network_error,
+	access_error,
+	invalid_parameter,
+	serialize_error,
+	data_error,
+	corrupted_stream,
+	other,
+	unknown,
 }
 
-Error :: union {
-	net.TCP_Send_Error,
-	serialize.Serialization_error,
-}
-
-//The values must be kept alive for the whole program, by the caller.
-make_commands :: proc(commands_map : map[Message_id_type]typeid) -> Network_commands {
-    net_commands : Network_commands;
-
-    net_commands.commands = make(map[Message_id_type]typeid);
-	net_commands.commands_inverse = make(map[typeid]Message_id_type);
-
-    for id, com in commands_map {
-        net_commands.commands_inverse[com] = id;
-		net_commands.commands[id] = com;
-    }
-
-    return net_commands;
-}
-
-delete_commands :: proc(using params : ^Network_commands) {
-	delete(commands);
-	delete(commands_inverse);
-}
-
-clean_up_events :: proc (to_clean : ^[dynamic]Event, client_clean : proc(c : rawptr), loc := #caller_location) {
+clean_up_events :: proc (to_clean : ^[dynamic]Event, loc := #caller_location) {
 	
 	for e in to_clean {
 		#partial switch b in e.type {
-			case Event_disconnected: {
+			case Event_msg: {
 				//nothing to free
-				client_clean(e.user_data);
+				if b.free_proc != nil {
+					b.free_proc(b.value, b.backing_data);
+				}
 			}
 		}
 		destroy_event(e);

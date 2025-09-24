@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<link rel="icon" href="favicon.ico">
+		<meta charset="UTF-8" />
+		<title>JS Terminal</title>
+		<style>
+			body {
+				background: #111;
+				color: #0f0;
+				font-family: monospace;
+				padding: 1rem;
+			}
+			#terminal {
+				width: 100%;
+				height: 80vh;
+				background: #000;
+				padding: 1rem;
+				overflow-y: auto;
+				white-space: pre-wrap;
+				border: 1px solid #0f0;
+			}
+			input {
+				width: 100%;
+				background: #000;
+				color: #0f0;
+				border: none;
+				font-family: monospace;
+				font-size: 1rem;
+				padding: 0.5rem;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="terminal"></div>
+		<input id="input" type="text" autocomplete="off" placeholder="Type JS and press Enter" />
+		
+		<script>
+			const terminal = document.getElementById("terminal");
+			const input = document.getElementById("input");
+
+			function log(text) {
+				terminal.textContent += text + "\n";
+				terminal.scrollTop = terminal.scrollHeight;
+			}
+			
+			input.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") {
+					const code = input.value;
+					log("> " + code);
+					try {
+						const result = eval(code);
+						log(String(result));
+					} catch (err) {
+						log("Error: " + err.message);
+					}
+					input.value = "";
+				}
+			});
+
+			log("JavaScript Terminal Ready.");
+		</script>
+
+		<script type="text/javascript" src="odinjs.js"></script>
+		<script type="text/javascript" src="odin_sockets.js"></script>
+		<script type="text/javascript" src="main.js"></script>
+		
+	</body>
+</html>
