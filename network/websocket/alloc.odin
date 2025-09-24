@@ -6,7 +6,7 @@ import "core:strings"
 import "core:log"
 import "core:mem"
 
-import "libws"
+import "../../libws"
 
 websocket_allocator : runtime.Allocator;
 websocket_logger : runtime.Logger;

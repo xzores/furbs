@@ -11,11 +11,10 @@ import "core:mem"
 import "core:thread"
 import vmem"core:mem/virtual"
 
-import "libws"
-import "libwebsockets"
-import network ".."
-
+import "../../libws"
+import "../../libwebsockets"
 import "../../serialize"
+import network ".."
 
 //Shallow copy
 reverse_map :: proc (to_reverse : map[$A]$B) -> map[B]A {
@@ -63,97 +62,31 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 
 		switch event {
 			case .LIBWS_EVENT_CONNECTED: {
+				log.debugf("Client recived connected event");
 				network.push_connect_client(user_data.client);
 				user_data.ws_client = client;
 			}
 			case .LIBWS_EVENT_CONNECTION_ERROR: {
+				log.errorf("Client recived error event");
 				network.push_error_client(user_data.client, .network_error);
 			}
 			case .LIBWS_EVENT_SENT: {
 				//Do we need to do anything?
 			}
 			case .LIBWS_EVENT_RECEIVED: {
-
-				wsi := libws.get_websocket(client);
-				
-				if libwebsockets.is_first_fragment(wsi) {
-					clear(&user_data.message_buffer);
-				}
-
-				length := libwebsockets.remaining_packet_payload(wsi);
-				pre_msg_length := len(user_data.message_buffer);
-				resize(&user_data.message_buffer, pre_msg_length + auto_cast length);
-				read_bytes := libws.receive(client, raw_data(user_data.message_buffer[pre_msg_length:]), length);
-				assert(read_bytes == length, "something went wrong, length of recived and payload does not match");
-				
-				if libwebsockets.is_final_fragment(wsi) {
-
-					is_binary : bool = auto_cast libwebsockets.frame_is_binary(wsi);
-
-					if is_binary {
-						valid, _, value, free_proc, backing_data := network.array_to_any(user_data.to_type, user_data.message_buffer[:]);
-						
-						if valid {
-							network.push_msg_client(user_data.client, value, free_proc, backing_data);
-						}
-						else {
-							network.push_error_client(user_data.client, .corrupted_stream);
-						}
+				done, value, free_proc, backing_data, was_binary, error := recive_fragment(user_data.from_type, user_data.to_type, client, &user_data.message_buffer);
+				if done {
+					if error != nil {
+						network.push_error_client(user_data.client, error);
 					}
 					else {
-						//text read as json
-						str_data := string(user_data.message_buffer[:]);
-						first_bracket := -1;
-						for c in str_data {
-							if c == '{' {
-								break;
-							}
-						}
-						
-						cmd, ok := strconv.parse_u64(str_data[:first_bracket]);
-						if !ok {
-							network.push_error_client(user_data.client, .data_error);
-						}
-
-						command_id : network.Message_id = auto_cast cmd;
-						
-						if !(command_id in user_data.to_type) {
-							network.push_error_client(user_data.client, .data_error);
-						}
-						
-						if first_bracket != -1 {
-							
-							arena_alloc := new(vmem.Arena);
-							aerr := vmem.arena_init_growing(arena_alloc);
-							assert(aerr == nil);
-
-							context.allocator = vmem.arena_allocator(arena_alloc);
-							
-							type := user_data.to_type[command_id];
-
-							//we must allocate the any
-							v_data, a_err := mem.alloc(reflect.size_of_typeid(type));
-							assert(a_err == nil, "failed to allocate");
-							value : any = transmute(any)runtime.Raw_Any{v_data, type};
-
-							json.unmarshal_any(user_data.message_buffer[first_bracket:], value);
-
-							free_proc :: proc (value : any, data : rawptr) {
-								data := cast(^vmem.Arena)data;
-								vmem.arena_destroy(data);
-								free(data);
-							}
-
-							network.push_msg_client(user_data.client, value, free_proc, arena_alloc);
-						}
-						else {
-							network.push_error_client(user_data.client, .corrupted_stream);
-						}
+						user_data.send_binary = was_binary; //resond to the client the same protocol as the the client asked, json vs binary
+						network.push_msg_client(user_data.client, value, free_proc, backing_data);
 					}
 				}
-
 			}
 			case .LIBWS_EVENT_CLOSED: {
+				log.debugf("Client recvied closed event");
 				network.push_disconnect_client(user_data.client);
 			}
 		}
@@ -214,16 +147,8 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 	}
 
 	ctx_info := libwebsockets.lws_context_creation_info {
-		0,								/* listen port, or CONTEXT_PORT_NO_LISTEN */
-		nil,							/* NULL = any */
-		nil,				/* your protocols array (NULL-terminated) */
-		"default",						/* eg "default" */
-		nil, 								/* ctx user pointer (optional) */
-		0, 							/* 0 unless you need special flags */
-		0, 0, 							/* 0 */
-		0, 0, 0,	/* 0 (keepalive off) */
-		/* leave all TLS / fileops / mounts / fops fields at 0 / NULL */
-	}
+		//I dont think we need to set anything here 
+	};
 	
 	ctx : libwebsockets.Lws_context = libwebsockets.create_context(&ctx_info);
 

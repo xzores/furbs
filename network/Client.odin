@@ -13,30 +13,30 @@ import "base:runtime"
 import "../utils"
 
 //////////////////////////////////////////////////////////////
-// 				This is a singled threaded API				//
-//////////////////////////////////////////////////////////////
+// 				This is a singled threaded API		/		//
+/////////////////////////////////////////////////////////////
 
 //All members are private
 Client :: struct {
 	//owned by this client 
     events       : queue.Queue(Event),     //This should be handle in the main thread
-	event_mutex 			: sync.Mutex,
+	event_mutex  : sync.Mutex,
 	to_clean : [dynamic]Event,
 	
-	client_data : rawptr,
-	client_i : Client_interface,
+	using client_i : Client_interface,
 	
     //threading stuff used internally
 	handeling_events : bool,
 	mutex : sync.Mutex,
 }
 
+Client_interface_data :: distinct rawptr;
+
 @(require_results)
-client_create :: proc (client_data : rawptr, client_interface : Client_interface) -> ^Client {
+client_create :: proc (client_interface : Client_interface) -> ^Client {
 	client := new(Client);
 	
 	client^ = {
-		client_data = client_data,
 		client_i = client_interface,
 		handeling_events = false,
 	}
@@ -48,8 +48,8 @@ client_create :: proc (client_data : rawptr, client_interface : Client_interface
 }
 
 @(require_results)
-client_connect :: proc (client : ^Client, target : rawptr) -> (err : Error) {
-	return client.client_i.connect(client, target);
+client_connect :: proc (client : ^Client) -> (err : Error) {
+	return client.connect(client, client.client_i.client_data);
 }
 
 //locks the mutex and return the current commands, the data must not be copied
@@ -104,12 +104,12 @@ client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sle
 
 @(require_results)
 client_send :: proc (client : ^Client, value : any, loc := #caller_location) -> (err : Error) {
-	client.client_i.send(client, client.client_data, value);
+	client.send(client, client.client_data, value);
 	unreachable();
 }
 
 //Will disconnect, but there might still be unhanded commands in the buffer these can be handled before calling destroy
 @(require_results)
 client_disconnect :: proc (client : ^Client) -> (err : Error) {
-	return client.client_i.disconnect(client, client.client_data);
+	return client.disconnect(client, client.client_data);
 }

@@ -622,7 +622,7 @@ struct lws_context_creation_info {
 	/**< VHOST: 0 for default limit of 10, or the maximum number of
 	 * client tls sessions we are willing to cache */
 #endif
-
+	
 	gid_t gid;
 	/**< CONTEXT: group id to change to after setting listen socket,
 	 *   or -1. See also .username below. */

@@ -8,6 +8,7 @@ import "core:mem/virtual"
 import "core:slice"
 import "core:strings"
 
+@require
 import "../libwebsockets"
 
 when ODIN_OS == .Windows { 

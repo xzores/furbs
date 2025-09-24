@@ -1,5 +1,5 @@
 #+feature dynamic-literals
-package furbs_network
+package furbs_network_tests
 
 import "core:debug/pe"
 import "core:log"
@@ -10,10 +10,12 @@ import "core:time"
 import "core:sync"
 import "core:thread"
 
-import "core:container/queue"
-import "../utils"
+import "../websocket"
+import network ".."
 
-/*
+import "core:container/queue"
+import "../../utils" 
+
 my_logger : log.Logger;
 my_alloc : mem.Allocator;
 should_close_server : bool;
@@ -47,7 +49,7 @@ main :: proc () {
 }
 
 Default_game_port : int = 26604;
-Default_game_ip := IP4_Loopback; //TODO should we use net.Address_Family.IP4
+Default_game_ip := "127.0.0.1"; //TODO should we use net.Address_Family.IP4
 
 //This test starts a server in a new thread, send some commands between the server and client and closes the server and client.
 //It creates 10 clients 1 at a time
@@ -55,6 +57,7 @@ Default_game_ip := IP4_Loopback; //TODO should we use net.Address_Family.IP4
 test_main :: proc () {
 	
 	///////////////////////////////////////////////
+	websocket.init()
 
 	for  i : int = 0; i < 5; i += 1 {
 		
@@ -66,125 +69,138 @@ test_main :: proc () {
 		
 		for j: int = 0; j < 5; j += 1 {
 			/////////// Client ///////////
-			client := client_create(commands_map)
+			client := network.client_create(websocket.client_interface(commands_map, Default_game_ip, Default_game_port, "/"));
 
-			assert(client_connect(client, Endpoint{Default_game_ip, Default_game_port}, context.logger, context.allocator) == nil)
+			assert(network.client_connect(client) == nil, "failed to connect?");
 
 			// Connected
 			{
-				tmoutcon := client_wait_for_event(client)
-				assert(!tmoutcon)
-				begin_handle_events(client)
-				defer end_handle_events(client)
-				econ, _ := get_next_event(client)
-				_, okcon := econ.type.(Event_connected)
+				tmoutcon := network.client_wait_for_event(client);
+				assert(!tmoutcon, "connection timeout...")
+				network.begin_handle_events(client)
+				defer network.end_handle_events(client)
+				econ, _ := network.get_next_event(client)
+				_, okcon := econ.type.(network.Event_connected)
 				assert(okcon)
 			}
 
 			// Hello echo 1
 			{
-				assert(client_send(client, Hello{}) == nil)
-				tmout1 := client_wait_for_event(client)
+				assert(network.client_send(client, Hello{}) == nil)
+				tmout1 := network.client_wait_for_event(client)
 				assert(!tmout1)
-				begin_handle_events(client)
-				defer end_handle_events(client)
-				e1, _ := get_next_event(client)
-				msg1, ok1 := e1.type.(Event_msg)
+				network.begin_handle_events(client)
+				defer network.end_handle_events(client)
+
+				e1, _ := network.get_next_event(client)
+				msg1, ok1 := e1.type.(network.Event_msg)
 				assert(ok1)
-				assert(msg1.commad.value.id == Hello_from_server)
+
+				_, okv1 := msg1.value.(Hello_from_server)
+				assert(okv1)
 			}
 
 			// Hello echo 2
 			{
-				tmout2 := client_wait_for_event(client)
+				tmout2 := network.client_wait_for_event(client)
 				assert(!tmout2)
-				begin_handle_events(client)
-				defer end_handle_events(client)
-				e2, _ := get_next_event(client)
-				msg2, ok2 := e2.type.(Event_msg)
+				network.begin_handle_events(client)
+				defer network.end_handle_events(client)
+
+				e2, _ := network.get_next_event(client)
+				msg2, ok2 := e2.type.(network.Event_msg)
 				assert(ok2)
-				assert(msg2.commad.value.id == Hello_from_server)
+
+				_, okv2 := msg2.value.(Hello_from_server)
+				assert(okv2)
 			}
 
 			// Hello echo 3
 			{
-				tmout3 := client_wait_for_event(client)
+				tmout3 := network.client_wait_for_event(client)
 				assert(!tmout3)
-				begin_handle_events(client)
-				defer end_handle_events(client)
-				e3, _ := get_next_event(client)
-				msg3, ok3 := e3.type.(Event_msg)
+				network.begin_handle_events(client)
+				defer network.end_handle_events(client)
+
+				e3, _ := network.get_next_event(client)
+				msg3, ok3 := e3.type.(network.Event_msg)
 				assert(ok3)
-				assert(msg3.commad.value.id == Hello_from_server)
+
+				_, okv3 := msg3.value.(Hello_from_server)
+				assert(okv3)
 			}
 
 			// Short-timeout probe (expect timeout, no handling)
 			{
-				tmtest := client_wait_for_event(client, 10 * time.Millisecond)
+				tmtest := network.client_wait_for_event(client, 10 * time.Millisecond)
 				assert(tmtest)
 			}
 
 			// Batch chat sends
-			assert(client_send(client, Chat_message{"Yoyoyo this is client calling! 1"}) == nil)
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 2"}) == nil)
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 3"}) == nil)
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 4"}) == nil)
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 5"}) == nil)
-			assert(client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 6"}) == nil)
+			assert(network.client_send(client, Chat_message{"Yoyoyo this is client calling! 1"}) == nil)
+			assert(network.client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 2"}) == nil)
+			assert(network.client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 3"}) == nil)
+			assert(network.client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 4"}) == nil)
+			assert(network.client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 5"}) == nil)
+			assert(network.client_send(client, Chat_message{"Yoyoyo what is up server, this is client calling! 6"}) == nil)
 
 			// Version check round-trip
-			assert(client_send(client, Version_check{1,2,3}) == nil)
+			assert(network.client_send(client, Version_check{1, 2, 3}) == nil)
 			{
-				tmoute := client_wait_for_event(client)
+				tmoute := network.client_wait_for_event(client)
 				assert(!tmoute)
-				begin_handle_events(client)
-				defer end_handle_events(client)
-				ee, _ := get_next_event(client)
-				msge, oke := ee.type.(Event_msg)
+				network.begin_handle_events(client)
+				defer network.end_handle_events(client)
+
+				ee, _ := network.get_next_event(client)
+				msge, oke := ee.type.(network.Event_msg)
 				assert(oke)
-				fmt.assertf(msge.commad.value.id == Version_check_passed, "did not recive a version check passed : %v", msge.commad.value.id)
-				ver_passed, okvp := msge.commad.value.(Version_check_passed)
+
+				ver_passed, okvp := msge.value.(Version_check_passed)
 				assert(okvp)
 				assert(ver_passed.was_passed == true)
 			}
 
 			// Disconnect flows
-			if i %% 2 == 0 || true { // TODO keep your original condition
+			if i %% 2 == 0 || true { // keep your original condition
 				// Client-initiated disconnect
-				assert(client_disconnect(client) == nil)
+				assert(network.client_disconnect(client) == nil)
 				{
-					tmdis := client_wait_for_event(client)
+					tmdis := network.client_wait_for_event(client)
 					assert(!tmdis)
-					begin_handle_events(client)
-					defer end_handle_events(client)
-					ed, _ := get_next_event(client)
-					_, oke := ed.type.(Event_disconnected)
-					assert(oke)
+					network.begin_handle_events(client)
+					defer network.end_handle_events(client)
+
+					ed, _ := network.get_next_event(client)
+					_, okd := ed.type.(network.Event_disconnected)
+					assert(okd)
 				}
 			} else {
 				// Server-initiated disconnect
 				log.warn("asking server to disconnect me")
-				assert(client_send(client, Disconnect_me{}) == nil)
+				assert(network.client_send(client, Disconnect_me{}) == nil)
 				{
-					tmdce := client_wait_for_event(client)
+					tmdce := network.client_wait_for_event(client)
 					assert(!tmdce)
-					begin_handle_events(client)
-					defer end_handle_events(client)
-					disconnect_event, _ := get_next_event(client)
-					_, ok := disconnect_event.type.(Event_disconnected)
+					network.begin_handle_events(client)
+					defer network.end_handle_events(client)
+
+					disconnect_event, _ := network.get_next_event(client)
+					_, ok := disconnect_event.type.(network.Event_disconnected)
 					assert(ok)
 				}
 
-				// Close locally as well (per your TODO notes)
-				assert(client_disconnect(client) == nil)
+				// Close locally as well (if you still want to mirror the old flow)
+				assert(network.client_disconnect(client) == nil)
 				{
-					tmdis := client_wait_for_event(client)
+					tmdis := network.client_wait_for_event(client)
 					assert(!tmdis)
-					begin_handle_events(client)
-					defer end_handle_events(client)
-					ed, _ := get_next_event(client)
-					_, oke := ed.type.(Event_disconnected)
-					assert(oke)
+					network.begin_handle_events(client)
+					defer network.end_handle_events(client)
+
+					ed, _ := network.get_next_event(client)
+					_, okd := ed.type.(network.Event_disconnected)
+					assert(okd)
 				}
 			}
 		}
@@ -196,7 +212,6 @@ test_main :: proc () {
 		fmt.printf("\n\n ENDING \n\n");
 		time.sleep(1 * time.Millisecond);
 	}
-	
 }
 
 
@@ -220,7 +235,7 @@ Chat_message :: struct {
 
 Disconnect_me :: struct{};
 
-commands_map : map[Message_id_type]typeid = {
+commands_map : map[network.Message_id]typeid = {
 	
 	//random number to make it less likely a wrong connection will be accepted.
 	14732 = Hello,
@@ -235,62 +250,62 @@ commands_map : map[Message_id_type]typeid = {
 	500 = Disconnect_me,
 }
 
-
 server_handle_func : thread.Thread_Proc : proc(t : ^thread.Thread) {
 	context.logger = my_logger;
 	context.allocator = my_alloc;
 
 	/////////// Server ///////////
-	server : ^Server = server_create(commands_map, {Default_game_ip, Default_game_port});
-	server_start_accepting(server, context.logger, context.allocator);
+	server := network.server_create();
+	network.register_interface(server, websocket.server_interface(commands_map, Default_game_ip, Default_game_port));
+	network.server_start_accepting(server);
 	
-	log.debugf("server handle thread open"); 
+	log.infof("server handle thread open on %v:%v", Default_game_ip, Default_game_port); 
 
-	connected_clients : map[^Server_side_client]struct{};
+	connected_clients : map[^network.Server_side_client]struct{};
 	defer delete(connected_clients);
 
-	server_handle_events :: proc (server : ^Server, connected_clients : ^map[^Server_side_client]struct{}) {
+	server_handle_events :: proc (server : ^network.Server, connected_clients : ^map[^network.Server_side_client]struct{}) {
 
-		server_begin_handle_events(server);
+		network.server_begin_handle_events(server);
 			
-			e, done := server_get_next_event(server);
+			e, done := network.server_get_next_event(server);
 			for !done {
-				defer e, done = server_get_next_event(server); //happens last, so for the next one
+				defer e, done = network.server_get_next_event(server); //happens last, so for the next one
 				assert(e.type != nil);
 				
-				client : ^Server_side_client = cast(^Server_side_client)e.user_data;
+				client := e.client.(^network.Server_side_client);
 				
 				#partial switch event in e.type {
-					case Event_connected: {
+					case network.Event_connected: {
 						log.infof("connected client");
 						connected_clients[client] = {};
 					}
-					case Event_msg: {
-						switch msg in event.commad.value {
+					case network.Event_msg: {
+						switch msg in event.value {
 							case Hello: {
-								assert(server_send(server, client, Hello_from_server{}) == nil);
-								assert(server_send(server, client, Hello_from_server{}) == nil);
-								assert(server_send(server, client, Hello_from_server{}) == nil);
+								assert(network.server_send(server, client, Hello_from_server{}) == nil);
+								assert(network.server_send(server, client, Hello_from_server{}) == nil);
+								assert(network.server_send(server, client, Hello_from_server{}) == nil);
 							}
 							case Version_check: {
 								assert(msg.major_version 	== 1);
 								assert(msg.minor_version 	== 2);
 								assert(msg.patch 			== 3);
-								assert(server_send(server, client, Version_check_passed{true}) == nil);
+								assert(network.server_send(server, client, Version_check_passed{true}) == nil);
 							}
 							case Chat_message: {
 								log.info("recived chat message from client");
 							}
 							case Disconnect_me: {
 								log.info("Client asked to be disconnected, doint that now");
-								server_disconnect_client(server, client.id);
+								network.server_disconnect_client(server, client);
 							}
 							case: {
 								unreachable()
 							}
 						}
 					}
-					case Event_disconnected: {
+					case network.Event_disconnected: {
 						log.infof("disconnected client");
 						delete_key(connected_clients, client);
 					}
@@ -300,7 +315,7 @@ server_handle_func : thread.Thread_Proc : proc(t : ^thread.Thread) {
 				}
 			}
 
-		server_end_handle_events(server);
+		network.server_end_handle_events(server);
 	}
 
 	for !should_close_server {
@@ -308,19 +323,17 @@ server_handle_func : thread.Thread_Proc : proc(t : ^thread.Thread) {
 		time.sleep(1 * time.Millisecond);
 	}
 
-	assert(server_close(server) == nil);
+	network.server_close(server)
 
 	for len(connected_clients) != 0 {
 		server_handle_events(server, &connected_clients);
 		time.sleep(1 * time.Millisecond);
 	}
-
-	server_destroy(server);
+	
+	network.server_destroy(server);
 
 	assert(len(connected_clients) == 0);
 }
-
-
 
 
 
@@ -368,7 +381,6 @@ server_and_client_test :: proc (t : ^testing.T) {
 
 	fmt.printf("Succesfully recived bytes from client, bytes recived : %v, bytes : %v\n", recv_butes_cnt, recv_bytes);
 }
-*/
 */
 
 

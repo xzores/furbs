@@ -12,23 +12,22 @@ import "core:mem"
 import "core:thread"
 import vmem"core:mem/virtual"
 
-import "libws"
-import "libwebsockets"
-import network ".."
-
+import "../../libws"
+import "../../libwebsockets"
 import "../../serialize"
+import network ".."
 
 
 
 @(private, require_results)
-recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : map[network.Message_id]typeid, lws_client : libwebsockets.Lws_client, message_buffer : ^[dynamic]u8) -> (done : bool, value : any, free_proc : proc (any, rawptr), backing_data : rawptr, error : network.Error) {
+recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : map[network.Message_id]typeid, lws_client : libwebsockets.Lws_client, message_buffer : ^[dynamic]u8) -> (done : bool, value : any, free_proc : proc (any, rawptr), backing_data : rawptr, is_binary : bool, error : network.Error) {
 
 	wsi := libws.get_websocket(lws_client);
 
 	if libwebsockets.is_first_fragment(wsi) {
 		clear(message_buffer);
 	}
-	
+
 	length := libwebsockets.remaining_packet_payload(wsi);
 	pre_msg_length := len(message_buffer);
 	resize(message_buffer, pre_msg_length + auto_cast length);
@@ -37,16 +36,16 @@ recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : ma
 	
 	if libwebsockets.is_final_fragment(wsi) {
 
-		is_binary : bool = auto_cast libwebsockets.frame_is_binary(wsi);
+		is_binary = auto_cast libwebsockets.frame_is_binary(wsi);
 
 		if is_binary {
 			valid, _, value, free_proc, backing_data := network.array_to_any(to_type, message_buffer[:]);
 			
 			if valid {
-				return true, value, free_proc, backing_data, nil;
+				return true, value, free_proc, backing_data, is_binary, nil;
 			}
 			else {
-				return true, nil, nil, nil, .corrupted_stream;
+				return true, nil, nil, nil, is_binary, .corrupted_stream;
 			}
 		}
 		else {
@@ -61,13 +60,13 @@ recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : ma
 			
 			cmd, ok := strconv.parse_u64(str_data[:first_bracket]);
 			if !ok {
-				return true, nil, nil, nil, .data_error;
+				return true, nil, nil, nil, is_binary, .data_error;
 			}
 
 			command_id : network.Message_id = auto_cast cmd;
 			
 			if !(command_id in to_type) {
-				return true, nil, nil, nil, .data_error;
+				return true, nil, nil, nil, is_binary, .data_error;
 			}
 			
 			if first_bracket != -1 {
@@ -93,13 +92,13 @@ recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : ma
 					free(data);
 				}
 
-				return true, value, free_proc, arena_alloc, nil;
+				return true, value, free_proc, arena_alloc, is_binary, nil;
 			}
 			else {
-				return true, nil, nil, nil, .corrupted_stream;
+				return true, nil, nil, nil, is_binary, .corrupted_stream;
 			}
 		}
 	}
 
-	return false, nil, nil, nil, nil;
+	return false, nil, nil, nil, is_binary, nil;
 }

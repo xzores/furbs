@@ -71,7 +71,7 @@ Event_disconnected :: struct {
 }
 
 Event :: struct {
-	user_data : union {
+	client : union {
 		^Server_side_client,
 		^Client,
 	},

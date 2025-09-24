@@ -8,16 +8,16 @@ import "core:log"
 import "core:mem"
 import "core:thread"
 
-import "libws"
-import "libwebsockets"
-import network ".."
-
+import "../../libwebsockets"
+import "../../libws"
 import "../../serialize"
+
+import network ".."
 
 // example client_interface("localhost", 80, "/websocket/1234")¨
 //iface = nil means listen on everything, localhost can be "localhost" or "127.0.0.1"
 @(require_results)
-server_interface :: proc (commands : map[u32]typeid, iface : string, port : c.int, send_binary := true, loc := #caller_location) -> network.Server_interface {
+server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int port : c.int, default_binary := true, loc := #caller_location) -> network.Server_interface {
 	assert_contextless(websocket_allocator != {}, "you must init the library first");
 	context = restore_context();
 
@@ -62,12 +62,13 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, port : c.in
 			case .LIBWS_EVENT_RECEIVED: {
 				k, v, ji, e := map_entry(&user_data.client_map, client);
 				assert(ji == false);
-				done, value, free_proc, backing_data, error := recive_fragment(user_data.from_type, user_data.to_type, client, &v.message_buffer);
+				done, value, free_proc, backing_data, was_binary, error := recive_fragment(user_data.from_type, user_data.to_type, client, &v.message_buffer);
 				if done {
 					if error != nil {
 						network.push_error_server(user_data.server, v.client, error);
 					}
 					else {
+						user_data.send_binary = was_binary; //resond to the client the same protocol as the the client asked, json vs binary
 						network.push_msg_server(user_data.server, v.client, value, free_proc, backing_data);
 					}
 				}
@@ -143,25 +144,17 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, port : c.in
 
 	iface := strings.clone_to_cstring(iface, context.temp_allocator);
 
-	ctx_info := libwebsockets.lws_context_creation_info {
-		0,															/* listen port, or CONTEXT_PORT_NO_LISTEN */
-		iface,	/* NULL = any */
-		nil,														/* your protocols array (NULL-terminated) */
-		"default",													/* eg "default" */
-		nil, 														/* ctx user pointer (optional) */
-		0, 															/* 0 unless you need special flags */
-		0, 0, 														/* 0 */
-		0, 0, 0,													/* 0 (keepalive off) */
-		/* leave all TLS / fileops / mounts / fops fields at 0 / NULL */
+	ctx_info : libwebsockets.lws_context_creation_info = {
+		iface = iface,
 	}
 	
 	ctx : libwebsockets.Lws_context = libwebsockets.create_context(&ctx_info);
-
+	
 	data := new(Data);
 	data^ = {
 		iface,
 		port,
-		true,
+		default_binary,
 		
 		//message conversion
 		reverse_map(commands),
@@ -177,7 +170,7 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, port : c.in
 		ctx,
 		nil,
 	}
-	
+
 	return network.Server_interface {
 		data,
 

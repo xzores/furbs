@@ -1,102 +1,385 @@
-/*
- * libwebsockets - small server side websockets and web server implementation
- *
- * Copyright (C) 2010 - 2019 Andy Green <andy@warmcat.com>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- */
+package libwebsocket;
 
-/*! \defgroup usercb User Callback
- *
- * ##User protocol callback
- *
- * The protocol callback is the primary way lws interacts with
- * user code.  For one of a list of a few dozen reasons the callback gets
- * called at some event to be handled.
- *
- * All of the events can be ignored, returning 0 is taken as "OK" and returning
- * nonzero in most cases indicates that the connection should be closed.
- */
-///@{
+import "base:runtime"
+import "core:c"
+import "core:fmt"
+import "core:mem"
+import "core:mem/virtual"
+import "core:slice"
+import "core:strings"
 
-struct lws_ssl_info {
-	int where;
-	int ret;
-};
+when ODIN_OS == .Windows { 
+	@(extra_linker_flags="/NODEFAULTLIB:MSVCRT /IGNORE:4217", require)
+	foreign import libwebsockets {
+		"libs/windows/libcrypto.lib",
+		"libs/windows/libssl.lib",
+		"libs/windows/libuv.lib",
+		"libs/windows/pthreadVC3.lib",
+		"libs/windows/websockets.lib",
+		"libs/windows/zlib.lib",
 
-enum lws_cert_update_state {
-	LWS_CUS_IDLE,
-	LWS_CUS_STARTING,
-	LWS_CUS_SUCCESS,
-	LWS_CUS_FAILED,
+        "system:ws2_32.lib",
+        "system:user32.lib",
+        "system:advapi32.lib",
+        "system:iphlpapi.lib",
+        "system:psapi.lib",
+        "system:shell32.lib",
+        "system:crypt32.lib",
+        "system:bcrypt.lib",
+        "system:dbghelp.lib",
+        "system:userenv.lib",
+        "system:ole32.lib",
+	}
+}
+when ODIN_OS == .Linux {
+	foreign import libwebsockets "a"
+} 
+when ODIN_OS == .Darwin {
+	foreign import libwebsockets "a"
+}
 
-	LWS_CUS_CREATE_KEYS,
-	LWS_CUS_REG,
-	LWS_CUS_AUTH,
-	LWS_CUS_CHALLENGE,
-	LWS_CUS_CREATE_REQ,
-	LWS_CUS_REQ,
-	LWS_CUS_CONFIRM,
-	LWS_CUS_ISSUE,
-};
+/* Opaque types we interact with */
+Lws_context :: distinct rawptr;
+Lws_vhost :: distinct rawptr;
+Lws_client :: distinct rawptr;
+Lws :: distinct rawptr;
+Lws_buflist :: distinct rawptr;
 
-enum {
-	LWS_TLS_REQ_ELEMENT_COUNTRY,
-	LWS_TLS_REQ_ELEMENT_STATE,
-	LWS_TLS_REQ_ELEMENT_LOCALITY,
-	LWS_TLS_REQ_ELEMENT_ORGANIZATION,
-	LWS_TLS_REQ_ELEMENT_COMMON_NAME,
-	LWS_TLS_REQ_ELEMENT_SUBJECT_ALT_NAME,
-	LWS_TLS_REQ_ELEMENT_EMAIL,
 
-	LWS_TLS_REQ_ELEMENT_COUNT,
-
-	LWS_TLS_SET_DIR_URL = LWS_TLS_REQ_ELEMENT_COUNT,
-	LWS_TLS_SET_AUTH_PATH,
-	LWS_TLS_SET_CERT_PATH,
-	LWS_TLS_SET_KEY_PATH,
-
-	LWS_TLS_TOTAL_COUNT
-};
-
-struct lws_acme_cert_aging_args {
-	struct lws_vhost *vh;
-	const char *element_overrides[LWS_TLS_TOTAL_COUNT]; /* NULL = use pvo */
-};
+/* Pull in the small subheaders that carry enums / flags / APIs we need */
+//#include <libwebsockets/lws-callbacks.h>   /* enum lws_callback_reasons */
+//#include <libwebsockets/lws-write.h>       /* enum lws_write_protocol, lws_write(), lws_callback_on_writable() */
+//#include <libwebsockets/lws-service.h>     /* lws_service() */
+//#include <libwebsockets/lws-client.h>      /* lws_client_connect_via_info(), lws_client_connect_info */
+//#include <libwebsockets/lws-context-vhost.h> /* lws_context_creation_info, lws_create_context(), lws_context_destroy() */
 
 /*
- * With LWS_CALLBACK_FILTER_NETWORK_CONNECTION callback, user_data pointer
- * points to one of these
+ * Minimal struct declarations (only fields you actually need).
+ * Keep these in sync with upstream if you enable more features later.
  */
-
-struct lws_filter_network_conn_args {
-	struct sockaddr_storage		cli_addr;
-	socklen_t			clilen;
-	lws_sockfd_type			accept_fd;
+/* Protocol definition (per-connection callback + per-session data size) */
+lws_protocols :: struct {
+    name : cstring,
+	callback : proc "c" (Lws, lws_callback_reasons, rawptr, rawptr, c.size_t) -> c.int, //int (*callback)(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len);
+    per_session_data_size : c.size_t,
+    rx_buffer_size : c.size_t,      /* 0 = default */
+    id : c.uint,            /* optional */
+    user : rawptr,                 /* optional */
+    tx_packet_size : c.size_t,      /* 0 = default */
 };
+
+/* Context creation (server: set port; client-only: CONTEXT_PORT_NO_LISTEN) */
+// helper typedefs (optional)
+lws_usec_t      :: c.uint64_t     // microseconds
+lws_sockfd_type :: c.int          // fd (assumed int)
+
+// opaque handles assumed elsewhere:
+// Lws_context :: distinct rawptr
+// Lws_vhost   :: distinct rawptr
+// Lws         :: distinct rawptr
+// lws_protocols :: struct {...}
+
+lws_context_creation_info :: struct {
+    ////////////////////////// network basics //////////////////////////
+    iface                           : cstring,                    // bind iface name, or NULL
+    protocols                       : [^]lws_protocols,          // protocols array (NULL-terminated)
+	
+    //////////////////////// HTTP/1.x / HTTP/2 /////////////////////////
+    token_limits                    : rawptr,                     // const lws_token_limits*
+    http_proxy_address              : cstring,                   // "user:pass@host:port" or NULL
+    headers                         : rawptr,                     // const lws_protocol_vhost_options*
+    reject_service_keywords         : rawptr,                     // const lws_protocol_vhost_options*
+    pvo                             : rawptr,                     // const lws_protocol_vhost_options*
+    log_filepath                    : cstring,
+    mounts                          : rawptr,                     // const lws_http_mount*
+    server_string                   : cstring,
+
+    error_document_404              : cstring,
+    port                            : c.int,                      // listen port, or special values
+    http_proxy_port                 : c.uint,
+    max_http_header_data2           : c.uint,
+    max_http_header_pool2           : c.uint,
+
+    keepalive_timeout               : c.int,                      // seconds
+    http2_settings                  : [7]c.uint32_t,             // http/2 overrides (0 = defaults)
+
+    max_http_header_data            : c.ushort,
+    max_http_header_pool            : c.ushort,
+
+    ////////////////////////////// TLS /////////////////////////////////
+    ssl_private_key_password        : cstring,
+    ssl_cert_filepath               : cstring,
+    ssl_private_key_filepath        : cstring,
+    ssl_ca_filepath                 : cstring,
+    ssl_cipher_list                 : cstring,                    // TLS1.2 and below
+    ecdh_curve                      : cstring,                    // default "prime256v1"
+    tls1_3_plus_cipher_list         : cstring,                    // TLS1.3+
+
+    server_ssl_cert_mem             : rawptr,                     // const void*
+    server_ssl_private_key_mem      : rawptr,                     // const void*
+    server_ssl_ca_mem               : rawptr,                     // const void*
+
+    ssl_options_set                 : c.long,
+    ssl_options_clear               : c.long,
+    simultaneous_ssl_restriction    : c.int,
+    simultaneous_ssl_handshake_restriction : c.int,
+    ssl_info_event_mask             : c.int,
+
+    server_ssl_cert_mem_len         : c.uint,
+    server_ssl_private_key_mem_len  : c.uint,
+    server_ssl_ca_mem_len           : c.uint,
+
+    alpn                            : cstring,                    // comma-separated list
+
+    ////////////////////////// TLS (client) ////////////////////////////
+    client_ssl_private_key_password : cstring,
+    client_ssl_cert_filepath        : cstring,
+    client_ssl_cert_mem             : rawptr,                     // const void*
+    client_ssl_cert_mem_len         : c.uint,
+    client_ssl_private_key_filepath : cstring,
+    client_ssl_key_mem              : rawptr,                     // const void*
+    client_ssl_ca_filepath          : cstring,
+    client_ssl_ca_mem               : rawptr,                     // const void*
+
+    client_ssl_cipher_list          : cstring,                    // TLS1.2 and below
+    client_tls_1_3_plus_cipher_list : cstring,                    // TLS1.3+
+
+    ssl_client_options_set          : c.long,
+    ssl_client_options_clear        : c.long,
+
+    client_ssl_ca_mem_len           : c.uint,
+    client_ssl_key_mem_len          : c.uint,
+
+    provided_client_ssl_ctx         : rawptr,                     // SSL_CTX* (OpenSSL build)
+
+    /////////////////////// timeouts & keepalive ///////////////////////
+    ka_time                         : c.int,
+    ka_probes                       : c.int,
+    ka_interval                     : c.int,
+    timeout_secs                    : c.uint,
+    connect_timeout_secs            : c.uint,
+    bind_iface                      : c.int,                      // SO_BINDTODEVICE if non-zero
+    timeout_secs_ah_idle            : c.uint,
+
+    ///////////////////////// TLS sessions /////////////////////////////
+    tls_session_timeout             : c.uint32_t,
+    tls_session_cache_max           : c.uint32_t,
+
+    ////////////////////// ids, options, userdata //////////////////////
+    gid                             : c.int,                      // gid_t (assumed int)
+    uid                             : c.int,                      // uid_t (assumed int)
+    options                         : c.uint64_t,                 // LWS_SERVER_OPTION_* bitfield
+    user                            : rawptr,                     // context / vhost user
+
+    count_threads                   : c.uint,                     // 0 = 1
+    fd_limit_per_thread             : c.uint,                     // 0 = auto
+
+    vhost_name                      : cstring,                    // vhost or context name
+
+    ////////////////////// extra lifecycle helpers /////////////////////
+    external_baggage_free_on_destroy: rawptr,                     // free()d on context destroy
+
+    pt_serv_buf_size                : c.uint,                     // 0 = default (4096)
+
+    ///////////////////////// file ops (enabled) ///////////////////////
+    fops                            : rawptr,                     // const lws_plat_file_ops*
+
+    /////////////////// foreign event loop integration /////////////////
+    foreign_loops                   : rawptr,                     // void** (array), or NULL
+    signal_cb                       : proc "c" (event_lib_handle: rawptr, signum: c.int),
+    pcontext                        : rawptr,                     // struct lws_context**
+
+    finalize                        : proc "c" (vh: Lws_vhost, arg: rawptr),
+    finalize_arg                    : rawptr,
+
+    listen_accept_role              : cstring,                    // force role name, or NULL
+    listen_accept_protocol          : cstring,                    // force protocol name, or NULL
+
+    pprotocols                      : ^^lws_protocols,            // const lws_protocols**
+
+    username                        : cstring,                    // post-init permissions
+    groupname                       : cstring,                    // post-init permissions
+    unix_socket_perms               : cstring,                    // "user:group" for unix sock
+
+    system_ops                      : rawptr,                     // const lws_system_ops_t*
+    retry_and_idle_policy           : rawptr,                     // const lws_retry_bo_t*
+
+    ////////////////////// system state notifiers //////////////////////
+    register_notifier_list          : rawptr,                     // lws_state_notify_link_t * const *
+
+    ///////////////////////// secure streams ///////////////////////////
+    pss_policies_json               : cstring,                    // JSON or filepath
+    pss_plugins                     : rawptr,                     // const lws_ss_plugin**
+
+    ss_proxy_bind                   : cstring,
+    ss_proxy_address                : cstring,
+    ss_proxy_port                   : c.uint16_t,
+
+    txp_ops_ssproxy                 : rawptr,                     // const lws_transport_proxy_ops*
+    txp_ssproxy_info                : rawptr,                     // const void*
+    txp_ops_sspc                    : rawptr,                     // const lws_transport_client_ops*
+
+    ////////////////////// resource limits & misc ///////////////////////
+    rlimit_nofile                   : c.int,
+
+    ///////////////////////// sys smd (enabled) /////////////////////////
+    early_smd_cb                    : rawptr,                     // lws_smd_notification_cb_t
+    early_smd_opaque                : rawptr,
+    early_smd_class_filter          : c.uint32_t,                 // lws_smd_class_t
+    smd_ttl_us                      : lws_usec_t,
+    smd_queue_depth                 : c.uint16_t,
+
+    ///////////////////////// TCP fast open /////////////////////////////
+    fo_listen_queue                 : c.int,                      // 0 = disabled
+
+    /////////////////// custom event library adapter ///////////////////
+    event_lib_custom                : rawptr,                     // const lws_plugin_evlib*
+
+    ////////////////////////// logging context //////////////////////////
+    log_cx                          : rawptr,                     // lws_log_cx_t*
+
+    /////////////////////// cookie jar (client) ////////////////////////
+    http_nsc_filepath               : cstring,
+    http_nsc_heap_max_footprint     : c.size_t,
+    http_nsc_heap_max_items         : c.size_t,
+    http_nsc_heap_max_payload       : c.size_t,
+
+    ///////////////////////// windows client check //////////////////////
+    win32_connect_check_interval_usec : c.uint,                   // harmless elsewhere
+
+    ////////////////////////// default loglevel /////////////////////////
+    default_loglevel                : c.int,
+
+    ////////////////// listen socket fd override ////////////////////////
+    vh_listen_sockfd                : lws_sockfd_type,
+
+    /////////////////////// wake-on-lan interface ///////////////////////
+    wol_if                          : cstring,
+
+    ////////////////////////////// ABI pad /////////////////////////////
+    _unused                         : [2]rawptr,
+}
+
+/* Client connect params (no TLS) */
+lws_client_connect_info :: struct {
+    ctx : Lws_context,
+    address : cstring,						/* host or IP */
+    port : c.int,							
+    path : cstring,							/* "/ws" */
+    host : cstring,							/* usually same as address */
+    origin : cstring,						/* NULL */
+    protocol : cstring,						/* must match one of protocols[].name */
+    ietf_version_or_minus_one : c.int,  	/* -1 = latest */
+    userdata : rawptr,						/* your per-connection user pointer */
+    /* leave proxy / ssl fields NULL/0 for plain WS */
+};
+
+Lws_humanize_unit :: struct {
+	name : cstring,
+	factor : c.uint64_t,
+};
+
+@(link_prefix = "lws_", require_results, default_calling_convention="c")
+foreign libwebsockets {
+	
+	/* Core API you’ll call (declared in the subheaders, repeated here for clarity) */
+	create_context :: proc (info : ^lws_context_creation_info) -> Lws_context ---
+	context_destroy :: proc (ctx : Lws_context) ---
+
+	service :: proc (ctx : Lws_context, timeout_ms : c.int) -> c.int ---
+
+	client_connect_via_info :: proc (ccinfo : ^lws_client_connect_info) -> Lws ---
+
+	write :: proc (wsi : Lws, buf : [^]u8, length : c.size_t, wp : lws_write_protocol) -> c.int ---
+	callback_on_writable :: proc (wsi : Lws) ---
+	
+	/* Handy accessors (optional, but commonly used) */
+	context_user :: proc (ctx : Lws_context) -> rawptr ---
+	wsi_user :: proc (wsi : Lws) -> rawptr ---
+}
+
+
+/*
+ * NOTE: These public enums are part of the abi.  If you want to add one,
+ * add it at where specified so existing users are unaffected.
+ */
+lws_write_protocol :: enum u32 {
+	LWS_WRITE_TEXT						= 0,
+	/**< Send a ws TEXT message,the pointer must have LWS_PRE valid
+	 * memory behind it.
+	 *
+	 * The receiver expects only valid utf-8 in the payload */
+	LWS_WRITE_BINARY					= 1,
+
+	/**< Send a ws BINARY message, the pointer must have LWS_PRE valid
+	 * memory behind it.
+	 *
+	 * Any sequence of bytes is valid */
+	LWS_WRITE_CONTINUATION					= 2,
+	
+	/**< Continue a previous ws message, the pointer must have LWS_PRE valid
+	 * memory behind it */
+	LWS_WRITE_HTTP						= 3,
+	
+	/**< Send HTTP content */
+
+	/* LWS_WRITE_CLOSE is handled by lws_close_reason() */
+	LWS_WRITE_PING						= 5,
+	LWS_WRITE_PONG						= 6,
+
+	/* Same as write_http but we know this write ends the transaction */
+	LWS_WRITE_HTTP_FINAL					= 7,
+
+	
+	
+	/* HTTP2 */
+
+	LWS_WRITE_HTTP_HEADERS					= 8,
+	/**< Send http headers (http2 encodes this payload and LWS_WRITE_HTTP
+	 * payload differently, http 1.x links also handle this correctly. so
+	 * to be compatible with both in the future,header response part should
+	 * be sent using this regardless of http version expected)
+	 */
+	LWS_WRITE_HTTP_HEADERS_CONTINUATION			= 9,
+	/**< Continuation of http/2 headers
+	 */
+
+	
+	
+	 /****** add new things just above ---^ ******/
+
+	/* flags */
+
+	LWS_WRITE_BUFLIST = 0x20,
+	/**< Don't actually write it... stick it on the output buflist and
+	 *   write it as soon as possible.  Useful if you learn you have to
+	 *   write something, have the data to write to hand but the timing is
+	 *   unrelated as to whether the connection is writable or not, and were
+	 *   otherwise going to have to allocate a temp buffer and write it
+	 *   later anyway */
+
+	LWS_WRITE_NO_FIN = 0x40,
+	/**< This part of the message is not the end of the message */
+
+	LWS_WRITE_H2_STREAM_END = 0x80,
+	/**< Flag indicates this packet should go out with STREAM_END if h2
+	 * STREAM_END is allowed on DATA or HEADERS.
+	 */
+
+	LWS_WRITE_CLIENT_IGNORE_XOR_MASK = 0x80,
+	/**< client packet payload goes out on wire unmunged
+	 * only useful for security tests since normal servers cannot
+	 * decode the content if used */
+};
+
+
 
 /*
  * NOTE: These public enums are part of the abi.  If you want to add one,
  * add it at where specified so existing users are unaffected.
  */
 /** enum lws_callback_reasons - reason you're getting a protocol callback */
-enum lws_callback_reasons {
+lws_callback_reasons :: enum u32 {
 
 	/* ---------------------------------------------------------------------
 	 * ----- Callbacks related to wsi and protocol binding lifecycle -----
@@ -891,30 +1174,147 @@ enum lws_callback_reasons {
 };
 
 
+@(link_prefix = "lws_", require_results, default_calling_convention="c")
+foreign libwebsockets {
 
-/**
- * typedef lws_callback_function() - User server actions
- * \param wsi:	Opaque websocket instance pointer
- * \param reason:	The reason for the call
- * \param user:	Pointer to per-session user data allocated by library
- * \param in:		Pointer used for some callback reasons
- * \param len:	Length set for some callback reasons
- *
- *	This callback is the way the user controls what is served.  All the
- *	protocol detail is hidden and handled by the library.
- *
- *	For each connection / session there is user data allocated that is
- *	pointed to by "user".  You set the size of this user data area when
- *	the library is initialized with lws_create_server.
- */
-typedef int
-lws_callback_function(struct lws *wsi, enum lws_callback_reasons reason,
-		    void *user, void *in, size_t len);
+	// Is the socket currently unable to accept writes? (1 = choked)
+	send_pipe_choked :: proc (wsi : Lws) -> c.int ---
 
-#define LWS_CB_REASON_AUX_BF__CGI		1
-#define LWS_CB_REASON_AUX_BF__PROXY		2
-#define LWS_CB_REASON_AUX_BF__CGI_CHUNK_END	4
-#define LWS_CB_REASON_AUX_BF__CGI_HEADERS	8
-#define LWS_CB_REASON_AUX_BF__PROXY_TRANS_END	16
-#define LWS_CB_REASON_AUX_BF__PROXY_HEADERS	32
-///@}
+	// Is the received fragment the final fragment of the WS message?
+	is_final_fragment :: proc (wsi : Lws) -> b32 ---
+
+	// Is the received fragment the first fragment of the WS message?
+	is_first_fragment :: proc (wsi : Lws) -> b32 ---
+
+	// Are we mid-send of a multi-fragment WS message? (1 = yes)
+	ws_sending_multifragment :: proc (wsi : Lws) -> c.int ---
+
+	// Reserved bits of the current WS frame.
+	get_reserved_bits :: proc (wsi : Lws) -> c.uchar ---
+
+	// Opcode of the current WS frame.
+	get_opcode :: proc (wsi : Lws) -> c.uint8_t ---
+
+	// Did lws buffer the last write? (1 = buffered; call again when writeable)
+	partial_buffered :: proc (wsi : Lws) -> c.int ---
+
+	// True if the current received frame was sent in binary mode.
+	frame_is_binary :: proc (wsi : Lws) -> b32 ---
+}
+
+
+// --------------------------- lsw-misc.h -----------------------------
+
+@(link_prefix = "lws_", require_results, default_calling_convention="c")
+foreign libwebsockets {
+    // Add buffer to buflist head. Returns -1 OOM, 1 if first seg, 0 otherwise.
+    buflist_append_segment      :: proc(head: ^Lws_buflist, buf: ^u8, len: c.size_t) -> c.int ---
+
+    // Bytes left in current segment; optionally returns pointer to remaining data.
+    buflist_next_segment_len    :: proc(head: ^Lws_buflist, buf: ^^u8) -> c.size_t ---
+
+    // Consume len bytes from current segment; returns bytes left in current seg.
+    buflist_use_segment         :: proc(head: ^Lws_buflist, len: c.size_t) -> c.size_t ---
+
+    // Total bytes held across all segments.
+    buflist_total_len           :: proc(head: ^Lws_buflist) -> c.size_t ---
+
+    // Linear copy without consuming; -1 if dest too small, else bytes copied.
+    buflist_linear_copy         :: proc(head: ^Lws_buflist, ofs: c.size_t, buf: ^u8, len: c.size_t) -> c.int ---
+
+    // Linear copy and consume; returns bytes written into buf.
+    buflist_linear_use          :: proc(head: ^Lws_buflist, buf: ^u8, len: c.size_t) -> c.int ---
+
+    // Copy & consume at most one fragment; returns bytes written. See frag flags.
+    buflist_fragment_use        :: proc(head: ^Lws_buflist, buf: ^u8, len: c.size_t, frag_first: ^u8, frag_fin: ^u8) -> c.int ---
+
+    // Free all segments; *head becomes NULL.
+    buflist_destroy_all_segments:: proc(head: ^Lws_buflist) ---
+
+    // Debug: describe buflist (only in debug builds of lws).
+    buflist_describe            :: proc(head: ^Lws_buflist, id: rawptr, reason: cstring) ---
+
+    // Pointer to start of the fragment payload, or NULL if empty.
+    buflist_get_frag_start_or_NULL :: proc(head: ^Lws_buflist) -> rawptr ---
+}
+
+
+@(link_prefix = "lws_", require_results, default_calling_convention="c")
+foreign libwebsockets {
+
+    // Render value with schema into buf; returns bytes written.
+    humanize                    :: proc(buf: ^u8, len: c.size_t, value: c.ulonglong, schema: ^Lws_humanize_unit) -> c.int ---
+    humanize_pad                :: proc(buf: ^u8, len: c.size_t, value: c.ulonglong, schema: ^Lws_humanize_unit) -> c.int ---
+
+    // Big-endian write / read helpers.
+    ser_wu16be                  :: proc(b: ^u8, u: c.ushort) ---
+    ser_wu32be                  :: proc(b: ^u8, u: c.uint) ---
+    ser_wu64be                  :: proc(b: ^u8, u: c.ulonglong) ---
+    ser_ru16be                  :: proc(b: ^u8) -> c.ushort ---
+    ser_ru32be                  :: proc(b: ^u8) -> c.uint ---
+    ser_ru64be                  :: proc(b: ^u8) -> c.ulonglong ---
+
+    // Variable-length integer encode / decode; returns bytes used / needed.
+    vbi_encode                  :: proc(value: c.ulonglong, buf: rawptr) -> c.int ---
+    vbi_decode                  :: proc(buf: rawptr, value: ^c.ulonglong, len: c.size_t) -> c.int ---
+
+    // Significant bits in uintptr (from MSB side).
+    sigbits                     :: proc(u: uintptr) -> c.uint ---
+
+    // Send Wake-on-LAN magic packet to MAC; optional bind IP; returns 0/ok.
+    wol                         :: proc(ctx: Lws_context, ip_or_NULL: cstring, mac_6_bytes: ^u8) -> c.int ---
+}
+
+
+uid_t :: c.uint;
+gid_t :: c.uint;
+
+@(link_prefix = "lws_", require_results, default_calling_convention="c")
+foreign libwebsockets {
+    // From wsi → owning context.
+    get_context                    :: proc(wsi: Lws) -> Lws_context ---
+
+    // Vhost listen port (useful if you passed 0 at creation).
+    get_vhost_listen_port          :: proc(vhost: Lws_vhost) -> c.int ---
+
+    // Number of service threads actually in use.
+    get_count_threads              :: proc(ctx: Lws_context) -> c.int ---
+
+    // Parent / child wsi helpers (NULL if none).
+    get_parent                     :: proc(wsi: Lws) -> Lws ---
+    get_child                      :: proc(wsi: Lws) -> Lws ---
+
+    // Effective uid/gid that will apply after dropping root.
+    get_effective_uid_gid          :: proc(ctx: Lws_context, uid: ^uid_t, gid: ^gid_t) ---
+
+    // UDP-specific info for this wsi (or NULL).
+    //get_udp                        :: proc(wsi: ^Lws) -> ^Lws_udp ---
+
+    // Get / set opaque parent data blob.
+    get_opaque_parent_data         :: proc(wsi: Lws) -> rawptr ---
+    set_opaque_parent_data         :: proc(wsi: Lws, data: rawptr) ---
+
+    // Get / set opaque user data blob.
+    get_opaque_user_data           :: proc(wsi: Lws) -> rawptr ---
+    set_opaque_user_data           :: proc(wsi: Lws, data: rawptr) ---
+
+    // Children pending-on-writable flags.
+    get_child_pending_on_writable  :: proc(wsi: Lws) -> c.int ---
+    clear_child_pending_on_writable:: proc(wsi: Lws) ---
+
+    // Close frame helpers (len + payload pointer).
+    get_close_length               :: proc(wsi: Lws) -> c.int ---
+    get_close_payload              :: proc(wsi: Lws) -> ^u8 ---
+
+    // Wsi that owns the TCP connection (H2 may differ).
+    get_network_wsi                :: proc(wsi: Lws) -> ^Lws ---
+
+    // RX flow control (boolean or bitmap flags); returns 0 on success.
+    rx_flow_control                :: proc(wsi: Lws, enable: c.int) -> c.int ---
+
+    // Allow all conns using protocol to receive again.
+    rx_flow_allow_all_protocol     :: proc(ctx: Lws_context, protocol: ^lws_protocols) ---
+
+    // Bytes remaining in current WS fragment.
+    remaining_packet_payload       :: proc(wsi: Lws) -> c.size_t ---
+}
