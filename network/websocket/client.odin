@@ -1,5 +1,6 @@
 package furbs_network_websocket_interface;
 
+import "core:debug/pe"
 import "core:strconv"
 import "core:reflect"
 import "core:encoding/json"
@@ -71,6 +72,8 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 			assert(ws in context_to_data);
 			_user_data^ = context_to_data[ws];
 
+			log.debugf("websocket client init user_data");
+
 			delete_key(&context_to_data, ws);
 			if len(context_to_data) == 0 {
 				delete(context_to_data);
@@ -125,10 +128,11 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 			callback,
 			size_of(^Data),
 		}
-
+		
+		
 		user_data.client = client;
 		user_data.socket = libws.connect(&connect_options);
-
+		
 		if user_data.socket == nil {
 			return .invalid_parameter;
 		}
@@ -136,6 +140,8 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		log.debugf("adding client ctx : %v", user_data.socket);
 		context_to_data[user_data.socket] = user_data;
 		
+		assert(libwebsockets.service(user_data.ctx, 0) == 0, "failed to service lws");
+
 		return .ok;
 	}
 
@@ -171,6 +177,7 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 	on_service :: proc (client : ^network.Client, user_data : rawptr) {
 		user_data := cast(^Data)user_data;
 		assert(libwebsockets.service(user_data.ctx, 0) == 0);
+		log.debugf("client on service");
 	}
 
 	ctx_info := libwebsockets.lws_context_creation_info {

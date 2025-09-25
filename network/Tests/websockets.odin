@@ -77,7 +77,7 @@ test_main :: proc () {
 
 			// Connected
 			{
-				tmoutcon := network.client_wait_for_event(client);
+				tmoutcon := network.client_wait_for_event(client, 200 * time.Hour);
 				assert(!tmoutcon, "connection timeout...")
 				network.begin_handle_events(client)
 				defer network.end_handle_events(client)

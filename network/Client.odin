@@ -55,9 +55,7 @@ client_connect :: proc (client : ^Client) -> (err : Error) {
 //locks the mutex and return the current commands, the data must not be copied
 client_begin_handle_events :: proc (client : ^Client, loc := #caller_location) {
 	assert(client.handeling_events == false, "you must call client_end_handle_events before calling client_begin_handle_events twice", loc);
-	if client.service != nil {
-		client.service(client, client.client_data);
-	}
+	client.service(client, client.client_data);
 	sync.lock(&client.event_mutex);
 	client.handeling_events = true;
 }
@@ -91,13 +89,14 @@ client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sle
 	
 	for timeout == 0 || !(time.diff(start_time, time.now()) >= timeout) {
 		{
+			log.debugf("checking");
 			client_begin_handle_events(client);
 			defer client_end_handle_events(client);
 			if queue.len(client.events) != 0 {
 				return false;
 			}
 		}
-
+		
 		time.sleep(sleep_time);
 	}
 

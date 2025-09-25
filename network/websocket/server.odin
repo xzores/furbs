@@ -47,7 +47,7 @@ Data :: struct {
 server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int port : c.int, default_binary := true, loc := #caller_location) -> network.Server_interface {
 	assert_contextless(websocket_allocator != {}, "you must init the library first");
 	context = restore_context();
-	
+	 
 	callback : libws.Callback : proc "c" (client: libws.Ws_client, event: libws.Event, _user_data : rawptr) -> c.int {
 		context = restore_context();
 		_user_data : ^^Data = cast(^^Data)_user_data;
@@ -56,6 +56,8 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 			ws := libws.get_websocket(client);
 			assert(ws in context_to_data);
 			_user_data^ = context_to_data[ws];
+
+			log.debugf("websocket server init user_data");
 
 			delete_key(&context_to_data, ws);
 			if len(context_to_data) == 0 {
@@ -116,10 +118,11 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 			size_of(^Data), 					//per_client_data_size = size_of(Data),
 		}
 
+		
 		user_data.socket = libws.listen(&listion_options);
 		user_data.server = server;
 		user_data.interface_handle = interface_handle;
-			
+		
 		log.debugf("adding server ctx : %v", user_data.socket);
 		context_to_data[user_data.socket] = user_data;
 
@@ -170,6 +173,7 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		user_data := cast(^Data)user_data;
 		res := libwebsockets.service(user_data.ctx, 0);
 		fmt.assertf(res == 0, "failed to service, code was : %v", libwebsockets.service(user_data.ctx, 0));
+		log.debugf("client on service");
 	}
 
 	iface := strings.clone_to_cstring(iface, context.temp_allocator);

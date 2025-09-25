@@ -34,3 +34,8 @@
 *.pdb
 /glslang/.vs
 glslang/glslang_bindings/lib/windows/SPIRV-Tools-optd.lib
+*.vsidx
+network/Tests/.vs/Tests/v17/Browse.VC.db-shm
+network/Tests/.vs/Tests/v17/Browse.VC.db-wal
+network/Tests/.vs/Tests/v17/Browse.VC.opendb
+network/Tests/.vs/Tests/v17/.suo
