@@ -45,6 +45,8 @@ Lws_client :: distinct rawptr;
 Lws :: distinct rawptr;
 Lws_buflist :: distinct rawptr;
 
+CONTEXT_PORT_NO_LISTEN :: -1
+CONTEXT_PORT_NO_LISTEN_SERVER :: -2
 
 /* Pull in the small subheaders that carry enums / flags / APIs we need */
 //#include <libwebsockets/lws-callbacks.h>   /* enum lws_callback_reasons */
@@ -285,8 +287,6 @@ foreign libwebsockets {
 	/* Core API you’ll call (declared in the subheaders, repeated here for clarity) */
 	create_context :: proc (info : ^lws_context_creation_info) -> Lws_context ---
 	context_destroy :: proc (ctx : Lws_context) ---
-
-	service :: proc (ctx : Lws_context, timeout_ms : c.int) -> c.int ---
 
 	client_connect_via_info :: proc (ccinfo : ^lws_client_connect_info) -> Lws ---
 
@@ -1265,7 +1265,6 @@ foreign libwebsockets {
     wol                         :: proc(ctx: Lws_context, ip_or_NULL: cstring, mac_6_bytes: ^u8) -> c.int ---
 }
 
-
 uid_t :: c.uint;
 gid_t :: c.uint;
 
@@ -1317,4 +1316,54 @@ foreign libwebsockets {
 
     // Bytes remaining in current WS fragment.
     remaining_packet_payload       :: proc(wsi: Lws) -> c.size_t ---
+}
+
+
+
+/////////////////////////// lws-service.h ///////////////////////////
+
+Lws_pollfd :: struct {
+        fd : c.int,					// File descriptor to poll.
+        events : c.short,			// Types of events poller cares about.
+        revents : c.short,			// Types of events that actually occurred.
+};
+
+@(link_prefix = "lws_", require_results, default_calling_convention="c")
+foreign libwebsockets {
+    ////////////// Built-in service loop //////////////
+    // Service pending activity. timeout_ms is ignored (keep 0).
+    service :: proc(ctx: Lws_context, timeout_ms: c.int) -> c.int ---
+
+    // Same as service(), but for a specific service thread (TSI).
+    service_tsi :: proc(ctx: Lws_context, timeout_ms: c.int, tsi: c.int) -> c.int ---
+
+    // Wake only the service thread that owns this wsi (rarely needed).
+    cancel_service_pt :: proc(wsi: Lws) ---
+
+    // Wake the event loop immediately on this context (thread-safe wake).
+    cancel_service :: proc(ctx: Lws_context) ---
+
+    // Tell lws to handle a pollfd that signaled events.
+    // If it's an lws socket, it’s serviced and pollfd.revents is cleared.
+    service_fd :: proc(ctx: Lws_context, pollfd: ^Lws_pollfd) -> c.int ---
+
+    // Same as service_fd(), but for a specific TSI.
+    service_fd_tsi :: proc(ctx: Lws_context, pollfd: ^Lws_pollfd, tsi: c.int) -> c.int ---
+
+    // Returns adjusted poll timeout. If zero, someone needs “forced service”.
+    // In that case you can call service_tsi(context, -1, tsi).
+    service_adjust_timeout :: proc(ctx: Lws_context, timeout_ms: c.int, tsi: c.int) -> c.int ---
+
+    // Handle POLLOUT for a given wsi (helper used by external poll integrations).
+    handle_POLLOUT_event :: proc(wsi: Lws, pollfd: ^Lws_pollfd) -> c.int ---
+
+    ////////////// libuv helpers (require LWS_WITH_LIBUV) //////////////
+    // Get the libuv loop used by lws for the given TSI.
+    //uv_getloop :: proc(ctx: ^Lws_context, tsi: c.int) -> ^uv_loop_t ---
+
+    // If you allocate your own uv handles, tie them into lws’ refcounting.
+    //libuv_static_refcount_add :: proc(h: ^uv_handle_t, ctx: ^Lws_context, tsi: c.int) ---
+
+    // Use as the close callback for your own uv handles to drop the refcount.
+    //libuv_static_refcount_del :: proc(h: ^uv_handle_t) ---
 }

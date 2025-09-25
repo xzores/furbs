@@ -40,6 +40,8 @@ Server_interface :: struct {
 	disconnect : proc (server : ^Server, user_data : rawptr, client_data : rawptr) -> Error, //disconnect the client forcefully (cannot fail)
 	close : proc (server : ^Server, user_data : rawptr) -> Error, //Must stop accecpting and close all connections
 	destroy : proc (server : ^Server, user_data : rawptr), //removes the interface, the interface must free all its internal data.
+
+	service : proc (client : ^Server, user_data : rawptr), 	//if you need it, maybe be nil
 }
 
 Client_interface :: struct {
@@ -48,7 +50,9 @@ Client_interface :: struct {
 	connect : proc (client : ^Client, user_data : rawptr) -> Error,
 	send : proc (client : ^Client, user_data : rawptr, data : any) -> Error,
 	disconnect : proc (client : ^Client, user_data : rawptr) -> Error,
-	destroy : proc (client : ^Client, user_data : rawptr)
+	destroy : proc (client : ^Client, user_data : rawptr),
+
+	service : proc (client : ^Client, user_data : rawptr), 	//if you need it, maybe be nil
 }
 
 Event_connected :: struct {

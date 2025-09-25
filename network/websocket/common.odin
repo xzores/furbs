@@ -17,8 +17,6 @@ import "../../libwebsockets"
 import "../../serialize"
 import network ".."
 
-
-
 @(private, require_results)
 recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : map[network.Message_id]typeid, lws_client : libwebsockets.Lws_client, message_buffer : ^[dynamic]u8) -> (done : bool, value : any, free_proc : proc (any, rawptr), backing_data : rawptr, is_binary : bool, error : network.Error) {
 

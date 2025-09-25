@@ -67,9 +67,11 @@ test_main :: proc () {
 		server_thread := thread.create(server_handle_func);
 		thread.start(server_thread);
 		
+		time.sleep(100 * time.Millisecond);
+
 		for j: int = 0; j < 5; j += 1 {
 			/////////// Client ///////////
-			client := network.client_create(websocket.client_interface(commands_map, Default_game_ip, Default_game_port, "/"));
+			client := network.client_create(websocket.client_interface(commands_map, Default_game_ip, Default_game_port, ""));
 
 			assert(network.client_connect(client) == nil, "failed to connect?");
 

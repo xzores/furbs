@@ -82,6 +82,11 @@ server_destroy :: proc (server : ^Server) {
 
 server_begin_handle_events :: proc (server : ^Server, loc := #caller_location) {
 	assert(server.handeling_events == false, "you must call server_end_handle_commands before calling server_begin_handle_commands twice", loc);
+	for _, interface in server.interfaces {
+		if interface.service != nil {
+			interface.service(server, interface.server_data);
+		}
+	}
 	sync.lock(&server.mutex);
 	server.handeling_events = true;
 }

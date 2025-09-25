@@ -3,7 +3,9 @@ package furbs_network_websocket_interface;
 import "core:net"
 import "base:runtime"
 import "core:c"
+import "core:fmt"
 import "core:strings"
+import "core:reflect"
 import "core:log"
 import "core:mem"
 import "core:thread"
@@ -14,37 +16,56 @@ import "../../serialize"
 
 import network ".."
 
+@(private="file")
+context_to_data : map[libws.Ws]^Data;
+
+@(private="file")
+Data :: struct {
+	//Data required to connect
+	iface : cstring,
+	port : c.int,
+	send_binary : bool,
+	
+	//message conversion
+	from_type : map[typeid]network.Message_id,
+	to_type : map[network.Message_id]typeid,
+	
+	//Network side
+	server : ^network.Server,
+	interface_handle : network.Interface_handle,
+
+	client_map : map[libws.Ws_client]struct{client : ^network.Server_side_client, message_buffer : [dynamic]u8},
+
+	//Libws side
+	ctx : libwebsockets.Lws_context,
+	socket : libws.Ws,
+}
+
 // example client_interface("localhost", 80, "/websocket/1234")¨
 //iface = nil means listen on everything, localhost can be "localhost" or "127.0.0.1"
 @(require_results)
 server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int port : c.int, default_binary := true, loc := #caller_location) -> network.Server_interface {
 	assert_contextless(websocket_allocator != {}, "you must init the library first");
 	context = restore_context();
-
-	Data :: struct {
-		//Data required to connect
-		iface : cstring,
-		port : c.int,
-		send_binary : bool,
-		
-		//message conversion
-		from_type : map[typeid]network.Message_id,
-		to_type : map[network.Message_id]typeid,
-		
-		//Network side
-		server : ^network.Server,
-		interface_handle : network.Interface_handle,
-
-		client_map : map[libws.Ws_client]struct{client : ^network.Server_side_client, message_buffer : [dynamic]u8},
-
-		//Libws side
-		ctx : libwebsockets.Lws_context,
-		socket : libws.Ws,
-	}
 	
-	callback : libws.Callback : proc "c" (client: libws.Ws_client, event: libws.Event, user_data : rawptr) -> c.int {
-		user_data := cast(^Data)user_data;
+	callback : libws.Callback : proc "c" (client: libws.Ws_client, event: libws.Event, _user_data : rawptr) -> c.int {
 		context = restore_context();
+		_user_data : ^^Data = cast(^^Data)_user_data;
+		
+		if _user_data^ == nil {
+			ws := libws.get_websocket(client);
+			assert(ws in context_to_data);
+			_user_data^ = context_to_data[ws];
+
+			delete_key(&context_to_data, ws);
+			if len(context_to_data) == 0 {
+				delete(context_to_data);
+			}
+		}
+		
+		user_data : ^Data = _user_data^;
+		
+		assert(user_data != nil, "user_data is nil");
 
 		switch event {
 			case .LIBWS_EVENT_CONNECTED: {
@@ -87,17 +108,20 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 	on_listen :: proc (server : ^network.Server, interface_handle : network.Interface_handle, user_data : rawptr) -> network.Error {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
-		
+
 		listion_options := libws.Listen_options {
-			auto_cast user_data.ctx,
+			user_data.ctx,
 			user_data.port,
-			callback,         	// int (*)(ws_client*, ws_event, void*)
-			0, 					//per_client_data_size = size_of(Data),
+			callback,         					// int (*)(ws_client*, ws_event, void*)
+			size_of(^Data), 					//per_client_data_size = size_of(Data),
 		}
 
 		user_data.socket = libws.listen(&listion_options);
 		user_data.server = server;
 		user_data.interface_handle = interface_handle;
+			
+		log.debugf("adding server ctx : %v", user_data.socket);
+		context_to_data[user_data.socket] = user_data;
 
 		return .ok;
 	}
@@ -141,10 +165,17 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		context = restore_context();
 		//TODO
 	}
+	
+	on_service :: proc (client : ^network.Server, user_data : rawptr) {
+		user_data := cast(^Data)user_data;
+		res := libwebsockets.service(user_data.ctx, 0);
+		fmt.assertf(res == 0, "failed to service, code was : %v", libwebsockets.service(user_data.ctx, 0));
+	}
 
 	iface := strings.clone_to_cstring(iface, context.temp_allocator);
 
 	ctx_info : libwebsockets.lws_context_creation_info = {
+		port = port,
 		iface = iface,
 	}
 	
@@ -179,5 +210,7 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		on_disconnect, //disconnect the client forcefully (cannot fail)
 		on_close, //Must stop accecpting and close all connections
 		on_destroy, //removes the interface, the interface must free all its internal data.
+
+		on_service,
 	}
 }

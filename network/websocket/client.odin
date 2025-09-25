@@ -16,7 +16,34 @@ import "../../libwebsockets"
 import "../../serialize"
 import network ".."
 
+@(private="file")
+Data :: struct {
+	//Data required to connect
+	address : cstring,
+	port : c.int,
+	path : cstring,
+	send_binary : bool,
+
+	//message conversion
+	from_type : map[typeid]network.Message_id,
+	to_type : map[network.Message_id]typeid,
+
+	//Network side
+	client : ^network.Client,
+
+	//Libws side
+	ctx : libwebsockets.Lws_context,
+	socket : libws.Ws,
+	ws_client : libws.Ws_client,
+	
+	message_buffer : [dynamic]u8,
+}
+
+@(private="file")
+context_to_data : map[libws.Ws]^Data;
+
 //Shallow copy
+@(require_results)
 reverse_map :: proc (to_reverse : map[$A]$B) -> map[B]A {
 
 	reversed := make(map[B]A);
@@ -34,31 +61,23 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 	assert_contextless(websocket_allocator != {}, "you must init the library first", loc);
 	context = restore_context();
 	
-	Data :: struct {
-		//Data required to connect
-		address : cstring,
-		port : c.int,
-		path : cstring,
-		send_binary : bool,
-
-		//message conversion
-		from_type : map[typeid]network.Message_id,
-		to_type : map[network.Message_id]typeid,
-
-		//Network side
-		client : ^network.Client,
-
-		//Libws side
-		ctx : libwebsockets.Lws_context,
-		socket : libws.Ws,
-		ws_client : libws.Ws_client,
-		
-		message_buffer : [dynamic]u8,
-	}
-	
-	callback : libws.Callback : proc "c" (client: libws.Ws_client, event: libws.Event, user_data : rawptr) -> c.int {
-		user_data := cast(^Data)user_data;
+	callback : libws.Callback : proc "c" (client: libws.Ws_client, event: libws.Event, _user_data : rawptr) -> c.int {
 		context = restore_context();
+
+		_user_data : ^^Data = cast(^^Data)_user_data;
+		
+		if _user_data^ == nil {
+			ws := libws.get_websocket(client);
+			assert(ws in context_to_data);
+			_user_data^ = context_to_data[ws];
+
+			delete_key(&context_to_data, ws);
+			if len(context_to_data) == 0 {
+				delete(context_to_data);
+			}
+		}
+		
+		user_data : ^Data = _user_data^;
 
 		switch event {
 			case .LIBWS_EVENT_CONNECTED: {
@@ -99,12 +118,12 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		context = restore_context();
 
 		connect_options := libws.Connect_options{
-			auto_cast user_data.ctx,
+			user_data.ctx,
 			user_data.address,
 			user_data.port,
 			user_data.path,
 			callback,
-			0, //per_client_data_size = size_of(Data),
+			size_of(^Data),
 		}
 
 		user_data.client = client;
@@ -113,6 +132,9 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		if user_data.socket == nil {
 			return .invalid_parameter;
 		}
+
+		log.debugf("adding client ctx : %v", user_data.socket);
+		context_to_data[user_data.socket] = user_data;
 		
 		return .ok;
 	}
@@ -146,8 +168,14 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		//todo clean up
 	}
 
+	on_service :: proc (client : ^network.Client, user_data : rawptr) {
+		user_data := cast(^Data)user_data;
+		assert(libwebsockets.service(user_data.ctx, 0) == 0);
+	}
+
 	ctx_info := libwebsockets.lws_context_creation_info {
-		//I dont think we need to set anything here 
+		//I dont think we need to set anything here
+		port = libwebsockets.CONTEXT_PORT_NO_LISTEN,
 	};
 	
 	ctx : libwebsockets.Lws_context = libwebsockets.create_context(&ctx_info);
@@ -173,5 +201,6 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		on_send,
 		on_disconnect,
 		on_destroy,
+		on_service,
 	}
 }
