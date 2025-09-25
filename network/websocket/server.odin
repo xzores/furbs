@@ -171,9 +171,11 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 	
 	on_service :: proc (client : ^network.Server, user_data : rawptr) {
 		user_data := cast(^Data)user_data;
-		res := libwebsockets.service(user_data.ctx, 0);
-		fmt.assertf(res == 0, "failed to service, code was : %v", libwebsockets.service(user_data.ctx, 0));
-		log.debugf("client on service");
+		for _ in 0..<10 {
+			res := libwebsockets.service(user_data.ctx, 0);
+			fmt.assertf(res == 0, "failed to service, code was : %v", res);
+		}
+		log.debugf("server on service");
 	}
 
 	iface := strings.clone_to_cstring(iface, context.temp_allocator);
@@ -218,3 +220,5 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		on_service,
 	}
 }
+
+

@@ -64,6 +64,8 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 	
 	callback : libws.Callback : proc "c" (client: libws.Ws_client, event: libws.Event, _user_data : rawptr) -> c.int {
 		context = restore_context();
+		
+		log.debugf("client recived callback");
 
 		_user_data : ^^Data = cast(^^Data)_user_data;
 		
@@ -140,7 +142,9 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		log.debugf("adding client ctx : %v", user_data.socket);
 		context_to_data[user_data.socket] = user_data;
 		
-		assert(libwebsockets.service(user_data.ctx, 0) == 0, "failed to service lws");
+		for _ in 0..<10 {
+			assert(libwebsockets.service(user_data.ctx, 0) == 0, "failed to service lws");
+		}
 
 		return .ok;
 	}
@@ -176,7 +180,9 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 
 	on_service :: proc (client : ^network.Client, user_data : rawptr) {
 		user_data := cast(^Data)user_data;
-		assert(libwebsockets.service(user_data.ctx, 0) == 0);
+		for _ in 0..<10 {
+			assert(libwebsockets.service(user_data.ctx, 0) == 0, "failed to service lws");
+		}
 		log.debugf("client on service");
 	}
 

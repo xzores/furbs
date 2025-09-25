@@ -26,7 +26,7 @@ alloc_cef_object_outplace :: proc ($T : typeid, user_data : rawptr, on_free : pr
 	assert(cef_allocator != {}, "You must call set_cef_allocator first", loc);
 
 	log.debugf("allocating %v", type_info_of(T), location = loc);
-
+	
 	base : cef.base_ref_counted = {
 		size_of(T), //size
 		proc "system" (self: ^cef.base_ref_counted) { //add_ref 

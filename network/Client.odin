@@ -55,8 +55,9 @@ client_connect :: proc (client : ^Client) -> (err : Error) {
 //locks the mutex and return the current commands, the data must not be copied
 client_begin_handle_events :: proc (client : ^Client, loc := #caller_location) {
 	assert(client.handeling_events == false, "you must call client_end_handle_events before calling client_begin_handle_events twice", loc);
+	log.debugf("client calling service...");
 	client.service(client, client.client_data);
-	sync.lock(&client.event_mutex);
+	//sync.lock(&client.event_mutex);
 	client.handeling_events = true;
 }
 
@@ -77,9 +78,9 @@ client_get_next_event :: proc (client : ^Client, loc := #caller_location) -> (e 
 client_end_handle_events :: proc (client : ^Client, loc := #caller_location) {
 	assert(client.handeling_events == true, "you must call client_begin_handle_events first", loc)	
 	client.handeling_events = false;
-	sync.unlock(&client.event_mutex);
+	//sync.unlock(&client.event_mutex);
 
-	clean_up_events(&client.to_clean);
+	clean_up_events(&client.to_clean); //ahh this is the problem
 }
 
 @(require_results)
