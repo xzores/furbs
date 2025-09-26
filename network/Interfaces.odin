@@ -25,6 +25,8 @@ import "base:runtime"
 push_connect_server :: proc (server : ^Server, inteface : Interface_handle, user_data : rawptr) -> ^Server_side_client {
 	sync.guard(&server.mutex);
 	
+	assert(inteface in server.interfaces, "invalid inteface");
+
 	new_client := new(Server_side_client);
 	new_client^ = {
 		inteface,

@@ -13,28 +13,28 @@ import "core:thread"
 import vmem"core:mem/virtual"
 
 import "../../libws"
-import "../../libwebsockets"
+import lws "../../libwebsockets"
 import "../../serialize"
 import network ".."
 
 @(private, require_results)
-recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : map[network.Message_id]typeid, lws_client : libwebsockets.Lws_client, message_buffer : ^[dynamic]u8) -> (done : bool, value : any, free_proc : proc (any, rawptr), backing_data : rawptr, is_binary : bool, error : network.Error) {
+recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : map[network.Message_id]typeid, lws_client : lws.Client, message_buffer : ^[dynamic]u8) -> (done : bool, value : any, free_proc : proc (any, rawptr), backing_data : rawptr, is_binary : bool, error : network.Error) {
 
 	wsi := libws.get_websocket(lws_client);
 
-	if libwebsockets.is_first_fragment(wsi) {
+	if lws.is_first_fragment(wsi) {
 		clear(message_buffer);
 	}
 
-	length := libwebsockets.remaining_packet_payload(wsi);
+	length := lws.remaining_packet_payload(wsi);
 	pre_msg_length := len(message_buffer);
 	resize(message_buffer, pre_msg_length + auto_cast length);
 	read_bytes := libws.receive(lws_client, raw_data(message_buffer[pre_msg_length:]), length);
 	assert(read_bytes == length, "something went wrong, length of recived and payload does not match");
 	
-	if libwebsockets.is_final_fragment(wsi) {
+	if lws.is_final_fragment(wsi) {
 
-		is_binary = auto_cast libwebsockets.frame_is_binary(wsi);
+		is_binary = auto_cast lws.frame_is_binary(wsi);
 
 		if is_binary {
 			valid, _, value, free_proc, backing_data := network.array_to_any(to_type, message_buffer[:]);

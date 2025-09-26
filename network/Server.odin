@@ -63,6 +63,7 @@ register_interface :: proc (server : ^Server, interface : Server_interface) -> I
 server_start_accepting :: proc (server : ^Server, loc := #caller_location) {
 	server.is_open = true;
 	for handle, interface in server.interfaces {
+		log.debugf("starting listening on interface %v", handle);
 		interface.listen(server, handle, interface.server_data);
 	}
 }
@@ -82,11 +83,6 @@ server_destroy :: proc (server : ^Server) {
 
 server_begin_handle_events :: proc (server : ^Server, loc := #caller_location) {
 	assert(server.handeling_events == false, "you must call server_end_handle_commands before calling server_begin_handle_commands twice", loc);
-	for _, interface in server.interfaces {
-		if interface.service != nil {
-			interface.service(server, interface.server_data);
-		}
-	}
 	sync.lock(&server.mutex);
 	server.handeling_events = true;
 }
@@ -115,6 +111,7 @@ server_end_handle_events :: proc (server : ^Server, loc := #caller_location) {
 
 @(require_results)
 server_send :: proc (server : ^Server, client : ^Server_side_client, value : any, loc := #caller_location) -> (err : Error) {
+	assert(client.interface in server.interfaces, "invalid interface handle")
 	i := server.interfaces[client.interface];
 	return i.send(server, i.server_data, client.user_data, value);
 }

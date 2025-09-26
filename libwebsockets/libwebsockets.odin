@@ -297,6 +297,9 @@ Protocol_vhost_options :: struct{
 	value : cstring, //value of name=value pair
 };
 
+
+Reload_func :: #type proc "c" () -> c.int;
+
 @(link_prefix = "lws_", require_results, default_calling_convention="c")
 foreign libwebsockets {
 	
@@ -312,6 +315,34 @@ foreign libwebsockets {
 	/* Handy accessors (optional, but commonly used) */
 	context_user :: proc (ctx : Context) -> rawptr ---
 	wsi_user :: proc (wsi : Lws) -> rawptr ---
+	
+	context_deprecate :: proc (ctx : Context, cb : Reload_func) ---
+	context_is_deprecated :: proc (ctx : Context) -> c.int ---
+	set_proxy :: proc (vhost : Vhost, proxy : cstring) -> c.int ---
+	set_socks :: proc (vhost : Vhost, proxy : cstring) -> c.int ---
+	create_vhost :: proc (ctx : Context, info : ^Context_creation_info) -> Vhost ---
+	vhost_destroy :: proc (vhost : Vhost) ---
+
+	//lwsws_get_config_globals :: proc (info : ^Context_creation_info, d : cstring, char **config_strings, int *len) -> c.int ---
+
+	//@(link_name="lwsws_get_config_vhosts")
+	//ws_get_config_vhosts :: proc (ctx : Context, info : ^Context_creation_info, d : cstring, char **config_strings, int *len) -> c.int ---
+	get_vhost :: proc (wsi : Lws) -> Vhost ---
+	get_vhost_name :: proc (vhost : Vhost) -> cstring ---
+	get_vhost_by_name :: proc (ctx : Context, name : cstring) -> Vhost ---
+	get_vhost_port :: proc (vhost : Vhost) -> c.int ---
+	get_vhost_user :: proc (vhost : Vhost) -> rawptr ---
+	get_vhost_iface :: proc (vhost : Vhost) -> cstring ---
+	vhost_user :: proc (vhost : Vhost) ---
+	vh_tag :: proc (vhost : Vhost) -> cstring --- 
+
+	//_lws_context_info_defaults :: proc (info : ^Context_creation_info, const char *sspol);
+
+	default_loop_exit :: proc (ctx : Context) ---
+	context_default_loop_run_destroy :: proc (ctx : Context) ---
+	cmdline_passfail :: proc (argc : c.int, argv : [^]cstring, actual : c.int) -> c.int ---
+	systemd_inherited_fd :: proc (index : c.uint, info : ^Context_creation_info) -> c.int ---
+	context_is_being_destroyed :: proc (ctx : Context) -> c.int ---
 }
 
 
@@ -1194,34 +1225,34 @@ foreign libwebsockets {
 @(link_prefix = "lws_", require_results, default_calling_convention="c")
 foreign libwebsockets {
     // Add buffer to buflist head. Returns -1 OOM, 1 if first seg, 0 otherwise.
-    buflist_append_segment      :: proc(head: ^Lws_buflist, buf: ^u8, len: c.size_t) -> c.int ---
+    buflist_append_segment      :: proc(head: ^Buflist, buf: ^u8, len: c.size_t) -> c.int ---
 
     // Bytes left in current segment; optionally returns pointer to remaining data.
-    buflist_next_segment_len    :: proc(head: ^Lws_buflist, buf: ^^u8) -> c.size_t ---
+    buflist_next_segment_len    :: proc(head: ^Buflist, buf: ^^u8) -> c.size_t ---
 
     // Consume len bytes from current segment; returns bytes left in current seg.
-    buflist_use_segment         :: proc(head: ^Lws_buflist, len: c.size_t) -> c.size_t ---
+    buflist_use_segment         :: proc(head: ^Buflist, len: c.size_t) -> c.size_t ---
 
     // Total bytes held across all segments.
-    buflist_total_len           :: proc(head: ^Lws_buflist) -> c.size_t ---
+    buflist_total_len           :: proc(head: ^Buflist) -> c.size_t ---
 
     // Linear copy without consuming; -1 if dest too small, else bytes copied.
-    buflist_linear_copy         :: proc(head: ^Lws_buflist, ofs: c.size_t, buf: ^u8, len: c.size_t) -> c.int ---
+    buflist_linear_copy         :: proc(head: ^Buflist, ofs: c.size_t, buf: ^u8, len: c.size_t) -> c.int ---
 
     // Linear copy and consume; returns bytes written into buf.
-    buflist_linear_use          :: proc(head: ^Lws_buflist, buf: ^u8, len: c.size_t) -> c.int ---
+    buflist_linear_use          :: proc(head: ^Buflist, buf: ^u8, len: c.size_t) -> c.int ---
 
     // Copy & consume at most one fragment; returns bytes written. See frag flags.
-    buflist_fragment_use        :: proc(head: ^Lws_buflist, buf: ^u8, len: c.size_t, frag_first: ^u8, frag_fin: ^u8) -> c.int ---
+    buflist_fragment_use        :: proc(head: ^Buflist, buf: ^u8, len: c.size_t, frag_first: ^u8, frag_fin: ^u8) -> c.int ---
 
     // Free all segments; *head becomes NULL.
-    buflist_destroy_all_segments:: proc(head: ^Lws_buflist) ---
+    buflist_destroy_all_segments:: proc(head: ^Buflist) ---
 
     // Debug: describe buflist (only in debug builds of lws).
-    buflist_describe            :: proc(head: ^Lws_buflist, id: rawptr, reason: cstring) ---
+    buflist_describe            :: proc(head: ^Buflist, id: rawptr, reason: cstring) ---
 
     // Pointer to start of the fragment payload, or NULL if empty.
-    buflist_get_frag_start_or_NULL :: proc(head: ^Lws_buflist) -> rawptr ---
+    buflist_get_frag_start_or_NULL :: proc(head: ^Buflist) -> rawptr ---
 }
 
 
@@ -1303,7 +1334,6 @@ foreign libwebsockets {
     // Bytes remaining in current WS fragment.
     remaining_packet_payload       :: proc(wsi: Lws) -> c.size_t ---
 }
-
 
 
 /////////////////////////// lws-service.h ///////////////////////////
@@ -1454,3 +1484,87 @@ foreign libwebsockets {
 
 
 
+
+///////////////////////////// lws-ring.h /////////////////////////////
+
+@(link_prefix = "lws_", require_results, default_calling_convention="c")
+foreign libwebsockets {
+	//lws_ring_create() - create a new ringbuffer
+	//element_len: size in bytes of one element in the ringbuffer
+	//count:       number of elements the ringbuffer can contain
+	//destroy_element: NULL, or callback called for each element retired when the
+	//                 oldest tail moves beyond it, and for any element left when
+	//                 the ringbuffer is destroyed
+	//Creates the ringbuffer and its storage. Returns the new lws_ring*, or NULL on failure.
+	ring_create :: proc (element_len: c.size_t, count: c.size_t, destroy_element: proc (element: rawptr)) -> ^Ring ---
+
+	//lws_ring_destroy() - destroy a previously created ringbuffer
+	//ring: the lws_ring to destroy
+	//Destroys the ringbuffer allocation and the lws_ring itself.
+	ring_destroy :: proc (ring: ^Ring) ---
+
+	//lws_ring_get_count_free_elements() - how many whole elements still fit
+	//ring: the lws_ring to report on
+	//Returns how much room is left for whole-element insertion.
+	ring_get_count_free_elements :: proc (ring: ^Ring) -> c.size_t ---
+
+	//lws_ring_get_count_waiting_elements() - how many elements can be consumed
+	//ring: the lws_ring to report on
+	//tail: pointer to the tail to use, or NULL for single tail
+	//Returns how many elements are waiting to be consumed from that tail's view.
+	ring_get_count_waiting_elements :: proc (ring: ^Ring, tail: ^c.uint32_t) -> c.size_t ---
+
+	//lws_ring_insert() - attempt to insert up to max_count elements from src
+	//ring: the lws_ring to operate on
+	//src: array of elements to insert
+	//max_count: number of available elements at src
+	//Attempts to insert as many elements as possible, up to max_count.
+	//Returns the number of elements actually inserted.
+	ring_insert :: proc (ring: ^Ring, src: rawptr, max_count: c.size_t) -> c.size_t ---
+
+	//lws_ring_consume() - copy out and remove up to max_count elements to dest
+	//ring: the lws_ring to operate on
+	//tail: pointer to the tail to use, or NULL for single tail
+	//dest: array to receive elements, or NULL for no copy
+	//max_count: maximum elements to consume
+	//Copies out up to max_count waiting elements into dest from tail's view; if
+	//dest is NULL, elements are logically consumed without copying. Increments
+	//the tail by the number consumed. Returns number of elements consumed.
+	ring_consume :: proc (ring: ^Ring, tail: ^c.uint32_t, dest: rawptr, max_count: c.size_t) -> c.size_t ---
+
+	//lws_ring_get_element() - pointer to next waiting element for tail
+	//ring: the lws_ring to report on
+	//tail: pointer to the tail to use, or NULL for single tail
+	//Returns NULL if none waiting, else a const void* to the next element.
+	//After using it, call lws_ring_consume(ring, &tail, NULL, 1).
+	ring_get_element :: proc (ring: ^Ring, tail: ^c.uint32_t) -> rawptr ---
+
+	//lws_ring_update_oldest_tail() - free up elements older than tail for reuse
+	//ring: the lws_ring to operate on
+	//tail: the tail value representing the new oldest live consumer
+	//For multi-tail use, update when the "oldest" tail advances.
+	ring_update_oldest_tail :: proc (ring: ^Ring, tail: c.uint32_t) ---
+
+	//lws_ring_get_oldest_tail() - get current oldest available data index
+	//ring: the lws_ring to report on
+	//Use this to initialize a new consumer's tail to the oldest entry still available.
+	ring_get_oldest_tail :: proc (ring: ^Ring) -> c.uint32_t ---
+
+	//lws_ring_next_linear_insert_range() - write directly into the ring
+	//ring:  the lws_ring to report on
+	//start: *out: start of next linear writable range in the ring
+	//bytes: *out: max length writable from *start before wrap
+	//Provides direct bytewise access to the next linear insertion range. Returns
+	//nonzero if no insertion currently possible.
+	ring_next_linear_insert_range :: proc (ring: ^Ring, start: ^rawptr, bytes: ^c.size_t) -> c.int ---
+
+	//lws_ring_bump_head() - commit bytes written via linear insert range
+	//ring:  the lws_ring to operate on
+	//bytes: number of bytes inserted at the current head
+	ring_bump_head :: proc (ring: ^Ring, bytes: c.size_t) ---
+
+	//lws_ring_dump() - debug dump of the ring state
+	//ring: the lws_ring to report on
+	//tail: pointer to the tail to use, or NULL for single tail
+	ring_dump :: proc (ring: ^Ring, tail: ^c.uint32_t) ---
+}

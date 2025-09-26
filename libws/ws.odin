@@ -9,7 +9,7 @@ import "core:slice"
 import "core:strings"
 
 @require
-import "../libwebsockets"
+import lws "../libwebsockets"
 
 when ODIN_OS == .Windows { 
 	@(extra_linker_flags="/NODEFAULTLIB:MSVCRT /IGNORE:4217")
@@ -47,9 +47,9 @@ main :: proc () {
 	fmt.printfln("done");
 }
 
-Ws :: libwebsockets.Lws;
-Ws_client :: libwebsockets.Lws_client;
-Lws_context :: libwebsockets.Lws_context;
+Ws :: lws.Lws;
+Ws_client :: lws.Client;
+Lws_context :: lws.Context;
 
 Event :: enum i32 {
 	LIBWS_EVENT_CONNECTION_ERROR,

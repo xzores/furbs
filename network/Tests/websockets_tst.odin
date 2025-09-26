@@ -51,10 +51,46 @@ main :: proc () {
 Default_game_port : int = 26604;
 Default_game_ip := "127.0.0.1"; //TODO should we use net.Address_Family.IP4
 
+test_main :: proc () {
+
+	websocket.init();
+	
+	client := network.client_create(websocket.client_interface(commands_map, "ws.postman-echo.com", 80, "/raw"));
+	assert(network.client_connect(client) == nil);
+
+	// Connected
+	{
+		tmoutcon := network.client_wait_for_event(client);
+		assert(!tmoutcon, "connection timeout...")
+		network.begin_handle_events(client)
+		defer network.end_handle_events(client)
+		econ, _ := network.get_next_event(client)
+		_, okcon := econ.type.(network.Event_connected)
+		assert(okcon)
+	}
+
+	// Hello echo 1
+	{
+		assert(network.client_send(client, Hello{}) == nil)
+		tmout1 := network.client_wait_for_event(client)
+		assert(!tmout1)
+		network.begin_handle_events(client)
+		defer network.end_handle_events(client)
+
+		e1, _ := network.get_next_event(client)
+		msg1, ok1 := e1.type.(network.Event_msg)
+		assert(ok1)
+
+		_, okv1 := msg1.value.(Hello_from_server)
+		assert(okv1)
+	}
+
+}
+
 //This test starts a server in a new thread, send some commands between the server and client and closes the server and client.
 //It creates 10 clients 1 at a time
 //@test test_main :: proc (t : ^testing.T) {
-test_main :: proc () {
+test_main_2 :: proc () {
 	
 	///////////////////////////////////////////////
 	websocket.init()
@@ -215,8 +251,6 @@ test_main :: proc () {
 		time.sleep(1 * time.Millisecond);
 	}
 }
-
-
 
 
 Hello :: struct {};

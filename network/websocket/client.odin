@@ -13,7 +13,7 @@ import "core:thread"
 import vmem"core:mem/virtual"
 
 import "../../libws"
-import "../../libwebsockets"
+import lws "../../libwebsockets"
 import "../../serialize"
 import network ".."
 
@@ -33,10 +33,12 @@ Data :: struct {
 	client : ^network.Client,
 
 	//Libws side
-	ctx : libwebsockets.Lws_context,
+	ctx : lws.Context,
 	socket : libws.Ws,
 	ws_client : libws.Ws_client,
+	outgoing : [dynamic][]u8, //message that needs to be sent
 	
+	//incoming msg
 	message_buffer : [dynamic]u8,
 }
 
@@ -131,7 +133,6 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 			size_of(^Data),
 		}
 		
-		
 		user_data.client = client;
 		user_data.socket = libws.connect(&connect_options);
 		
@@ -142,10 +143,6 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		log.debugf("adding client ctx : %v", user_data.socket);
 		context_to_data[user_data.socket] = user_data;
 		
-		for _ in 0..<10 {
-			assert(libwebsockets.service(user_data.ctx, 0) == 0, "failed to service lws");
-		}
-
 		return .ok;
 	}
 
@@ -178,20 +175,12 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		//todo clean up
 	}
 
-	on_service :: proc (client : ^network.Client, user_data : rawptr) {
-		user_data := cast(^Data)user_data;
-		for _ in 0..<10 {
-			assert(libwebsockets.service(user_data.ctx, 0) == 0, "failed to service lws");
-		}
-		log.debugf("client on service");
-	}
-
-	ctx_info := libwebsockets.lws_context_creation_info {
+	ctx_info := lws.Context_creation_info {
 		//I dont think we need to set anything here
-		port = libwebsockets.CONTEXT_PORT_NO_LISTEN,
+		port = lws.CONTEXT_PORT_NO_LISTEN,
 	};
-	
-	ctx : libwebsockets.Lws_context = libwebsockets.create_context(&ctx_info);
+
+	ctx : lws.Context = lws.create_context(&ctx_info);
 
 	data := new(Data);
 	data^ = {
@@ -205,6 +194,7 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		ctx,
 		nil,
 		nil,
+		make([dynamic][]u8),
 		make([dynamic]u8),
 	}
 
@@ -214,6 +204,5 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		on_send,
 		on_disconnect,
 		on_destroy,
-		on_service,
 	}
 }

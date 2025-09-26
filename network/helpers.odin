@@ -16,12 +16,14 @@ any_to_array :: proc (msg_types : map[typeid]Message_id, value : any, loc := #ca
 	assert(value.id in msg_types, "the message you are passing is not in the message map", loc);
 
 	data := make([dynamic]u8);
-
-	serialize.append_type_to_data(msg_types[value.id], &data)
-	header := cast(^Header_size)&data[len(data)];
-	resize(&data, len(data) + size_of(Header_size))
+	
+	msg_id : Message_id = msg_types[value.id];
+	serialize.append_type_to_data(msg_id, &data);
+	resize(&data, len(data) + size_of(Header_size));
 
 	err := serialize.serialize_to_bytes_append(value, &data);
+	
+	header := cast(^Header_size)&data[size_of(Message_id)];
 	header^ = auto_cast len(data);
 
 	if err != nil {
