@@ -165,7 +165,7 @@ callback_minimal :: proc "c" (wsi : lws.Lws, reason : lws.Callback_reasons, user
 
 	return 0
 }
-
+Page_struct :: distinct struct{};
 // ---- protocols table ----
 protocols := [?]lws.Protocols {
 	lws.Protocols{
