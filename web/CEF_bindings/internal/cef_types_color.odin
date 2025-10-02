@@ -1,4 +1,4 @@
-package cef_internal
+package furbs_cef_internal
 
 /// Describes how to interpret the components of a pixel.
 color_type :: enum u32 {

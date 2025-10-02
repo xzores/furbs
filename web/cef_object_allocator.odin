@@ -1,4 +1,4 @@
-package whirl_web
+package furbs_web
 
 import "core:reflect"
 import "core:fmt"

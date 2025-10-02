@@ -124,7 +124,7 @@ Navigation_entry_visitor :: struct {
 	// (0) to stop. |current| is true (1) if this entry is the currently loaded
 	// navigation entry. |index| is the 0-based index of this entry and |total|
 	// is the total number of entries.
-	visit: proc "system" (
+	visit : proc "system" (
 		self: ^Navigation_entry_visitor,
 		entry: ^Navigation_entry,
 		current: c.int,

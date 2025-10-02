@@ -1,4 +1,4 @@
-package cef_internal
+package furbs_cef_internal
 
 /// CEF supports both a Chrome runtime style (based on the Chrome UI layer) and an Alloy runtime style (based on the Chromium content layer). Chrome style
 /// provides the full Chrome UI and browser functionality whereas Alloy style
