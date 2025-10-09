@@ -79,6 +79,13 @@ server_destroy :: proc (server : ^Server) {
 	for handle, interface in server.interfaces {
 		interface.destroy(server, interface.server_data);
 	}
+
+	assert(len(server.clients) == 0);
+	delete(server.clients);
+	queue.destroy(&server.events);
+	delete(server.to_clean);
+	delete(server.interfaces);
+	free(server);
 }
 
 server_begin_handle_events :: proc (server : ^Server, loc := #caller_location) {
@@ -105,15 +112,36 @@ server_end_handle_events :: proc (server : ^Server, loc := #caller_location) {
 	assert(server.handeling_events == true, "you must call server_begin_handle_commands before calling server_end_handle_commands", loc);	
 	server.handeling_events = false;
 	sync.unlock(&server.mutex);
-	
-	clean_up_events(&server.to_clean, loc);
+
+	for e in server.to_clean {
+		#partial switch b in e.type {
+			case Event_msg: {
+				//nothing to free
+				if b.free_proc != nil {
+					b.free_proc(b.value, b.backing_data);
+				}
+			}
+			case Event_disconnected: {
+				client := e.client.(^Server_side_client);
+				assert(client in server.clients);
+				delete_key(&server.clients, client);
+
+				i := server.interfaces[client.interface];
+				i.destroy_client(server, client, i.server_data, client.user_data);
+				free(client);
+			}
+		}
+	}
+
+	clear(&server.to_clean);
+
 }
 
 @(require_results)
 server_send :: proc (server : ^Server, client : ^Server_side_client, value : any, loc := #caller_location) -> (err : Error) {
 	assert(client.interface in server.interfaces, "invalid interface handle")
 	i := server.interfaces[client.interface];
-	return i.send(server, i.server_data, client.user_data, value);
+	return i.send(server, client, i.server_data, client.user_data, value);
 }
 
 //send to all clients
@@ -129,6 +157,10 @@ server_disconnect_client :: proc (server : ^Server, client : ^Server_side_client
 	fmt.assertf(client in server.clients, "Not a valid client id : %v", client, loc = loc);
 	
 	interface := server.interfaces[client.interface];
-	interface.disconnect(server, interface.server_data, client.user_data);
+	interface.disconnect(server, client, interface.server_data, client.user_data);
 }
+
+
+
+
 

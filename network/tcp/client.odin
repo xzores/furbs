@@ -1,239 +1,206 @@
+package furbs_network_tcp_interface
 
-@(require_results)
-client_create :: proc (commands_map : map[Message_id_type]typeid) -> ^Client {
+import "core:unicode/tools"
+import "core:c"
+import "core:math"
+import "base:runtime"
 
-	client := new(Client)
+import "core:net"
+import "core:time"
+import "core:container/queue"
+import "core:thread"
+import "core:mem"
+import vmem "core:mem/virtual"
+import "core:fmt"
+import "core:log"
+import "core:reflect"
+import "core:sync"
 
-	client^ = {
-		interface = init_tcp_base(nil), //TODO, when supporting other this should be moved into connect as it is connect which determines the interface type
-		params = make_commands(commands_map),
-		handeling_events = false,
-		recive_thread = nil,
-	}
+import "../../serialize"
+import network ".."
 
-	queue.init(&client.events);
-	client.to_clean = make([dynamic]Event);
-	
-	return client;
+@(private="file")
+Data :: struct {
+	//Data required to connect
+	target : net.Endpoint,
+	use_binary : bool,
+
+	//message conversion
+	from_type : map[typeid]network.Message_id,
+	to_type : map[network.Message_id]typeid,
+
+	//Network side
+	//client : ^network.Client,
+
+	//TCP side
+	socket : net.TCP_Socket,
+	recive_thread : ^thread.Thread,
+	should_close : bool,
 }
 
+Ip_mode :: enum  {
+	ipv4_only,
+	ipv6_only,
+	prefer_ipv4, //tries ipv4 and then ipv6
+	prefer_ipv6, //tries ipv6 then ipv4
+	//TODO maybe implement later: auto, //infer from endpoint, or try both and pick the fastest
+}
+
+//endpoint could be 1.2.3.4:9000 or localhost:2345 or www.google.com
 @(require_results)
-client_connect :: proc (client : ^Client, target : Host_or_endpoint, thread_logger : Maybe(log.Logger) = nil, thread_allocator : Maybe(mem.Allocator) = nil,) -> (err : Network_Error) {
-	
-	when ODIN_OS == .JS || ODIN_OS == .WASI {
-		panic("When target is WASM or WASI you cannot connect via the odin interface, this must happen in the Javascript and then you can pass the data to the client by calling ");
-	}
+client_interface :: proc "contextless" (commands_map : map[network.Message_id]typeid, endpoint : string, mode : Ip_mode, use_binary := true) -> network.Client_interface {
+	assert_contextless(tcp_allocator != {}, "you must init the library first");
+	context = restore_context();
 
-	Client_logger_allocator :: struct {
-		client : ^Client,
-		logger : Maybe(log.Logger),
-		allocator : Maybe(mem.Allocator),
-	}
+	on_connect :: proc "contextless" (client : ^network.Client, user_data : rawptr) -> network.Error {
+		user_data := cast(^Data)user_data;
+		context = restore_context();
 
-	client_recive_loop : thread.Thread_Proc : proc(t : ^thread.Thread) {
+		sock, s_err := net.dial_tcp_from_host_or_endpoint(user_data.target);
+		user_data.socket = sock;
 		
-		cla : ^Client_logger_allocator = cast(^Client_logger_allocator)t.data;
-		client : ^Client = cla.client;
-		
-		this_logger := context.logger;
-		this_allocator := context.allocator;
+		if s_err != nil {
+			err : network.Error = .unknown;
 
-		if l, ok := cla.logger.?; ok {
-			this_logger = l;
-		}
-
-		if a, ok := cla.allocator.?; ok {
-			this_allocator = a;
-		}
-		
-		context.logger = this_logger;
-		context.allocator = this_allocator;
-		
-		free(cla);
-		
-		switch &base in client.interface { 
-			case Client_tcp_base: {
-				log.debugf("begining client tcp parse loop")
-				recv_tcp_parse_loop(&base, client.params);
-			}
-		}
-	}
-
-	/////////// setup recive thread ///////////
-	switch &base in client.interface { 
-		case Client_tcp_base: {
-			
-			sock, s_err := net.dial_tcp_from_host_or_endpoint(target);
-			err = s_err;
-			base.user_data = client;
-			base.sock = sock;
-			base.events = &client.events;
-			base.event_mutex = &client.event_mutex;
-			 
-			if err != nil {
-				log.errorf("Failed to connect to server got error : %v", err);
-				return err;
-			}
-			
-			log.infof("Client connected to server");
-
-			queue.clear(&base.current_bytes_recv);
-			queue.clear(&client.events);
-
-			assert(net.set_blocking(sock, true) == nil); //We want it to be blocking
-			//assert(net.set_option(base.sock, .Linger, time.Second) == nil);
-			//assert(net.set_option(base.sock, .Keep_Alive, true) == nil);
-			//TODO a timeout is needed (and maybe keep alive settings?)
-			
-			cla := new(Client_logger_allocator);
-			cla^ = {
-				client,
-				thread_logger,
-				thread_allocator,
+			#partial switch v in s_err {
+				case net.Create_Socket_Error:
+					err = .unknown
+				case net.Dial_Error:
+					err = .refused
+				case net.Bind_Error:
+					err = .refused
+				case net.Socket_Option_Error:
+					err = .invalid_parameter
+				case net.Parse_Endpoint_Error:
+					err = .endpoint_error
+				case net.Resolve_Error:
+					err = .endpoint_error
+				case net.DNS_Error:
+					err = .dns_error
+				case:
 			}
 
-			client.recive_thread = thread.create(client_recive_loop);
-			client.recive_thread.data = cla;
-			
-			queue.append(&client.events, Event{nil, time.now(), Event_connected{}});
-
-			thread.start(client.recive_thread);
-		}
-	}
-	
-	return nil;
-}
-
-//locks the mutex and return the current commands, the data must not be copied
-client_begin_handle_events :: proc (client : ^Client, loc := #caller_location) {
-	assert(client.handeling_events == false, "you must call client_end_handle_events before calling client_begin_handle_events twice", loc);
-	sync.lock(&client.event_mutex);
-	client.handeling_events = true;
-}
-
-@(require_results)
-client_get_next_event :: proc (client : ^Client, loc := #caller_location) -> (e : Event, done : bool) {
-	assert(client.handeling_events == true, "you must call client_begin_handle_events first", loc)
-
-	if queue.len(client.events) == 0 {
-		return {}, true;
-	}
-
-	c := queue.pop_front(&client.events);
-	append(&client.to_clean, c);
-	return c, false;
-}
-
-//Frees the mutex and frees the data (all the commands which you have just recived)
-client_end_handle_events :: proc (client : ^Client, loc := #caller_location) {
-	assert(client.handeling_events == true, "you must call client_begin_handle_events first", loc)	
-	client.handeling_events = false;
-	sync.unlock(&client.event_mutex);
-
-	clean_up_events(&client.to_clean, _client_destroy);
-}
-
-@(require_results)
-client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sleep_time := 100 * time.Microsecond, loc := #caller_location) -> (timedout : bool) { 
-
-	start_time := time.now();
-	
-	for timeout == 0 || !(time.diff(start_time, time.now()) >= timeout) {
-		{
-			client_begin_handle_events(client);
-			defer client_end_handle_events(client);
-			if queue.len(client.events) != 0 {
-				return false;
-			}
-		}
-
-		time.sleep(sleep_time);
-	}
-
-	log.warnf("client_wait_for_event timed out");
-	return true;
-}
-
-@(require_results)
-client_send :: proc (client : ^Client, value : any, loc := #caller_location) -> (err : Error) {
-
-	log.warnf("sending : %v", 123);
-	switch base in client.interface {
-		case Client_tcp_base: {
-			return send_tcp_message_commands(base.sock, client.params, value, loc);
-		}
-	}
-	
-	unreachable();
-}
-
-@(require_results)
-client_send_raw :: proc (client : ^Client, command_id : Message_id_type, value : []u8, loc := #caller_location) -> (err : Error) {
-	command_id := command_id;
-	
-	switch base in client.interface {
-		case Client_tcp_base: {
-			to_send := make([]u8, size_of(Message_id_type) + len(value));
-			defer delete(to_send);
-			runtime.mem_copy(&to_send[0], &command_id, size_of(Message_id_type));
-			if len(value) != 0 {
-				runtime.mem_copy(&to_send[size_of(Message_id_type)], &value[0], len(value));
-			}
-			
-			bytes_send, serr := net.send_tcp(base.sock, to_send[:]);
-			
-			if serr != nil {
-				log.errorf("Failed to send, got err %v\n", serr);
-				return serr;
-			}
-			if bytes_send != len(to_send) {
-				log.errorf("Failed to send all bytes, tried to send %i, but only sent %i\n", len(to_send), bytes_send);
-				return .Unknown;
-			}
-
-			return;
-		}
-	}
-	
-	unreachable();
-}
-
-//Will disconnect, but there might still be unhanded commands in the buffer these can be handled before calling destroy
-@(require_results)
-client_disconnect :: proc (client : ^Client) -> net.Shutdown_Error {
-	
-	switch &base in client.interface {
-		case Client_tcp_base: {
-			assert(base.did_open, "the client was never opened");
-			
-			base.should_close = true;
-			
-			err := net.shutdown(base.sock, .Send)  // disable send/recv
-			net.close(base.sock)                             // free the socket
-
+			log.errorf("Failed to connect to server got error : %v", s_err);
 			return err;
 		}
-	}
-	
-	return nil;
-}
 
-@(private)
-_client_destroy :: proc (client : rawptr) {
-	client : ^Client = auto_cast client;
-	
-	//Join the recive thread
-	thread.destroy(client.recive_thread); //also joins
+		network.push_connect_client(client);
+		log.infof("Client connected to server : %v", user_data.target);
 
-	switch &base in client.interface {
-		case Client_tcp_base: {
-			assert(base.should_close == true, "recive thread should have been signaled to close");
-			destroy_tcp_base(&base);
+		assert(net.set_blocking(sock, true) == nil); //We want it to be blocking
+		//assert(net.set_option(base.sock, .Linger, time.Second) == nil);
+		//assert(net.set_option(base.sock, .Keep_Alive, true) == nil);
+		//TODO a timeout is needed (and maybe keep alive settings?)
+
+		client_recive_loop : thread.Thread_Proc : proc(t : ^thread.Thread) {
+			context = restore_context();
+
+			client := cast(^network.Client) t.user_args[0]
+			user_data := cast(^Data) t.user_args[1]
+
+			log.debugf("begining client tcp parse loop")
+			
+			recv_tcp_parse_loop(client, user_data.socket, user_data.to_type, &user_data.should_close, user_data.use_binary);
+
+			net.close(user_data.socket);
+			log.debugf("disconnected tcp socket client side");
+			network.push_disconnect_client(client);
 		}
+
+		user_data.recive_thread = thread.create(client_recive_loop);
+		user_data.recive_thread.user_args[0] = client;
+		user_data.recive_thread.user_args[1] = user_data;
+
+		thread.start(user_data.recive_thread);
+
+		return .ok;
+	}
+
+	on_send :: proc "contextless" (client : ^network.Client, user_data : rawptr, data : any) -> network.Error {
+		user_data := cast(^Data)user_data;
+		context = restore_context();
+		
+		return tcp_send(user_data.socket, user_data.from_type, data, user_data.use_binary);
+	}
+
+	on_disconnect :: proc "contextless" (client : ^network.Client, user_data : rawptr) -> network.Error {
+		user_data := cast(^Data)user_data;
+		context = restore_context();
+
+		user_data.should_close = true;
+		
+		err := net.shutdown(user_data.socket, .Send)  // disable send/recv
+
+		if err != nil {
+			return .network_error;
+		}
+
+		return nil;
+	}
+
+	on_destroy :: proc "contextless" (client : ^network.Client, user_data : rawptr) {
+		user_data := cast(^Data)user_data;
+		context = restore_context();
+
+		delete(user_data.from_type);
+		delete(user_data.to_type);
+
+		thread.destroy(user_data.recive_thread);
+
+		free(user_data);
+	}
+
+	ep : net.Endpoint;
+	err : net.Network_Error = nil;
+
+	ep4, ep6, port := net.resolve(endpoint);
+	ep = ep4;
+
+	switch mode {
+		case .ipv4_only:
+			ep, err = net.resolve_ip4(endpoint);
+		case .ipv6_only:
+			ep, err = net.resolve_ip6(endpoint)
+		case .prefer_ipv4:
+			ep4, ep6, port := net.resolve(endpoint);
+			ep = ep4;
+			if ep4 == {} {
+				ep = ep6;
+			}
+		case .prefer_ipv6:
+			ep4, ep6, err := net.resolve(endpoint);
+			ep = ep6;
+			if ep6 == {} {
+				ep = ep4;
+			}
+	}
+
+	if err != nil {
+		log.errorf("invalid endpoint %v, got err : %v", endpoint, err);
+	}
+
+	rm := reverse_map(commands_map);
+
+	data := new(Data);
+	data^ = {
+		ep,
+		use_binary,
+		rm,
+		reverse_map(rm), // a sneaky way to clone the map
+		//nil, //client
+		{}, //socket
+		nil, //thread
+		false, //should_close
+	}
+
+	interface : network.Client_interface = {
+		data,
+
+		on_connect,
+		on_send,
+		on_disconnect,
+		on_destroy,
 	}
 	
-	delete(client.to_clean);
-	delete_commands(&client.params);
-	queue.destroy(&client.events);
-	free(client);	
+	return interface;
 }

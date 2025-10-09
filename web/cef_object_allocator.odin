@@ -25,7 +25,7 @@ Super :: struct(T : typeid) {
 alloc_cef_object_outplace :: proc ($T : typeid, user_data : rawptr, on_free : proc "contextless" (self: ^cef.base_ref_counted, user_data : rawptr, alloc_location : runtime.Source_Code_Location) = nil, loc := #caller_location) -> ^T where intrinsics.type_has_field(T, "base") {
 	assert(cef_allocator != {}, "You must call set_cef_allocator first", loc);
 
-	log.debugf("allocating %v", type_info_of(T), location = loc);
+	//log.debugf("allocating %v", type_info_of(T), location = loc);
 	
 	base : cef.base_ref_counted = {
 		size_of(T), //size
@@ -48,7 +48,7 @@ alloc_cef_object_outplace :: proc ($T : typeid, user_data : rawptr, on_free : pr
 					super.on_free(self, super.user_data, super.alloc_location);
 				}
 
-				log.debugf("freeing %v", type_info_of(T), location = super.alloc_location);
+				//log.debugf("freeing %v", type_info_of(T), location = super.alloc_location);
 				mem.free(super, cef_allocator, loc = super.alloc_location);
 				super = {};
 			}

@@ -1,5 +1,6 @@
-package furbs_network
+package furbs_network_tcp_interface
 
+import "core:strconv"
 import "core:debug/pe"
 import "core:math"
 import "base:runtime"
@@ -14,242 +15,311 @@ import "core:fmt"
 import "core:log"
 import "core:reflect"
 import "core:sync"
+import "core:unicode/utf8"
+import "core:encoding/json"
+import "core:strings"
+import "core:slice"
 
-import "../serialize"
+import "../../serialize"
+import network ".."
 
 //////////////////////////////////////////////////////////////////////
 // 				This is only meant for internal use					//
 //////////////////////////////////////////////////////////////////////
 
-Client_tcp_base :: struct {
-	//Data
-	current_bytes_recv  : queue.Queue(u8),	  	//This fills up and must be handled somehow
-	events	   			: ^queue.Queue(Event),	//This should be handle in the main thread
-	event_mutex 		: ^sync.Mutex,
+@private
+json_spec :: json.Marshal_Options{.JSON5, false, false, 0, false, true, false, false, true, {}, {}, {}}
+
+//////////////////////////////////// SEND ////////////////////////////////////
+
+tcp_send :: proc (socket : net.TCP_Socket, from_type : map[typeid]network.Message_id, data : any, binary : bool) -> network.Error {
+	assert(reflect.is_struct(type_info_of(data.id)), "the message must be a struct")
+
+	arr : []u8;
+	defer delete(arr);
+
+	if binary {
+		err : serialize.Serialization_error;
+		arr, err = network.any_to_array(from_type, data);
+		
+		if err != nil {
+			return .serialize_error;
+		}
+	}
+	else {
+		json_arr, json_err := json.marshal(data, json_spec);
+		
+		if json_err != nil {
+			return .serialize_error;
+		}
+
+		b : strings.Builder;
+		strings.builder_init(&b);
+
+		ti := type_info_of(data.id);
+		
+		//we prefer to write the name, but if we can't we write the msg_id instead
+		if named, ok := ti.variant.(runtime.Type_Info_Named); ok {
+			strings.write_string(&b, named.name);
+		}
+		else {
+			strings.write_i64(&b, cast(i64)from_type[data.id]);
+		}
+		
+		strings.write_bytes(&b, json_arr);
+
+		arr = b.buf[:]
+	}
 	
-	sock : net.TCP_Socket,
-	user_data : rawptr, //this is used by the server to figure out which client recived the command.
-
-	did_open : bool,
-	should_close : bool,
-	mutex : sync.Mutex, //lock everything
-}
-
-init_tcp_base :: proc (user_data : rawptr, loc := #caller_location) -> Client_tcp_base {
-	client : Client_tcp_base
-	queue.init(&client.current_bytes_recv);
-	client.user_data = user_data;
-	return client;
-}
-
-destroy_tcp_base :: proc (client : ^Client_tcp_base) {
-	queue.destroy(&client.current_bytes_recv);
-}
-
-recv_tcp_parse_loop :: proc(client : ^Client_tcp_base, params : Network_commands, buffer_size := 4096, loc := #caller_location) {
-
-	client.did_open = true;
+	log.debugf("sending json:\n%v", string(arr));
+	bw, e := net.send_tcp(socket, arr);
 	
-	new_data_buffer := make([]u8, buffer_size); //The max number of bytes that can be recived at a time (you can still recive messages larger then this)
+	if e != nil {
+		log.errorf("failed to send TCP message, got error : %v", e);
+		return .network_error;
+	}
+	if bw != len(arr) {
+		log.errorf("failed to send entire TCP message, tried to send %v, but only send : %v", len(arr), bw);
+		return .corrupted_stream;
+	}
+
+	return .ok;
+}
+
+
+
+//////////////////////////////////// RECV ////////////////////////////////////
+
+@(private)
+C :: struct {
+	server : ^network.Server,
+	client : ^network.Server_side_client
+}
+
+@(private)
+U :: union {
+	^network.Client,
+	C,
+}
+
+@(private)
+recv_tcp_parse_loop :: proc (client : U, socket : net.TCP_Socket, to_type : map[network.Message_id]typeid, should_close : ^bool, parse_binary : bool, init_buffer_size := 1024 * 1024, loc := #caller_location) {
+	assert(client != nil);
+	new_data_buffer := make([]u8, init_buffer_size); //The max number of bytes that can be recived at a time (you can still recive messages larger then this)
 	defer delete(new_data_buffer);
 
-	for !client.should_close {
-		bytes_recv, err := net.recv(client.sock, new_data_buffer[:]);
-		
+	current_bytes_recv : queue.Queue(u8);
+	queue.init(&current_bytes_recv);
+	defer queue.destroy(&current_bytes_recv);
+	
+	for !should_close^ {
+		bytes_recv, err := net.recv(socket, new_data_buffer[:]);
+
 		if bytes_recv == 0 {
 			break;
 		}
-		if (err == net.TCP_Recv_Error.Connection_Closed || err == net.TCP_Recv_Error.Interrupted) && client.should_close {
+		if (err == net.TCP_Recv_Error.Connection_Closed || err == net.TCP_Recv_Error.Interrupted) && should_close^ {
 			log.warnf("Breakout of recv : %v", loc);
 			continue;
 		}
 		else if (err == net.TCP_Recv_Error.Connection_Closed || err == net.TCP_Recv_Error.Interrupted) {
 			log.warnf("Warning : a connection was close without should_close being set true. Automagicly closing now\n Caller : %v", loc);
-			client.should_close = true;
+			should_close^ = true;
 			continue;
 		}
 		else if err != nil {
 			log.errorf("failed recv, err : %v called from : %v", err, loc);
-			sync.lock(client.event_mutex);
-			queue.append(client.events, Event{client.user_data, time.now(), Event_error{}});
-			sync.unlock(client.event_mutex);
+			switch c in client {
+				case ^network.Client:
+					network.push_error_client(c, .network_error);
+				case C:
+					network.push_error_server(c.server, c.client, .network_error);
+			}
 			break;
 		}
-
-		sync.lock(&client.mutex);
-		queue.append_elems(&client.current_bytes_recv, ..new_data_buffer[:bytes_recv]);
-		sync.unlock(&client.mutex);
 		
-		status := parse_message(client, params, loc);
+		queue.append_elems(&current_bytes_recv, ..new_data_buffer[:bytes_recv]);
+		
+		status, value, free_func, data := parse_message(&current_bytes_recv, to_type, parse_binary, loc);
 		for status == .finished {
-			status = parse_message(client, params, loc);
-			log.debugf("status is finished there might be more messages");
+			switch c in client {
+				case ^network.Client: {
+					assert(c != nil, "you passed a nil client", loc);
+					network.push_msg_client(c, value, free_func, data);
+				}
+				case C: {
+					network.push_msg_server(c.server, c.client, value, free_func, data);
+				}
+			}
+
+			//maybe there are more messages:
+			status, value, free_func, data = parse_message(&current_bytes_recv, to_type, parse_binary, loc);
+			//log.debugf("status is finished there might be more messages");
 		}; //Parses all messages, if one finishes then do the next...
-		
+
 		if status == .failed {
 			panic("TODO corrupt message disconnect client");
 		}
-
+		
 		free_all(context.temp_allocator);
 	}
-
-	sync.lock(client.event_mutex);
-	queue.append(client.events, Event{client.user_data, time.now(), Event_disconnected{}});
-	sync.unlock(client.event_mutex);
-
+	
 	free_all(context.temp_allocator);
 }
 
-send_tcp_message_commands :: proc (socket : net.TCP_Socket, params : Network_commands, data : any, loc := #caller_location) -> (err : Error) {
-		fmt.assertf(data.id in params.commands_inverse, "The data %v is not a command as it is not in the map : %#v", data.id, params.commands_inverse, loc);
-
-	command_id : Message_id_type = params.commands_inverse[data.id];
-
-	to_send := make([dynamic]u8, size_of(Message_id_type));
-	runtime.mem_copy(&to_send[0], &command_id, size_of(Message_id_type));
-
-	ser_err := serialize.serialize_to_bytes(data, &to_send, loc);
-	defer delete(to_send);
-
-	when ODIN_DEBUG {
-		_, _ = serialize.deserialize_from_bytes(data.id, to_send[size_of(Message_id_type):], context.temp_allocator);
-	}
-
-	if ser_err != nil {
-		log.errorf("Failed to serialize, got err %v\n", ser_err);
-		return ;
-	}
-	
-	bytes_send, serr := net.send_tcp(socket, to_send[:]);
-	
-	if serr != nil {
-		log.errorf("Failed to send, got err %v\n", serr);
-		return serr;
-	}
-	if bytes_send != len(to_send) {
-		log.errorf("Failed to send all bytes, tried to send %i, but only sent %i\n", len(to_send), bytes_send);
-		return .Unknown;
-	}
-	
-	return nil;
-}
-
-Msg_pass_result :: enum {
-	finished, 
-	not_done,
-	failed,
-}
-
 //returns true if it did parse something
-@require_results
-parse_message :: proc (client : ^Client_tcp_base, params : Network_commands, loc := #caller_location) -> Msg_pass_result {
+@(private, require_results)
+parse_message :: proc (current_bytes_recv : ^queue.Queue(u8), to_type : map[network.Message_id]typeid, parse_binary : bool, loc := #caller_location) -> (status : network.Msg_pass_result, value : any, free_func : proc (any, rawptr), data : rawptr) {
 
-	try_parse :: proc(using client : ^Client_tcp_base, params : Network_commands, message_id : Message_id_type, command : ^Command, loc := #caller_location) -> Msg_pass_result {
-
-		message_typeid : typeid = params.commands[message_id];
-		command.cmd_id = message_id;
+	free_func = proc (v : any, data : rawptr) {
+		data := cast(^vmem.Arena)data;
+		context = restore_context()
 		
-		req_size := size_of(Message_id_type) + size_of(serialize.Header_size_type);
-		if queue.len(client.current_bytes_recv) < req_size {
-			return .not_done;
+		vmem.arena_destroy(data);
+		free(data);
+	}
+
+	message_data := current_bytes_recv.data[current_bytes_recv.offset:current_bytes_recv.offset + current_bytes_recv.len]
+
+	if parse_binary {
+		
+		//We want enough bytes to know the message_id, otherwise we know nothing.
+		if queue.len(current_bytes_recv^) < size_of(network.Message_id) + size_of(network.Header_size) {
+			return .not_done, nil, nil, nil;
 		}
 		
-		header_data : []u8 = make([]u8, size_of(serialize.Header_size_type));
-		defer delete(header_data);
-		for i : int = 0; i < size_of(serialize.Header_size_type); i += 1 {
-			header_data[i] = queue.get(&current_bytes_recv, i + size_of(Message_id_type));
-		}
-		message_size := serialize.to_type(header_data, serialize.Header_size_type); //message_size includes the Header_size itself, so an empty message is size_of(serialize.Header_size_type) long
-		
-		total_size : int = size_of(Message_id_type) + cast(int)message_size;
-		if queue.len(client.current_bytes_recv) < total_size {
-			return .not_done;
-		}
-		
-		data : []u8 = make([]u8, message_size);
-		defer delete(data);
+		{
+			//log.debugf("offset : %v, len : %v", current_bytes_recv.offset, current_bytes_recv.len);
+			message_id : network.Message_id = serialize.to_type(message_data[:], network.Message_id);
+			
+			if message_id in to_type {
+				//Yes, a valid message
+				status, read_bytes, value, _, data := network.array_to_any(to_type, message_data[:], loc);
+				queue.consume_front(current_bytes_recv, read_bytes);
+				if queue.len(current_bytes_recv^) == 0 {
+					queue.clear(current_bytes_recv);
+				}
+				//log.debugf("offset : %v, len : %v", current_bytes_recv.offset, current_bytes_recv.len);
 
-		for i : int = 0; i < cast(int)message_size; i += 1 {
-			data[i] = queue.get(&current_bytes_recv, i + size_of(Message_id_type));
+				if status == .finished {
+					return .finished, value, free_func, data;
+				}
+				
+				if status == .failed {
+					log.errorf("failed to parse message");
+					return .failed, nil, nil, nil;
+				}
+
+				return .not_done, nil, nil, nil;
+			}
+			else {
+				log.errorf("A none valid message %v was passed.\n params are : %#v.\n", message_id);
+				return .failed, nil, nil, nil;
+			}
 		}
-		queue.consume_front(&client.current_bytes_recv, total_size);
+	}
+	else{
+
+		if !utf8.valid_string(string(message_data)) {
+			log.errorf("recvied invalid string : %v string(%v)", message_data, string(message_data));
+			return .failed, nil, nil, nil;
+		}
 		
-		val : any;	
-		err : serialize.Serialization_error;
-		val, err = serialize.deserialize_from_bytes(message_typeid, data, command.alloc);
+		//read until the first {
+		//Check if the pre-{ is a number, if yes, lookup by message_id, if not then lookup by name.
+		msg_start := -1;
+		for c, i in message_data {
+			if c == '{' {
+				//we have found the message 
+				msg_start = i;
+				break;
+			}
+		}
 
-		//fmt.assertf(command_size != 0, "command_size was 0, for %v", message_typeid);
+		if msg_start == -1 {
+			return .not_done, nil, nil, nil;  //we need more of the message
+		}
 
-		if err == .ok {
-			command.value = val;
+		//count the { vs } and find the last }
+		count := 0;
+		last_bracket := -1;
+		for c, i in message_data {
+			if c == '{' {
+				count += 1;
+			}
+			else if c == '}' {
+				count -= 1;
+				if count == 0 {
+					last_bracket = i+1;
+					break; //we found the entire message
+				}
+			}
+		}
+
+		//if there is too many { then we are not done yet
+		if count != 0 {
+			return .not_done, nil, nil, nil;  //we need more of the message
+		}
+
+		if last_bracket == -1 {
+			panic("this should never be hit");
+		}
+
+		pre_msg := string(message_data[:msg_start]);
+		num, valid := strconv.parse_i64(pre_msg);
+		
+		res_type : typeid = nil;
+
+		if valid {
+			if !(auto_cast num in to_type) {
+				return .failed, nil, nil, nil
+			}
+
+			res_type = to_type[auto_cast num]
 		}
 		else {
-			log.errorf("Failed to deserialize_from_bytes! for message type %v with error %v, data was:\n%v", message_typeid, err, data);
-			return .failed;
-		}
-
-		return .finished
-	}
-
-	{
-		sync.lock(&client.mutex);
-		defer sync.unlock(&client.mutex);
-
-		//We want enough bytes to know the message_id, otherwise we know nothing.
-		if queue.len(client.current_bytes_recv) < size_of(Message_id_type) {
-			return .not_done;
-		}
-	}
-	
-	sync.lock(&client.mutex);
-	message_data : []u8 = make([]u8, size_of(Message_id_type));
-	defer delete(message_data);
-	for i : int = 0; i < size_of(Message_id_type); i += 1 { //TODO no bounds check
-		message_data[i] = queue.get(&client.current_bytes_recv, i);
-	}
-	sync.unlock(&client.mutex);
-	
-	message_id : Message_id_type = serialize.to_type(message_data, Message_id_type); //slice.reinterpret(client.data[:3], u32);
-
-	if message_id in params.commands {
-		//Yes, a valid message
-		command : Command;
-		
-		/*
-		command.arena_alloc = new(mem.Dynamic_Arena);
-		mem.dynamic_arena_init(command.arena_alloc);
-		command.alloc = mem.dynamic_arena_allocator(command.arena_alloc);
-		*/
-		command.arena_alloc = new(vmem.Arena);
-		a_err := vmem.arena_init_growing(command.arena_alloc);
-		assert(a_err == nil, "failed to make a virtual arena allocaor");
-		command.alloc = vmem.arena_allocator(command.arena_alloc);
-
-		sync.lock(&client.mutex);
-		defer sync.unlock(&client.mutex);
-		did_parse_message := try_parse(client, params, message_id, &command, loc);
-
-		if did_parse_message == .finished {
-			//Add command to command queue.
-			sync.lock(client.event_mutex) //TODO look at if these mutexs are even needed? could we just have 1?
-			queue.append(client.events, Event{client.user_data, time.now(), Event_msg{command}});
-			sync.unlock(client.event_mutex)
-			return .finished;
+			//try to find by name instead
+			for _, t in to_type {
+				ti := type_info_of(t)
+				if named, ok := ti.variant.(runtime.Type_Info_Named); ok {
+					if named.name == pre_msg {
+						//we found the match
+						res_type = t;
+						break;
+					}
+					//log.debugf("searched '%v' (%v)", named.name, transmute([]u8)named.name);
+				}
+			}
 		}
 		
-		//failed, free resources
-		free_all(command.alloc);
-		vmem.arena_destroy(command.arena_alloc);
-		free(command.arena_alloc);
-		
-		if did_parse_message == .failed {
-			log.errorf("failed to parse message");
-			return .failed;
+		if res_type == nil {
+			log.errorf("could not find a match for message type '%v' (%v)", pre_msg, transmute([]u8)pre_msg);
+			return .failed, nil, nil, nil;
 		}
+
+		arena_alloc := new(vmem.Arena, loc = loc);
+		aerr := vmem.arena_init_growing(arena_alloc);
+		assert(aerr == nil);
+
+		pt := runtime.Type_Info_Pointer{type_info_of(res_type)};
+
+		res_ptr, err := mem.alloc(reflect.size_of_typeid(res_type), allocator = vmem.arena_allocator(arena_alloc));
+		assert(err == nil)
+		
+		value = any{res_ptr, res_type};
+		json_err := json.unmarshal_any(message_data[msg_start:last_bracket], value, json.Specification.JSON5, vmem.arena_allocator(arena_alloc));
+		if json_err != nil {
+			log.errorf("failed to parse json, got err: %v for recvie message : %v", json_err, string(message_data[msg_start:last_bracket]));
+			return .failed, nil, nil, nil;
+		}
+
+		queue.consume_front(current_bytes_recv, last_bracket);
+		if queue.len(current_bytes_recv^) == 0 {
+			queue.clear(current_bytes_recv);
+		}
+
+		return .finished, value, free_func, arena_alloc;
 	}
-	else {
-		log.errorf("A none valid message %v was passed.\n params are : %#v.\n", message_id);
-	}
-	
-	return .not_done;
+
+	unreachable();
 }

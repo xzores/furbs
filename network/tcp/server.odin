@@ -1,198 +1,254 @@
-package furbs_networking_tcp;
+package furbs_network_tcp_interface
 
+import "core:debug/pe"
+import "core:math"
+import "base:runtime"
 
-@(require_results)
-server_create :: proc(commands_map : map[Message_id_type]typeid, endpoint : Endpoint, loc := #caller_location) -> (server : ^Server) {
-	
-	server = new(Server);
-	server^ = Server{
-		endpoint = endpoint,
-		params = make_commands(commands_map),
-	}
-	
-	queue.init(&server.events);
-	server.to_clean = make([dynamic]Event)
+import "core:net"
+import "core:time"
+import "core:container/queue"
+import "core:thread"
+import "core:mem"
+import vmem "core:mem/virtual"
+import "core:fmt"
+import "core:log"
+import "core:reflect"
+import "core:sync"
 
-	return server;
+import "../../serialize"
+import network ".."
+
+@(private="file")
+Data :: struct {
+	//Data required to connect
+	target : net.Endpoint,
+	use_binary : bool,
+
+	//message conversion
+	from_type : map[typeid]network.Message_id,
+	to_type : map[network.Message_id]typeid,
+
+	//Network side
+	server : ^network.Server,
+	interface_handle : network.Interface_handle,
+
+	//TCP side
+	acceptor_socket : net.TCP_Socket,
+	acceptor_thread : ^thread.Thread,
+	should_close : bool, 
 }
 
-//Start reciving clients
-server_start_accepting :: proc (server : ^Server, thread_logger : Maybe(log.Logger) = nil, thread_allocator : Maybe(mem.Allocator) = nil, loc := #caller_location) {
+//per connection data
+@(private="file")
+Data_client :: struct {
+	name : net.Endpoint,
+	socket : net.TCP_Socket,
+	recive_thread : ^thread.Thread,
+	should_close : bool, //stops the listening thread.
+}
 
-	Server_and_client :: struct {
-		c : ^Server_side_client,
-		s : ^Server,
-		logger : Maybe(log.Logger),
-		allocator : Maybe(mem.Allocator),
+@(require_results)
+server_interface :: proc "contextless" (commands_map : map[network.Message_id]typeid, endpoint : string, use_binary := true, loc := #caller_location) -> (network.Server_interface) {
+	assert_contextless(tcp_allocator != {}, "you must init the library first", loc);
+	context = restore_context();
+
+	on_send :: proc "contextless" (server : ^network.Server, client : ^network.Server_side_client, user_data : rawptr, client_user_data : rawptr, data : any) -> network.Error {
+		user_data := cast(^Data)user_data;
+		client_user_data := cast(^Data_client)client_user_data;
+		context = restore_context();
+
+		tcp_send(client_user_data.socket, user_data.from_type, data, user_data.use_binary);
+
+		return .ok;
 	}
 
-	Server_logger_allocator :: struct {
-		server : ^Server,
-		logger : Maybe(log.Logger),
-		allocator : Maybe(mem.Allocator),
+	on_disconnect :: proc "contextless" (server : ^network.Server, client : ^network.Server_side_client, user_data : rawptr, client_user_data : rawptr) -> network.Error {
+		user_data := cast(^Data)user_data;
+		client_user_data := cast(^Data_client)client_user_data;
+		context = restore_context();
+		
+		log.infof("closing socket server side");
+		client_user_data.should_close = true;
+		net.shutdown(client_user_data.socket, .Both);
+
+		return .ok;
 	}
 
-	if server.endpoint.port == 0 {
+	on_destroy_client :: proc "contextless" (server : ^network.Server, client : ^network.Server_side_client, user_data : rawptr, client_user_data : rawptr) {
+		user_data := cast(^Data)user_data;
+		client_user_data := cast(^Data_client)client_user_data;
+		context = restore_context();
+
+		thread.destroy(client_user_data.recive_thread);
+		free(client_user_data);
+	}
+
+	on_close :: proc "contextless" (server : ^network.Server, user_data : rawptr) -> network.Error {
+		user_data := cast(^Data)user_data;
+		server.should_close = true;
+
+		context = restore_context();
+		net.close(user_data.acceptor_socket);
+		thread.destroy(user_data.acceptor_thread); //also joins
+
+		return nil
+	}
+
+	on_destroy :: proc "contextless" (server : ^network.Server, user_data : rawptr) {
+		user_data := cast(^Data)user_data;
+		context = restore_context();
+
+		delete(user_data.from_type);
+		delete(user_data.to_type);
+
+		free(user_data);
+	}
+
+	ep : net.Endpoint;
+	err : net.Network_Error;
+
+	ep, err = net.resolve_ip4(endpoint);
+	if err != nil {
+		ep, err = net.resolve_ip6(endpoint);
+	}
+	
+	if err != nil {
+		log.errorf("Could not resolve %v, got error: %v", endpoint, err);
+		//because we dont bind yet, we cannot yet throw the error, happens later.
+	}
+	else {
+		log.infof("resolved host ip to %v", ep);
+	}
+
+	rm := reverse_map(commands_map);
+
+	data := new(Data);
+	data^ = {
+		ep,
+		use_binary,
+
+		//message conversion
+		rm,
+		reverse_map(rm),
+
+		//Network side
+		nil, //server : ^network.Server,
+		-1, //interface_handle : network.Interface_handle,
+
+		//TCP side
+		{}, //acceptor_socket : net.TCP_Socket,
+		nil, //acceptor_thread : ^thread.Thread,
+		false, //should_close : bool, 
+	}
+
+	interface : network.Server_interface = {
+		data,
+
+		on_listen, //listen data is given by the user who starts it.
+		on_send,
+		on_disconnect, //disconnect the client forcefully (cannot fail)
+		on_destroy_client,
+		on_close, //Must stop accecpting and close all connections
+		on_destroy, //removes the interface, the interface must free all its internal data.
+	}
+	
+	return interface;
+}
+
+@(private="file")
+destroy_client_user_data :: proc (client_user_data : ^Data_client) {
+
+	free(client_user_data);
+}
+
+@(private="file")
+on_listen :: proc "contextless" (server : ^network.Server, interface_handle : network.Interface_handle, user_data : rawptr) -> network.Error {
+	user_data := cast(^Data)user_data;
+	context = restore_context();
+
+	user_data.interface_handle = interface_handle;
+
+	if user_data.target == {} {
 		panic("Endpoint is not setup");
 	}
-
-	if true { //TODO make multiple interfaces
-		err : net.Network_Error;
-		server.accpector_interface, err = net.listen_tcp(server.endpoint);
-		
-		if err != nil {
-			panic("Failed setup_acceptor");
-		}
+	
+	err : net.Network_Error;
+	user_data.acceptor_socket, err = net.listen_tcp(user_data.target);
+	
+	if err != nil {
+		panic("Failed setup_acceptor");
 	}
 	
 	log.infof("Succesfully setup acceptor"); 
 
 	//This loops while the client is connected
+	//A thread per client for listening, this could be done better, but it is OS dependent, for future work.
+	//TODO overlapping IO
 	server_side_client_recive_loop : thread.Thread_Proc : proc(t : ^thread.Thread) {
+		context = restore_context();
+
+		server := cast(^network.Server)t.user_args[0];
+		client := cast(^network.Server_side_client)t.user_args[1];
+		user_data := cast(^Data)t.user_args[2];
+		client_user_data := cast(^Data_client)t.user_args[3];
 		
-		sac := cast(^Server_and_client)t.data;
+		recv_tcp_parse_loop(C{server, client}, client_user_data.socket, user_data.to_type, &user_data.should_close, user_data.use_binary);
 		
-		this_logger := context.logger;
-		this_allocator := context.allocator;
-
-		if l, ok := sac.logger.?; ok {
-			this_logger = l;
-		}
-
-		if a, ok := sac.allocator.?; ok {
-			this_allocator = a;
-		}
-
-		context.logger = this_logger;
-		context.allocator = this_allocator;
-		
-		client : ^Server_side_client = sac.c;
-		server : ^Server = sac.s;
-		assert(client.client_id == t.user_index);
-
-		free(sac);
-
-		switch &base in client.interface {
-			case Client_tcp_base: {
-				recv_tcp_parse_loop(&base, server.params);
-			}
-			case: {
-				unreachable();
-			}
-		}
-
-		log.debugf("disconnected socket server side");
+		net.close(client_user_data.socket);
+		log.debugf("disconnected tcp socket %v server side", client_user_data.name);
+		network.push_disconnect_server(server, client);
 	}
 	
 	//This loops forever in another thread.
 	acceptor_loop : thread.Thread_Proc : proc(t : ^thread.Thread) {
+		context = restore_context();
 		
-		sla : ^Server_logger_allocator = cast(^Server_logger_allocator)t.data;
-		server : ^Server = sla.server;
-		
-		this_logger := context.logger;
-		this_allocator := context.allocator;
-		
-		if l, ok := sla.logger.?; ok {
-			this_logger = l;
-		}
-		
-		if a, ok := sla.allocator.?; ok {
-			this_allocator = a;
-		}
-		
-		context.logger = this_logger;
-		context.allocator = this_allocator;
-		
-		defer free(sla); //need later when creting clients
-
-		log.debugf("server.should_close : %v", server.should_close);
-
-		assert(server.should_close == false, "server has not opened but it should already close?")
-		assert(server.is_open == false, "server already open")
+		server := cast(^network.Server) t.user_args[0];
+		user_data := cast(^Data) t.user_args[1];
 
 		///////////////////////////////////////////////////////
 
 		log.debugf("Thread acceptor running");
 		
-		server.is_open = true;
-		
 		for !server.should_close {
-			new_client : ^Server_side_client = new(Server_side_client);
 			
-			switch accpector in server.accpector_interface {
+			client_user_data := new(Data_client);
+			
+			err : net.Network_Error;
+			
+			//blocks until a client has connected
+			client_user_data.socket, client_user_data.name, err = net.accept_tcp(user_data.acceptor_socket);
+
+			if err != nil {
+				if !server.should_close || err != net.Accept_Error.Interrupted {
+					log.errorf("Failed accept_tcp, err : %v", err);
+				}
 				
-				case net.TCP_Socket: {
-					err : net.Network_Error;
-					
-					base := init_tcp_base(new_client);
-					
-					//blocks until a client has connected
-					base.sock, new_client.endpoint, err = net.accept_tcp(accpector);
-					base.events = &server.events;
-					base.event_mutex = &server.mutex;
-
-					if true && server.should_close { //something here instead of true
-						free(new_client);
-						continue
-					}
-					else if err != nil {
-						log.errorf("Failed accept_tcp, err : %v", err);
-						free(new_client);
-						continue;
-					}
-					
-					/////////// get an index for the client ///////////
-					sync.lock(&server.mutex);
-					client_index := server.current_client_index;
-					server.current_client_index += 1;
-					
-					log.infof("A new client connected, serving with id : %v", client_index);
-					
-					/////////// setup client thread ///////////
-					assert(net.set_blocking(base.sock, true) == nil); //We want it to be blocking, since we have 1 thread per client.
-					//assert(net.set_option(base.sock, .Keep_Alive, true) == nil);
-					//TODO a timeout is needed (and maybe keep alive settings?)
-					
-					sac := new(Server_and_client);
-					sac.c = new_client;
-					sac.s = server;
-					sac.logger = sla.logger;
-					sac.allocator = sla.allocator;
-					
-					new_client.recive_thread = thread.create(server_side_client_recive_loop);
-					new_client.client_id = client_index;
-					new_client.recive_thread.data = sac;
-					new_client.recive_thread.user_index = client_index;
-					new_client.interface = base;
-					new_client.id = client_index;
-
-					queue.init(&base.current_bytes_recv);
-					base.events = &server.events;
-					base.event_mutex = &server.mutex;
-					
-					/////////// add the clients ///////////
-					server.clients[client_index] = new_client;
-					queue.append(&server.events, Event{new_client, time.now(), Event_connected{}});
-					
-					///////////////////////////////////////
-					
-					//start the client thread
-					sync.unlock(&server.mutex);
-					
-					log.debugf("starting server side client recive thread");
-					thread.start(new_client.recive_thread);
-				} 
+				free(client_user_data);
+				continue;
 			}
+			
+			/////////// get an index for the client ///////////
+			log.infof("A new client connected, serving on : %v", client_user_data.name);
+			
+			/////////// setup client thread ///////////
+			assert(net.set_blocking(client_user_data.socket, true) == nil); //We want it to be blocking, since we have 1 thread per client.
+			//assert(net.set_option(base.sock, .Keep_Alive, true) == nil);
+			//TODO a timeout is needed (and maybe keep alive settings?)
+			
+			ssc := network.push_connect_server(server, user_data.interface_handle, client_user_data);
+
+			client_user_data.recive_thread = thread.create(server_side_client_recive_loop);
+			client_user_data.recive_thread.user_args[0] = server
+			client_user_data.recive_thread.user_args[1] = ssc
+			client_user_data.recive_thread.user_args[2] = user_data
+			client_user_data.recive_thread.user_args[3] = client_user_data
+			
+			//start the client thread
+			log.debugf("starting server side client recive thread");
+			thread.start(client_user_data.recive_thread);
 
 			free_all(context.temp_allocator);
-		}
-		
-		switch accpector in server.accpector_interface {
-			
-			case net.TCP_Socket: {
-				net.close(accpector);
-			}
 		}
 		
 		log.debugf("Thread acceptor stopped and closed");
@@ -201,157 +257,14 @@ server_start_accepting :: proc (server : ^Server, thread_logger : Maybe(log.Logg
 	}
 
 	///////////////////////////////
-
-	sla := new(Server_logger_allocator);
-	sla^ = Server_logger_allocator {
-		server,
-		thread_logger,
-		thread_allocator,
-	}
-
-	server.acceptor_thread = thread.create(acceptor_loop);
-	server.acceptor_thread.data = sla;
+	
+	user_data.acceptor_thread = thread.create(acceptor_loop);
+	user_data.acceptor_thread.user_args[0] = server;
+	user_data.acceptor_thread.user_args[1] = user_data;
 	
 	log.infof("Starting thread acceptor");
-	thread.start(server.acceptor_thread);
+	thread.start(user_data.acceptor_thread);
+
+	return .ok;
 }
 
-//Stop accepecting and recving new clients and messages from clients (disconnects all clients), there might still be unhandeled messages, which can be handled before server_destroy.
-@(require_results)
-server_close :: proc(server : ^Server) -> Error {
-	
-	server_begin_handle_events(server);
-	for id, c in server.clients {
-		server_disconnect_client(server, id); //this will NOT join the client thread
-	}
-	server_end_handle_events(server);
-	
-	server.should_close = true;
-	
-	switch interface in server.accpector_interface {
-		case net.TCP_Socket: {
-			net.shutdown(interface, .Both);
-			net.close(interface);
-		}
-	}
-
-	thread.destroy(server.acceptor_thread); //also joins
-
-	return nil
-}
-
-//Free allocations
-server_destroy :: proc(server : ^Server) {
-
-	switch acceptor in server.accpector_interface {
-		case net.TCP_Socket: {
-			//TODO
-		}
-	}
-	
-	queue.destroy(&server.events);
-	clean_up_events(&server.to_clean, _server_destroy_client);
-	delete(server.to_clean);
-
-	assert(len(server.clients) == 0);
-	delete(server.clients);
-
-	delete_commands(&server.params);
-
-	free(server);
-}
-
-
-
-server_begin_handle_events :: proc (server : ^Server, loc := #caller_location) {
-	assert(server.handeling_events == false, "you must call server_end_handle_commands before calling server_begin_handle_commands twice", loc);
-	sync.lock(&server.mutex);
-	server.handeling_events = true;
-}
-
-@(require_results)
-server_get_next_event :: proc (server : ^Server, loc := #caller_location) -> (event : Event, done : bool) {
-	assert(server.handeling_events == true, "you must call begin_handle_commands first", loc)
-
-	if queue.len(server.events) == 0 {
-		return {}, true;
-	}
-
-	e := queue.pop_front(&server.events);
-	append(&server.to_clean, e);
-	
-	return e, false;
-}
-
-server_end_handle_events :: proc (server : ^Server, loc := #caller_location) {
-	assert(server.handeling_events == true, "you must call server_begin_handle_commands before calling server_end_handle_commands", loc);	
-	server.handeling_events = false;
-	sync.unlock(&server.mutex);
-
-	clean_up_events(&server.to_clean, _server_destroy_client, loc);
-}
-
-@(require_results)
-server_send :: proc (server : ^Server, client : ^Server_side_client, value : any, loc := #caller_location) -> (err : Error) {
-	
-	switch base in client.interface {
-		case Client_tcp_base: {
-			return send_tcp_message_commands(base.sock, server.params, value, loc);
-		}
-		case: {
-			unreachable()
-		}
-	}
-	
-	unreachable();
-}
-
-//send to all clients
-send_broadcast :: proc (server : ^Server, value : any, loc := #caller_location) {
-	for _, client  in server.clients {
-		_ = server_send(server, client, value, loc);
-	}
-}
-
-//Will disconnect and allow one to handle the remaining messages
-server_disconnect_client :: proc (server : ^Server, client_id : Client_id_type, loc := #caller_location) {
-	
-	assert(server.handeling_events == true, "you must call begin_handle_commands first", loc)
-	fmt.assertf(client_id in server.clients, "Not a valid client id : %v", client_id, loc = loc);
-	
-	client := server.clients[client_id];
-	
-	switch &base in client.interface {
-		case Client_tcp_base: {
-			log.warn("closing socket server side");
-			base.should_close = true;
-			net.shutdown(base.sock, .Both);
-			net.close(base.sock);
-			log.error("shutting down the server side client");
-		}
-		case: {
-			//log.error("shutting down the server side client");
-			unreachable();
-		}
-	}
-	
-	delete_key(&server.clients, client_id);
-}
-
-@(private)
-_server_destroy_client :: proc(client : rawptr) {
-	client : ^Server_side_client = auto_cast client;
-	
-	thread.destroy(client.recive_thread); //also joins
-	
-	switch &base in client.interface {
-		case Client_tcp_base: {
-			destroy_tcp_base(&base);
-		}
-		case: {
-			unreachable();
-		}
-	}
-
-	free(client);
-}

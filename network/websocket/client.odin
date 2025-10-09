@@ -45,22 +45,9 @@ Data :: struct {
 @(private="file")
 context_to_data : map[libws.Ws]^Data;
 
-//Shallow copy
-@(require_results)
-reverse_map :: proc (to_reverse : map[$A]$B) -> map[B]A {
-
-	reversed := make(map[B]A);
-
-	for k, v in to_reverse {
-		reversed[v] = k
-	}
-
-	return reversed;
-}
-
 // example client_interface("localhost", 80, "/websocket/1234")
 @(require_results)
-client_interface :: proc (commands : map[u32]typeid, address : string, #any_int port : c.int, path : string, send_binary := true, loc := #caller_location) -> network.Client_interface {
+client_interface :: proc (commands : map[i32]typeid, address : string, #any_int port : c.int, path : string, send_binary := true, loc := #caller_location) -> network.Client_interface {
 	assert_contextless(websocket_allocator != {}, "you must init the library first", loc);
 	context = restore_context();
 	
@@ -120,7 +107,7 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		return 0;
 	}
 	
-	on_connect :: proc (client : ^network.Client, user_data : rawptr) -> (network.Error) {
+	on_connect :: proc "contextless" (client : ^network.Client, user_data : rawptr) -> (network.Error) {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
 
@@ -146,11 +133,12 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		return .ok;
 	}
 
-	on_send :: proc (client : ^network.Client, user_data : rawptr, data : any) -> network.Error {
+	on_send :: proc "contextless" (client : ^network.Client, user_data : rawptr, data : any) -> network.Error {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
 
 		arr, err := network.any_to_array(user_data.from_type, data);
+		defer delete(arr);
 
 		if err != nil {
 			return .serialize_error;
@@ -162,7 +150,7 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		return .ok;
 	}
 
-	on_disconnect :: proc (client : ^network.Client, user_data : rawptr) -> network.Error {
+	on_disconnect :: proc "contextless" (client : ^network.Client, user_data : rawptr) -> network.Error {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
 
@@ -170,7 +158,7 @@ client_interface :: proc (commands : map[u32]typeid, address : string, #any_int 
 		return .ok;
 	}
 
-	on_destroy :: proc (client : ^network.Client, user_data : rawptr) {
+	on_destroy :: proc "contextless" (client : ^network.Client, user_data : rawptr) {
 		context = restore_context();
 		//todo clean up
 	}

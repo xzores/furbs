@@ -22,7 +22,7 @@ import "base:runtime"
 ///////////////////////// SERVER /////////////////////////
 
 @(require_results)
-push_connect_server :: proc (server : ^Server, inteface : Interface_handle, user_data : rawptr) -> ^Server_side_client {
+push_connect_server :: proc (server : ^Server, inteface : Interface_handle, client_data : rawptr) -> ^Server_side_client {
 	sync.guard(&server.mutex);
 	
 	assert(inteface in server.interfaces, "invalid inteface");
@@ -30,7 +30,7 @@ push_connect_server :: proc (server : ^Server, inteface : Interface_handle, user
 	new_client := new(Server_side_client);
 	new_client^ = {
 		inteface,
-		user_data
+		client_data
 	}
 
 	server.clients[new_client] = {};
@@ -52,8 +52,7 @@ push_error_server :: proc (server : ^Server, client : ^Server_side_client, error
 
 push_disconnect_server :: proc (server : ^Server, client : ^Server_side_client) {
 	sync.guard(&server.mutex);
-	assert(client in server.clients);
-	delete_key(&server.clients, client);
+	queue.append(&server.events, Event{client, time.now(), 0, Event_disconnected{}});
 }
 
 
@@ -63,6 +62,7 @@ push_disconnect_server :: proc (server : ^Server, client : ^Server_side_client) 
 push_connect_client :: proc (client : ^Client) {
 	sync.guard(&client.mutex);
 	queue.append(&client.events, Event{client, time.now(), 0, Event_connected{}});
+	log.infof("Event_connected, len(client.events) : %v", queue.len(client.events));
 }
 
 push_msg_client :: proc (client : ^Client, value : any, free_proc : proc (value : any, data : rawptr), backing_data : rawptr) {
