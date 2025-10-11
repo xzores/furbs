@@ -300,7 +300,7 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 	parent := s.panel_stack[len(s.panel_stack) - 1]
 	s_state : Splitter_state;
 	
-	//the first time the window is found
+	//the first time the split is found
 	{
 		_s := get_state(s, uid);
 		if _s == nil {
@@ -320,7 +320,7 @@ begin_split_panel :: proc (s : ^State, ratios : []f32, dir : Split_dir, flags : 
 			panic("The was not a window last frame");
 		}
 		
-		if !(.allow_resize in flags) {
+		if !(.allow_resize in flags) || _s == nil {
 			for &p, i in s_state.procentages {
 				p = ratios[i] / total_ratios;
 			}

@@ -157,7 +157,12 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 		glfw.WindowHint(glfw.OPENGL_DEBUG_CONTEXT, glfw.TRUE);
 	}
 	
+
 	if desc, ok := window_desc.?; ok {
+		if desc.hide {
+			glfw.WindowHint(glfw.VISIBLE, glfw.FALSE);  // Make the window invisible
+		}
+
 		assert(desc.resize_behavior == .allow_resize || desc.resize_behavior == .dont_allow_resize, "when calling init with a window descriptor, the resize_behavior must be .resize_backbuffer or .dont_allow", loc);
 
 		if desc.antialiasing != .none {
@@ -171,6 +176,8 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 		state.owner_context = window.glfw_window;
 		state.owner_gl_states = window.gl_states
 		state.main_window = window;
+
+		glfw.WindowHint(glfw.VISIBLE, glfw.TRUE);  // Reset to default state (shown on create)
 	}
 	else {
 		// Create a dummy window for context sharing
@@ -364,14 +371,14 @@ begin_frame :: proc() {
 
 	for w in &state.active_windows {
 		
-		sw, sh := window_get_size(w);
+		size := window_get_size(w);
 		
-		if w.framebuffer.width != sw || w.framebuffer.height != sh {
+		if w.framebuffer.width != size[0] || w.framebuffer.height != size[1] {
 			frame_buffer_destroy(w.framebuffer);
 			render_buffer, ok := w.framebuffer.color_attachments[0].(Color_render_buffer);
 			assert(ok == true, "window.framebuffer.color_format is nil");
-			w.framebuffer = frame_buffer_make_render_buffers({render_buffer.format}, sw, sh, w.framebuffer.samples, w.framebuffer.depth_format);
-			w.width, w.height = sw, sh;
+			w.framebuffer = frame_buffer_make_render_buffers({render_buffer.format}, size[0], size[1], w.framebuffer.samples, w.framebuffer.depth_format);
+			w.width, w.height = size[0], size[1];
 			
 			_make_context_current(w);
 			gl.delete_frame_buffer(w.context_framebuffer.id);
@@ -382,7 +389,8 @@ begin_frame :: proc() {
 	}
 	
 	if state.main_window != nil {
-		state.main_window.width, state.main_window.height = window_get_size(state.main_window);
+		size := window_get_size(state.main_window)
+		state.main_window.width, state.main_window.height = size[0], size[1];
 	}
 
 	input_begin();
@@ -416,11 +424,9 @@ end_frame :: proc(loc := #caller_location) {
 
 	for w in state.active_windows {
 		_make_context_current(w);
-		
-		dst_width, dst_height : i32;
 
-		dst_width, dst_height = window_get_size(w);
-		gl.blit_fbo_color_to_screen(w.context_framebuffer.id, 0, 0, 0, w.framebuffer.width, w.framebuffer.height, 0, 0, dst_width, dst_height, true);
+		size := window_get_size(w);
+		gl.blit_fbo_color_to_screen(w.context_framebuffer.id, 0, 0, 0, w.framebuffer.width, w.framebuffer.height, 0, 0, size[0], size[1], true);
 
 		_swap_buffers(loc, w.glfw_window);
 	}

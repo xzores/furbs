@@ -712,7 +712,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 			fmt.assertf(!(u_name in texture_names), "The uniform: %v, is both a texture and a uniform, it should not be both", u_name);
 			value := uniform_names[u_name];
 			shader.uniform_locations[value] = uniform;
-			log.debugf("shader contains uniform : %v : %#v\n", u_name, uniform);
+			//log.debugf("shader contains uniform : %v : %#v\n", u_name, uniform);
 		}
 		else if (u_name in texture_names) {
 			fmt.assertf(is_uniform_type_texture(uniform.uniform_type), "The texture: %v is not a texture, but a %v", u_name, uniform.uniform_type);
@@ -721,7 +721,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 			gl.bind_shader_program(shader_id);
 			glgl.Uniform1i(uniform.location, cast(i32)value); //The uniform will always be bound to this texture slot. Static assignment.
 			gl.unbind_shader_program();
-			log.debugf("shader contains texture uniform : %v : %#v\n", u_name, uniform);
+			//log.debugf("shader contains texture uniform : %v : %#v\n", u_name, uniform);
 		}
 		else {
 			free(shader);

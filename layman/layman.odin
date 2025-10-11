@@ -55,7 +55,6 @@ Rect_type :: enum {
 	menu_item_front_border,
 
 	split_panel_splitter,
-	
 }
 
 Text_type :: enum {
@@ -126,6 +125,13 @@ Command :: union {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
+
+//TODO, i need to be able to specify a min, max size in pixel or ratio and so on, and i should target the following:
+//px	//pixels, easy
+//%, //unit size, will be screen-size independent, but might look bad for thin lines which dont align with the pixels.
+//em, //text size, not sure how this is usefull
+//vw or vh ratio, //like take up 100% of the screen width, usefull for some elements. This should likely be container width, not screen.
+//auto/fit-content //this i am not sure how i would implement/use
 
 Panel :: struct {
 	position : [2]f32, //in relation to the parent panel
@@ -986,14 +992,16 @@ do_offset :: proc (s : ^State, to_offset : [2]f32) -> [2]f32 {
 	
 	res : [2]f32 = p.current_offset;
 	
-	where_append_ver:: proc (s : ^State, p : ^Panel, to_offset : [2]f32) -> (new_offset : [2]f32, space_occ : [4]f32) {
+	/*
+	where_append_ver :: proc (s : ^State, p : ^Panel, to_offset : [2]f32) -> (new_offset : [2]f32, space_occ : [4]f32) {
 		
 	}
 	
-	where_append_hor:: proc (s : ^State, p : ^Panel, to_offset : [2]f32) -> (new_offset : [2]f32, space_occ : [4]f32) {
+	where_append_hor :: proc (s : ^State, p : ^Panel, to_offset : [2]f32) -> (new_offset : [2]f32, space_occ : [4]f32) {
 		
 	}
-	
+	*/
+
 	do_append_hor :: proc (s : ^State, p : ^Panel, to_offset : [2]f32, is_alternative : bool) {
 		padding : f32; 
 	

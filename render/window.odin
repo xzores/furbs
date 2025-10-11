@@ -1,5 +1,6 @@
 package render;
 
+import "core:unicode/utf16"
 import "core:fmt"
 import "base:runtime"
 import "core:slice"
@@ -163,6 +164,7 @@ Window_desc :: struct {
 	title : string,
 	resize_behavior : Resize_behavior,
 	antialiasing : Antialiasing,
+	hide : bool,
 }
 
 Window :: struct {
@@ -387,8 +389,8 @@ window_set_fullscreen :: proc(window : ^Window, mode : Fullscreen_mode, monitor 
 	
 	// Get the position of the window
 	xpos, ypos := glfw.GetWindowPos(window.glfw_window);
-	ww, wh := window_get_size(window);
-
+	ww, wh := glfw.GetWindowPos(window.glfw_window);
+	
 	monitor := window_get_monitor(window);
 	
 	if monitor == nil {
@@ -487,25 +489,26 @@ window_is_focus :: proc "contextless" (window : ^Window) -> bool {
 	return state.window_in_focus == window;
 }
 
-window_set_position :: proc "contextless" (window : ^Window, x, y : i32) {
-	glfw.SetWindowPos(window.glfw_window, x, y);
+window_set_position :: proc "contextless" (window : ^Window, pos : [2]i32) {
+	glfw.SetWindowPos(window.glfw_window, pos.x, pos.y);
 }
 
-window_get_position :: proc "contextless" (window : ^Window) -> (x, y : i32) {
-	return glfw.GetWindowPos(window.glfw_window);
+window_get_position :: proc "contextless" (window : ^Window) -> [2]i32 {
+	x,y := glfw.GetWindowPos(window.glfw_window)
+	return {x,y};
 }
 
 window_is_fullscreen :: proc "contextless" (window : ^Window) -> (fullscreen : Fullscreen_mode) {
 	return window.current_fullscreen;
 }
 
-window_set_size :: proc "contextless" (window : ^Window, w, h : i32) {
-	glfw.SetWindowSize(window.glfw_window, w, h);
+window_set_size :: proc "contextless" (window : ^Window, size : [2]i32) {
+	glfw.SetWindowSize(window.glfw_window, size[0], size[1]);
 }
 
-window_get_size :: proc "contextless" (window : ^Window, loc := #caller_location) -> (w, h : i32) {
+window_get_size :: proc "contextless" (window : ^Window, loc := #caller_location) -> [2]i32 {
 
-	w, h = glfw.GetFramebufferSize(window.glfw_window);
+	w, h := glfw.GetFramebufferSize(window.glfw_window);
 	
 	if w == 0 {
 		w = window.width;
@@ -514,7 +517,7 @@ window_get_size :: proc "contextless" (window : ^Window, loc := #caller_location
 		h = window.height;
 	}
 
-	return;
+	return {w,h};
 }
 
 window_set_mouse_mode :: proc "contextless" (window : ^Window, mouse_mode : Mouse_mode, loc := #caller_location) {
@@ -552,6 +555,41 @@ window_set_floating :: proc "contextless" (window : ^Window, value : bool) {
 window_set_focus_on_show :: proc "contextless" (window : ^Window, value : bool) {
 	glfw.SetWindowAttrib(window.glfw_window, glfw.FOCUS_ON_SHOW, auto_cast value);
 } 
+
+//This must be called while the window is hidden
+show_window_on_taskbar :: proc "contextless" (window: ^Window, value: bool) {
+    
+	when ODIN_OS == .Windows {
+		hwnd := glfw.GetWin32Window(window.glfw_window);
+		ex_style := win32.GetWindowLongPtrW(hwnd, win32.GWL_EXSTYLE);
+
+		if value {
+			// Show on taskbar → remove TOOLWINDOW, add APPWINDOW
+			ex_style &= cast(win32.LONG_PTR)~win32.WS_EX_TOOLWINDOW;
+			ex_style |= cast(win32.LONG_PTR)win32.WS_EX_APPWINDOW;
+		} else {
+			// Hide from taskbar → remove APPWINDOW, add TOOLWINDOW
+			ex_style &= cast(win32.LONG_PTR)~win32.WS_EX_APPWINDOW;
+			ex_style |= cast(win32.LONG_PTR)win32.WS_EX_TOOLWINDOW;
+		}
+
+		win32.SetWindowLongPtrW(hwnd, win32.GWL_EXSTYLE, cast(win32.LONG_PTR)win32.WS_EX_TOOLWINDOW);
+	}
+	else {
+		panic("TODO for non-windows");
+	}
+}
+
+window_do_drag :: proc "contextless" (window: ^Window) {
+	when ODIN_OS == .Windows {
+		hwnd := glfw.GetWin32Window(window.glfw_window);
+		win32.ReleaseCapture();  // 1. Release current mouse capture (GLFW has it while not dragging)
+		win32.SendMessageW(hwnd, win32.WM_NCLBUTTONDOWN, win32.HTCAPTION, 0);// 2. Tell Windows to begin a standard title-bar drag
+	}
+	else {
+		panic("TODO for non-windows");
+	}
+}
 
 /////////////////// Cursor stuff ///////////////////
 
@@ -728,7 +766,6 @@ get_mouse_monitor :: proc () -> Monitor_info {
 //handle os error pop-up messages
 
 //Do os explorerer pop-up
-
 
 get_os_bar_size :: proc () -> i32 {
 	when ODIN_OS == .Windows {
