@@ -330,7 +330,7 @@ make_os_window :: proc (
 
     class_name := utf16_str(class_name_str, context.temp_allocator)
     window_name := utf16_str(window_name_str, context.temp_allocator)
-
+	
     wcex: windows.WNDCLASSEXW
     wcex.cbSize = size_of(windows.WNDCLASSEXW)
     wcex.style = style

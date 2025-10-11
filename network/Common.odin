@@ -35,20 +35,21 @@ Interface_handle :: distinct i32;
 Server_interface :: struct {
 	server_data : rawptr,
 	
-	listen : proc (server : ^Server, interface_handle : Interface_handle, user_data : rawptr) -> Error, //listen data is given by the user who starts it.
-	send : proc (server : ^Server, user_data : rawptr, client : rawptr, data : any) -> Error,
-	disconnect : proc (server : ^Server, user_data : rawptr, client_data : rawptr) -> Error, //disconnect the client forcefully (cannot fail)
-	close : proc (server : ^Server, user_data : rawptr) -> Error, //Must stop accecpting and close all connections
-	destroy : proc (server : ^Server, user_data : rawptr), //removes the interface, the interface must free all its internal data.
+	listen 			: proc "contextless" (server : ^Server, interface_handle : Interface_handle, user_data : rawptr) -> Error, //listen data is given by the user who starts it.
+	send 			: proc "contextless" (server : ^Server, client : ^Server_side_client, user_data : rawptr, client_user_data : rawptr, data : any) -> Error,
+	disconnect 		: proc "contextless" (server : ^Server, client : ^Server_side_client, user_data : rawptr, client_user_data : rawptr) -> Error, //disconnect the client forcefully (cannot fail)
+	destroy_client 	: proc "contextless" (server : ^Server, client : ^Server_side_client, user_data : rawptr, client_user_data : rawptr), //disconnect the client forcefully (cannot fail)
+	close 			: proc "contextless" (server : ^Server, user_data : rawptr) -> Error, //Must stop accecpting and close all connections
+	destroy 		: proc "contextless" (server : ^Server, user_data : rawptr), //removes the interface, the interface must free all its internal data.
 }
 
 Client_interface :: struct {
 	client_data : rawptr,
 
-	connect : proc (client : ^Client, user_data : rawptr) -> Error,
-	send : proc (client : ^Client, user_data : rawptr, data : any) -> Error,
-	disconnect : proc (client : ^Client, user_data : rawptr) -> Error,
-	destroy : proc (client : ^Client, user_data : rawptr),
+	connect 	: proc "contextless" (client : ^Client, user_data : rawptr) -> Error,
+	send 		: proc "contextless" (client : ^Client, user_data : rawptr, data : any) -> Error,
+	disconnect 	: proc "contextless" (client : ^Client, user_data : rawptr) -> Error,
+	destroy 	: proc "contextless" (client : ^Client, user_data : rawptr),
 }
 
 Event_connected :: struct {
@@ -85,28 +86,6 @@ Event :: struct {
 	}
 }
 
-destroy_event :: proc (e : Event, loc := #caller_location) {
-	
-	switch b in e.type {
-		case Event_connected: {
-			//nothing to free
-		}
-		case Event_msg: {
-			b.free_proc(b.value, b.backing_data);
-		}
-		case Event_disconnected: {
-			//nothing to free
-
-		}
-		case Event_error: {
-			//nothing to free
-		}
-		case: {
-			unreachable();
-		}
-	}
-}
-
 Error :: enum {
 	ok,
 	no_such_client,
@@ -114,6 +93,8 @@ Error :: enum {
 	already_open,
 	not_open,
 	refused,
+	endpoint_error,
+	dns_error,
 	network_error,
 	access_error,
 	invalid_parameter,
@@ -122,23 +103,6 @@ Error :: enum {
 	corrupted_stream,
 	other,
 	unknown,
-}
-
-clean_up_events :: proc (to_clean : ^[dynamic]Event, loc := #caller_location) {
-	
-	for e in to_clean {
-		#partial switch b in e.type {
-			case Event_msg: {
-				//nothing to free
-				if b.free_proc != nil {
-					b.free_proc(b.value, b.backing_data);
-				}
-			}
-		}
-		destroy_event(e);
-	}
-
-	clear(to_clean);
 }
 
 begin_handle_events :: proc {client_begin_handle_events, server_begin_handle_events}

@@ -45,3 +45,16 @@ restore_context :: proc "contextless" () -> runtime.Context {
 	
 	return context;
 }
+
+//Shallow copy
+@(private, require_results)
+reverse_map :: proc (to_reverse : map[$A]$B) -> map[B]A {
+
+	reversed := make(map[B]A);
+
+	for k, v in to_reverse {
+		reversed[v] = k
+	}
+
+	return reversed;
+}

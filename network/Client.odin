@@ -13,8 +13,8 @@ import "base:runtime"
 import "../utils"
 
 //////////////////////////////////////////////////////////////
-// 				This is a singled threaded API		/		//
-/////////////////////////////////////////////////////////////
+// 				This is a singled threaded API				//
+//////////////////////////////////////////////////////////////
 
 //All members are private
 Client :: struct {
@@ -40,7 +40,7 @@ client_create :: proc (client_interface : Client_interface) -> ^Client {
 		client_i = client_interface,
 		handeling_events = false,
 	}
-
+	
 	queue.init(&client.events);
 	client.to_clean = make([dynamic]Event);
 	
@@ -77,12 +77,23 @@ client_end_handle_events :: proc (client : ^Client, loc := #caller_location) {
 	assert(client.handeling_events == true, "you must call client_begin_handle_events first", loc)	
 	client.handeling_events = false;
 	sync.unlock(&client.event_mutex);
+	
+	for e in client.to_clean {
+		#partial switch b in e.type {
+			case Event_msg: {
+				//nothing to free
+				if b.free_proc != nil {
+					b.free_proc(b.value, b.backing_data);
+				}
+			}
+		}
+	}
 
-	clean_up_events(&client.to_clean); //ahh this is the problem
+	clear(&client.to_clean);
 }
 
 @(require_results)
-client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sleep_time := 100 * time.Microsecond, loc := #caller_location) -> (timedout : bool) { 
+client_wait_for_event :: proc (client : ^Client, timeout := 5 * time.Second, sleep_time := 100 * time.Microsecond, loc := #caller_location) -> (timedout : bool) { 
 	
 	start_time := time.now();
 	
@@ -98,18 +109,24 @@ client_wait_for_event :: proc (client : ^Client, timeout := 3 * time.Second, sle
 		time.sleep(sleep_time);
 	}
 
-	log.warnf("client_wait_for_event timed out");
+	log.warnf("client_wait_for_event timed out", location = loc);
 	return true;
 }
 
 @(require_results)
 client_send :: proc (client : ^Client, value : any, loc := #caller_location) -> (err : Error) {
-	client.send(client, client.client_data, value);
-	unreachable();
+	return client.send(client, client.client_data, value);
 }
 
 //Will disconnect, but there might still be unhanded commands in the buffer these can be handled before calling destroy
 @(require_results)
 client_disconnect :: proc (client : ^Client) -> (err : Error) {
 	return client.disconnect(client, client.client_data);
+}
+
+client_destroy :: proc (client : ^Client) {
+	client.destroy(client, client.client_data);
+	queue.destroy(&client.events);
+	delete(client.to_clean);
+	free(client);
 }

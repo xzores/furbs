@@ -370,15 +370,15 @@ deserialize_from_bytes_any :: proc(as_type : typeid, data : []u8, alloc : mem.Al
 	
 	context.allocator = mem.panic_allocator();
 	
-	assert(len(data) >= size_of(Header_size_type), "not enough data for header");
+	fmt.assertf(len(data) >= size_of(Header_size_type), "not enough data for header, data is %v long, but should be at least %v", len(data), size_of(Header_size_type), loc = loc);
 	header : Header_size_type = (cast(^Header_size_type)raw_data(data))^;
-	assert(len(data) == auto_cast header, "length of data does not match header size");
+	fmt.assertf(len(data) == auto_cast header, "length of data does not match header size %v (data given) vs %v(data required)", len(data), header, loc = loc);
 	used_bytes : Header_size_type = size_of(Header_size_type);
 	
 	if reflect.size_of_typeid(as_type) != 0 {
 		ptr, alloc_err := mem.alloc(reflect.size_of_typeid(as_type), mem.DEFAULT_ALIGNMENT, alloc, loc);
 		fmt.assertf(alloc_err == nil, "failed to allocate : %v", alloc_err);
-		log.debugf("the pointer was : %p for %v", ptr, type_info_of(as_type));
+		//log.debugf("the pointer was : %p for %v", ptr, type_info_of(as_type));
 		err = _deserialize_from_bytes(as_type, data, &used_bytes, ptr, alloc, loc);
 		if err != nil {
 			return {}, err;

@@ -51,7 +51,7 @@ Data :: struct {
 // example client_interface("localhost", 80, "/websocket/1234")¨
 //iface = nil means listen on everything, localhost can be "localhost" or "127.0.0.1"
 @(require_results)
-server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int port : c.int, default_binary := true, loc := #caller_location) -> network.Server_interface {
+server_interface :: proc (commands : map[i32]typeid, iface : string, #any_int port : c.int, default_binary := true, loc := #caller_location) -> network.Server_interface {
 	assert_contextless(websocket_allocator != {}, "you must init the library first");
 	context = restore_context();
 	
@@ -115,7 +115,7 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		return 0;
 	}
 
-	on_listen :: proc (server : ^network.Server, interface_handle : network.Interface_handle, user_data : rawptr) -> network.Error {
+	on_listen :: proc "contextless" (server : ^network.Server, interface_handle : network.Interface_handle, user_data : rawptr) -> network.Error {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
 		sync.guard(&user_data.mutex);
@@ -188,14 +188,15 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		return .ok;
 	}
 
-	on_send :: proc (server : ^network.Server, user_data : rawptr, ws_client : rawptr, data : any) -> network.Error {
+	on_send :: proc "contextless" (server : ^network.Server, client : ^network.Server_side_client, user_data : rawptr, ws_client : rawptr, data : any) -> network.Error {
 		user_data := cast(^Data)user_data;
 		ws_client := cast(libws.Ws_client)ws_client;
 		context = restore_context();
 		sync.guard(&user_data.mutex);
 
 		arr, err := network.any_to_array(user_data.from_type, data);
-
+		defer delete(arr);
+		
 		if err != nil {
 			return .serialize_error;
 		}
@@ -206,7 +207,7 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		return .ok;
 	}
 
-	on_disconnect :: proc (server : ^network.Server, user_data : rawptr, ws_client : rawptr) -> network.Error {
+	on_disconnect :: proc "contextless" (server : ^network.Server, client : ^network.Server_side_client, user_data : rawptr, ws_client : rawptr) -> network.Error {
 		user_data := cast(^Data)user_data;
 		ws_client := cast(libws.Ws_client)ws_client;
 		context = restore_context();
@@ -217,7 +218,7 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		return .ok;
 	}
 
-	on_close :: proc (server : ^network.Server, user_data : rawptr) -> network.Error {
+	on_close :: proc "contextless" (server : ^network.Server, user_data : rawptr) -> network.Error {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
 		sync.guard(&user_data.mutex);
@@ -227,7 +228,7 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		return .ok;
 	}
 
-	on_destroy :: proc (server : ^network.Server, user_data : rawptr) {
+	on_destroy :: proc "contextless" (server : ^network.Server, user_data : rawptr) {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
 		sync.guard(&user_data.mutex);
@@ -270,6 +271,7 @@ server_interface :: proc (commands : map[u32]typeid, iface : string, #any_int po
 		on_listen, //listen data is given by the user who starts it.
 		on_send,
 		on_disconnect, //disconnect the client forcefully (cannot fail)
+		nil, //TODO
 		on_close, //Must stop accecpting and close all connections
 		on_destroy, //removes the interface, the interface must free all its internal data.
 	}

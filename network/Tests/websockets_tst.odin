@@ -11,15 +11,15 @@ import "core:sync"
 import "core:thread"
 
 import "../websocket"
+import "../tcp"
 import network ".."
 
 import "core:container/queue"
 import "../../utils" 
 
-my_logger : log.Logger;
-my_alloc : mem.Allocator;
 should_close_server : bool;
 
+/*
 main :: proc () {
 	
 	my_logger = utils.create_console_logger(.Debug);
@@ -47,15 +47,15 @@ main :: proc () {
 		test_main();
 	}
 }
+*/
 
-Default_game_port : int = 26604;
-Default_game_ip := "127.0.0.1"; //TODO should we use net.Address_Family.IP4
-
+/*
 test_main :: proc () {
 
-	websocket.init();
+	tcp.init(context.allocator, context.logger);
+	defer tcp.destroy();
 	
-	client := network.client_create(websocket.client_interface(commands_map, "ws.postman-echo.com", 80, "/raw"));
+	client := network.client_create(tcp.client_interface(commands_map, "127.0.0.1:1832", .ipv4_only));
 	assert(network.client_connect(client) == nil);
 
 	// Connected
@@ -76,7 +76,7 @@ test_main :: proc () {
 		assert(!tmout1)
 		network.begin_handle_events(client)
 		defer network.end_handle_events(client)
-
+vis
 		e1, _ := network.get_next_event(client)
 		msg1, ok1 := e1.type.(network.Event_msg)
 		assert(ok1)
@@ -251,173 +251,4 @@ test_main_2 :: proc () {
 		time.sleep(1 * time.Millisecond);
 	}
 }
-
-
-Hello :: struct {};
-
-Hello_from_server :: struct {};
-
-Version_check :: struct {
-	major_version : u16,
-	minor_version : u16,
-	patch : u16,
-};
-
-Version_check_passed :: struct { was_passed : bool };
-
-Chat_message :: struct { 
-	text : string,
-};
-
-Disconnect_me :: struct{};
-
-commands_map : map[network.Message_id]typeid = {
-	
-	//random number to make it less likely a wrong connection will be accepted.
-	14732 = Hello,
-	42034 = Hello_from_server,
-
-	//We start initiliztion stuff from id 100 and up
-	100 = Version_check,
-	101 = Version_check_passed,
-
-	200 = Chat_message,
-
-	500 = Disconnect_me,
-}
-
-server_handle_func : thread.Thread_Proc : proc(t : ^thread.Thread) {
-	context.logger = my_logger;
-	context.allocator = my_alloc;
-
-	/////////// Server ///////////
-	server := network.server_create();
-	network.register_interface(server, websocket.server_interface(commands_map, Default_game_ip, Default_game_port));
-	network.server_start_accepting(server);
-	
-	log.infof("server handle thread open on %v:%v", Default_game_ip, Default_game_port); 
-
-	connected_clients : map[^network.Server_side_client]struct{};
-	defer delete(connected_clients);
-
-	server_handle_events :: proc (server : ^network.Server, connected_clients : ^map[^network.Server_side_client]struct{}) {
-
-		network.server_begin_handle_events(server);
-			
-			e, done := network.server_get_next_event(server);
-			for !done {
-				defer e, done = network.server_get_next_event(server); //happens last, so for the next one
-				assert(e.type != nil);
-				
-				client := e.client.(^network.Server_side_client);
-				
-				#partial switch event in e.type {
-					case network.Event_connected: {
-						log.infof("connected client");
-						connected_clients[client] = {};
-					}
-					case network.Event_msg: {
-						switch msg in event.value {
-							case Hello: {
-								assert(network.server_send(server, client, Hello_from_server{}) == nil);
-								assert(network.server_send(server, client, Hello_from_server{}) == nil);
-								assert(network.server_send(server, client, Hello_from_server{}) == nil);
-							}
-							case Version_check: {
-								assert(msg.major_version 	== 1);
-								assert(msg.minor_version 	== 2);
-								assert(msg.patch 			== 3);
-								assert(network.server_send(server, client, Version_check_passed{true}) == nil);
-							}
-							case Chat_message: {
-								log.info("recived chat message from client");
-							}
-							case Disconnect_me: {
-								log.info("Client asked to be disconnected, doint that now");
-								network.server_disconnect_client(server, client);
-							}
-							case: {
-								unreachable()
-							}
-						}
-					}
-					case network.Event_disconnected: {
-						log.infof("disconnected client");
-						delete_key(connected_clients, client);
-					}
-					case: {
-						panic("TODO Event is not Event_msg");
-					}
-				}
-			}
-
-		network.server_end_handle_events(server);
-	}
-
-	for !should_close_server {
-		server_handle_events(server, &connected_clients);
-		time.sleep(1 * time.Millisecond);
-	}
-
-	network.server_close(server)
-
-	for len(connected_clients) != 0 {
-		server_handle_events(server, &connected_clients);
-		time.sleep(1 * time.Millisecond);
-	}
-	
-	network.server_destroy(server);
-
-	assert(len(connected_clients) == 0);
-}
-
-
-
-
-/* 
-//Very simple setup, minimal code example
-//This might failed as we try to conenct to the server before it is garentied to be created...
-@test
-server_and_client_test :: proc (t : ^testing.T) {
-
-	endpoint    := net.Endpoint{net.IP4_Loopback, default_game_port};
-	acceptor_socket, err := net.listen_tcp(endpoint); //TODO Receive_Timeout can be used to set a timeout for accpeting...
-
-	defer net.close(acceptor_socket);
-
-	if err != nil {
-		fmt.printf("Failed to make a UDP socket, error:", err);
-		panic("Unable to bind to port");
-	}
-
-	fmt.printf("Made UDP socket on %v\n", endpoint.port);
-	
-	client_socket, cerr := net.dial_tcp(endpoint);
-	if cerr != nil {
-		fmt.printf("Failed to connect to server, error:", cerr);
-		panic("Unable to bind to port");
-	}
-
-	new_ss_client_socket, _, sscerr := net.accept_tcp(acceptor_socket);
-	if sscerr != nil {
-		fmt.printf("Failed to make a UDP socket, error:", sscerr);
-		panic("Unable to bind to port");
-	}
-
-	fmt.printf("Succesfully accepted a client %v\n", endpoint.port);
-
-	my_bytes : []u8 = {20, 100, 150};
-	net.send(client_socket, my_bytes);
-
-	recv_bytes : [20]u8;
-	recv_butes_cnt, recv_err := net.recv(new_ss_client_socket, recv_bytes[:]);
-	if recv_err != nil {
-		panic("Failed to recive bytes from client");
-	}
-
-	fmt.printf("Succesfully recived bytes from client, bytes recived : %v, bytes : %v\n", recv_butes_cnt, recv_bytes);
-}
 */
-
-
-

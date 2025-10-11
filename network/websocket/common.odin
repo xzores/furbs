@@ -37,9 +37,9 @@ recive_fragment :: proc (from_type : map[typeid]network.Message_id, to_type : ma
 		is_binary = auto_cast lws.frame_is_binary(wsi);
 
 		if is_binary {
-			valid, _, value, free_proc, backing_data := network.array_to_any(to_type, message_buffer[:]);
+			status, _, value, free_proc, backing_data := network.array_to_any(to_type, message_buffer[:]);
 			
-			if valid {
+			if status == .finished {
 				return true, value, free_proc, backing_data, is_binary, nil;
 			}
 			else {
