@@ -1,21 +1,12 @@
 package furbs_network_tcp_interface
 
-import "core:debug/pe"
-import "core:math"
 import "base:runtime"
 
 import "core:net"
-import "core:time"
-import "core:container/queue"
 import "core:thread"
-import "core:mem"
-import vmem "core:mem/virtual"
 import "core:fmt"
 import "core:log"
-import "core:reflect"
-import "core:sync"
 
-import "../../serialize"
 import network ".."
 
 @(private="file")
@@ -48,7 +39,7 @@ Data_client :: struct {
 }
 
 @(require_results)
-server_interface :: proc "contextless" (commands_map : map[network.Message_id]typeid, endpoint : string, use_binary := true, loc := #caller_location) -> (network.Server_interface) {
+server_interface :: proc "contextless" (commands_map : map[network.Message_id]typeid, endpoint : union{string, net.Host_Or_Endpoint}, use_binary := true, loc := #caller_location) -> (network.Server_interface) {
 	assert_contextless(tcp_allocator != {}, "you must init the library first", loc);
 	context = restore_context();
 
@@ -107,9 +98,27 @@ server_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 	ep : net.Endpoint;
 	err : net.Network_Error;
 
-	ep, err = net.resolve_ip4(endpoint);
-	if err != nil {
-		ep, err = net.resolve_ip6(endpoint);
+	switch endpoint in endpoint {
+		case string: {
+			ep, err = net.resolve_ip4(endpoint);
+			if err != nil {
+				ep, err = net.resolve_ip6(endpoint);
+			}
+		}
+		case net.Host_Or_Endpoint: {
+			switch endpoint in endpoint {
+				case net.Host: {
+					endpoint := fmt.tprintf("%v:%v", endpoint.hostname, endpoint.port);
+					ep, err = net.resolve_ip4(endpoint);
+					if err != nil {
+						ep, err = net.resolve_ip6(endpoint);
+					}
+				}
+				case net.Endpoint:{
+					ep = endpoint;
+				}
+			}
+		}
 	}
 	
 	if err != nil {
@@ -176,7 +185,8 @@ on_listen :: proc "contextless" (server : ^network.Server, interface_handle : ne
 	user_data.acceptor_socket, err = net.listen_tcp(user_data.target);
 	
 	if err != nil {
-		panic("Failed setup_acceptor");
+		log.errorf("Failed setup_acceptor, error : %v", err);
+		return .already_open;
 	}
 	
 	log.infof("Succesfully setup acceptor"); 

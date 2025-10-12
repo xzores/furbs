@@ -1,22 +1,12 @@
 package furbs_network_tcp_interface
 
-import "core:unicode/tools"
-import "core:c"
-import "core:math"
 import "base:runtime"
 
 import "core:net"
-import "core:time"
-import "core:container/queue"
 import "core:thread"
-import "core:mem"
-import vmem "core:mem/virtual"
 import "core:fmt"
 import "core:log"
-import "core:reflect"
-import "core:sync"
 
-import "../../serialize"
 import network ".."
 
 @(private="file")
@@ -48,7 +38,7 @@ Ip_mode :: enum  {
 
 //endpoint could be 1.2.3.4:9000 or localhost:2345 or www.google.com
 @(require_results)
-client_interface :: proc "contextless" (commands_map : map[network.Message_id]typeid, endpoint : string, mode : Ip_mode, use_binary := true) -> network.Client_interface {
+client_interface :: proc "contextless" (commands_map : map[network.Message_id]typeid, endpoint : union{string, net.Host_Or_Endpoint}, mode : Ip_mode, use_binary := true) -> network.Client_interface {
 	assert_contextless(tcp_allocator != {}, "you must init the library first");
 	context = restore_context();
 
@@ -153,26 +143,47 @@ client_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 	ep : net.Endpoint;
 	err : net.Network_Error = nil;
 
-	ep4, ep6, port := net.resolve(endpoint);
-	ep = ep4;
+	resolve :: proc (endpoint : string, mode : Ip_mode) -> (ep : net.Endpoint, err : net.Network_Error){
+		ep4, ep6, port := net.resolve(endpoint);
+		ep = ep4;
 
-	switch mode {
-		case .ipv4_only:
-			ep, err = net.resolve_ip4(endpoint);
-		case .ipv6_only:
-			ep, err = net.resolve_ip6(endpoint)
-		case .prefer_ipv4:
-			ep4, ep6, port := net.resolve(endpoint);
-			ep = ep4;
-			if ep4 == {} {
-				ep = ep6;
-			}
-		case .prefer_ipv6:
-			ep4, ep6, err := net.resolve(endpoint);
-			ep = ep6;
-			if ep6 == {} {
+		switch mode {
+			case .ipv4_only:
+				ep, err = net.resolve_ip4(endpoint);
+			case .ipv6_only:
+				ep, err = net.resolve_ip6(endpoint)
+			case .prefer_ipv4:
+				ep4, ep6, port := net.resolve(endpoint);
 				ep = ep4;
+				if ep4 == {} {
+					ep = ep6;
+				}
+			case .prefer_ipv6:
+				ep4, ep6, err := net.resolve(endpoint);
+				ep = ep6;
+				if ep6 == {} {
+					ep = ep4;
+				}
+			
+		}
+		
+		return;
+	}
+
+	switch endpoint in endpoint {
+		case string: {
+			ep, err = resolve(endpoint, mode);
+		}
+		case net.Host_Or_Endpoint: {
+			switch endpoint in endpoint {
+				case net.Host: {
+					ep, err = resolve(fmt.tprintf("%v:%v", endpoint.hostname, endpoint.port), mode);
+				}
+				case net.Endpoint:{
+					ep = endpoint;
+				}
 			}
+		}
 	}
 
 	if err != nil {
