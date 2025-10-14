@@ -9,6 +9,7 @@ import "core:time"
 import "core:log"
 
 import "base:runtime"
+import "../tracy"
 
 //////////////////////////////////////////////////////////////
 // 			This is a multithread threaded API		 		//
@@ -23,6 +24,7 @@ import "base:runtime"
 
 @(require_results)
 push_connect_server :: proc (server : ^Server, inteface : Interface_handle, client_data : rawptr) -> ^Server_side_client {
+	tracy.Zone();
 	sync.guard(&server.mutex);
 	
 	assert(inteface in server.interfaces, "invalid inteface");
@@ -39,18 +41,21 @@ push_connect_server :: proc (server : ^Server, inteface : Interface_handle, clie
 }
 
 push_msg_server :: proc (server : ^Server, client : ^Server_side_client, value : any, free_proc : proc (value : any, data : rawptr), backing_data : rawptr) {
+	tracy.Zone();
 	sync.guard(&server.mutex);
 	assert(client in server.clients);
 	queue.append(&server.events, Event{client, time.now(), 0, Event_msg{value, free_proc, backing_data}});
 }
 
 push_error_server :: proc (server : ^Server, client : ^Server_side_client, error : Error) {
+	tracy.Zone();
 	sync.guard(&server.mutex);
 	assert(client in server.clients);
 	queue.append(&server.events, Event{client, time.now(), 0, Event_error{}});
 }
 
 push_disconnect_server :: proc (server : ^Server, client : ^Server_side_client) {
+	tracy.Zone();
 	sync.guard(&server.mutex);
 	queue.append(&server.events, Event{client, time.now(), 0, Event_disconnected{}});
 }
@@ -60,22 +65,25 @@ push_disconnect_server :: proc (server : ^Server, client : ^Server_side_client) 
 ///////////////////////// CLIENT /////////////////////////
 
 push_connect_client :: proc (client : ^Client) {
+	tracy.Zone();
 	sync.guard(&client.mutex);
 	queue.append(&client.events, Event{client, time.now(), 0, Event_connected{}});
-	log.infof("Event_connected, len(client.events) : %v", queue.len(client.events));
 }
 
 push_msg_client :: proc (client : ^Client, value : any, free_proc : proc (value : any, data : rawptr), backing_data : rawptr) {
+	tracy.Zone();
 	sync.guard(&client.mutex);
 	queue.append(&client.events, Event{client, time.now(), 0, Event_msg{value, free_proc, backing_data}});
 }
 
 push_error_client :: proc (client : ^Client, err : Error) {
+	tracy.Zone();
 	sync.guard(&client.mutex);
 	queue.append(&client.events, Event{client, time.now(), 0, Event_error{err}});
 }
 
 push_disconnect_client :: proc (client : ^Client) {
+	tracy.Zone();
 	sync.guard(&client.mutex);
 	queue.append(&client.events, Event{client, time.now(), 0, Event_disconnected{}});
 }

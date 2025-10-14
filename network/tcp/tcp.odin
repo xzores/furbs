@@ -22,6 +22,7 @@ import "core:slice"
 
 import "../../serialize"
 import network ".."
+import "../../tracy"
 
 //////////////////////////////////////////////////////////////////////
 // 				This is only meant for internal use					//
@@ -71,7 +72,6 @@ tcp_send :: proc (socket : net.TCP_Socket, from_type : map[typeid]network.Messag
 		arr = b.buf[:]
 	}
 	
-	log.debugf("sending json:\n%v", string(arr));
 	bw, e := net.send_tcp(socket, arr);
 	
 	if e != nil {
@@ -104,6 +104,7 @@ U :: union {
 
 @(private)
 recv_tcp_parse_loop :: proc (client : U, socket : net.TCP_Socket, to_type : map[network.Message_id]typeid, should_close : ^bool, parse_binary : bool, init_buffer_size := 1024 * 1024, loc := #caller_location) {
+	tracy.Zone();
 	assert(client != nil);
 	new_data_buffer := make([]u8, init_buffer_size); //The max number of bytes that can be recived at a time (you can still recive messages larger then this)
 	defer delete(new_data_buffer);
@@ -111,7 +112,7 @@ recv_tcp_parse_loop :: proc (client : U, socket : net.TCP_Socket, to_type : map[
 	current_bytes_recv : queue.Queue(u8);
 	queue.init(&current_bytes_recv);
 	defer queue.destroy(&current_bytes_recv);
-	
+
 	for !should_close^ {
 		bytes_recv, err := net.recv(socket, new_data_buffer[:]);
 

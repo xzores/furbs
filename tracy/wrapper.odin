@@ -11,6 +11,9 @@ TRACY_HAS_CALLSTACK :: #config(TRACY_HAS_CALLSTACK, true)
 
 when TRACY_ENABLE {
 	
+	init :: tracy.init
+	destroy :: tracy.destroy
+
 	//Structs
 	SourceLocationData :: tracy.SourceLocationData;
 	ZoneCtx			:: tracy.ZoneCtx;
@@ -19,15 +22,15 @@ when TRACY_ENABLE {
 	// NOTE: These automatically calls ZoneEnd() at end of scope.
 	Zone   :: tracy.Zone
 	ZoneN  :: tracy.ZoneN
-	ZoneC  :: tracy.ZoneC
-	ZoneNC :: tracy.ZoneNC
+	//ZoneC  :: tracy.ZoneC
+	//ZoneNC :: tracy.ZoneNC
 
 	// Dummy aliases to match C API (only difference is the `depth` parameter,
 	// which we declare as optional for the non-S procs.)
 	ZoneS   :: tracy.ZoneS
 	ZoneNS  :: tracy.ZoneNS
-	ZoneCS  :: tracy.ZoneCS
-	ZoneNCS :: tracy.ZoneNCS
+	//ZoneCS  :: tracy.ZoneCS
+	//ZoneNCS :: tracy.ZoneNCS
 
 	ZoneText  :: tracy.ZoneText
 	ZoneName  :: tracy.ZoneName
@@ -88,23 +91,20 @@ when TRACY_ENABLE {
 	//Allocator
 	MakeProfiledAllocator :: tracy.MakeProfiledAllocator
 
-}
-else {
+} else {
 
+	init :: proc() {}
+	destroy :: proc() {}
+	
 	SourceLocationData 		:: struct {};
 	ZoneCtx					:: struct {};
 	TracyPlotFormatEnum		:: struct {};
 	ProfiledAllocatorData 	:: struct {};
 	
-	Zone   :: proc(active := true, depth: i32 = TRACY_CALLSTACK, loc := #caller_location) -> (ctx: ZoneCtx) { return {}; }; 
-	ZoneN  :: proc(name: string, active := true, depth: i32 = TRACY_CALLSTACK, loc := #caller_location) -> (ctx: ZoneCtx) { return {}; };
-	ZoneC  :: proc(color: u32, active := true, depth: i32 = TRACY_CALLSTACK, loc := #caller_location) -> (ctx: ZoneCtx) { return {}; };
-	ZoneNC :: proc(name: string, color: u32, active := true, depth: i32 = TRACY_CALLSTACK, loc := #caller_location) -> (ctx: ZoneCtx) { return {}; }; 
-	
-	ZoneS   :: Zone
-	ZoneNS  :: ZoneN
-	ZoneCS  :: ZoneC
-	ZoneNCS :: ZoneNC
+	Zone   :: proc(active := true, color := [4]u8{}, depth: i32 = TRACY_CALLSTACK, loc := #caller_location) -> (ctx: ZoneCtx) { return {}; }; 
+	ZoneN  :: proc(name: string, active := true, color := [4]u8{}, depth: i32 = TRACY_CALLSTACK, loc := #caller_location) -> (ctx: ZoneCtx) { return {}; };
+	//ZoneC  :: proc(color: u32, active := true, depth: i32 = TRACY_CALLSTACK, loc := #caller_location) -> (ctx: ZoneCtx) { return {}; };
+	//ZoneNC :: proc(name: string, color: u32, active := true, depth: i32 = TRACY_CALLSTACK, loc := #caller_location) -> (ctx: ZoneCtx) { return {}; }; 
 	
 	ZoneText  :: proc(ctx: ZoneCtx, text: string) {}
 	ZoneName  :: proc(ctx: ZoneCtx, name: string) {}

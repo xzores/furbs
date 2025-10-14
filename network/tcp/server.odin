@@ -6,8 +6,10 @@ import "core:net"
 import "core:thread"
 import "core:fmt"
 import "core:log"
+import "core:time"
 
 import network ".."
+import "../../tracy"
 
 @(private="file")
 Data :: struct {
@@ -42,11 +44,13 @@ Data_client :: struct {
 server_interface :: proc "contextless" (commands_map : map[network.Message_id]typeid, endpoint : union{string, net.Host_Or_Endpoint}, use_binary := true, loc := #caller_location) -> (network.Server_interface) {
 	assert_contextless(tcp_allocator != {}, "you must init the library first", loc);
 	context = restore_context();
+	tracy.Zone();
 
 	on_send :: proc "contextless" (server : ^network.Server, client : ^network.Server_side_client, user_data : rawptr, client_user_data : rawptr, data : any) -> network.Error {
 		user_data := cast(^Data)user_data;
 		client_user_data := cast(^Data_client)client_user_data;
 		context = restore_context();
+		tracy.Zone();
 
 		tcp_send(client_user_data.socket, user_data.from_type, data, user_data.use_binary);
 
@@ -57,10 +61,13 @@ server_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 		user_data := cast(^Data)user_data;
 		client_user_data := cast(^Data_client)client_user_data;
 		context = restore_context();
+		tracy.Zone();
 		
-		log.infof("closing socket server side");
+		log.debugf("closing socket %v server side", client_user_data.socket);
 		client_user_data.should_close = true;
 		net.shutdown(client_user_data.socket, .Both);
+		net.close(client_user_data.socket);
+		log.debugf("closed socket %v server side", client_user_data.socket);
 
 		return .ok;
 	}
@@ -69,25 +76,37 @@ server_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 		user_data := cast(^Data)user_data;
 		client_user_data := cast(^Data_client)client_user_data;
 		context = restore_context();
-
+		tracy.Zone();
+		
+		sw : time.Stopwatch;
+		time.stopwatch_start(&sw);
 		thread.destroy(client_user_data.recive_thread);
+		time.stopwatch_stop(&sw)
+		log.debugf("Waited for %v secounds on recive_thread to die", time.duration_seconds(time.stopwatch_duration(sw)));
+
 		free(client_user_data);
 	}
 
 	on_close :: proc "contextless" (server : ^network.Server, user_data : rawptr) -> network.Error {
 		user_data := cast(^Data)user_data;
 		server.should_close = true;
-
 		context = restore_context();
+		tracy.Zone();
+
+		sw : time.Stopwatch;
+		time.stopwatch_start(&sw);
 		net.close(user_data.acceptor_socket);
 		thread.destroy(user_data.acceptor_thread); //also joins
-
+		time.stopwatch_stop(&sw)
+		log.debugf("Waited for %v secounds on recive_thread to die", time.duration_seconds(time.stopwatch_duration(sw)));
+		
 		return nil
 	}
 
 	on_destroy :: proc "contextless" (server : ^network.Server, user_data : rawptr) {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
+		tracy.Zone();
 
 		delete(user_data.from_type);
 		delete(user_data.to_type);
@@ -97,7 +116,7 @@ server_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 
 	ep : net.Endpoint;
 	err : net.Network_Error;
-
+	
 	switch endpoint in endpoint {
 		case string: {
 			ep, err = net.resolve_ip4(endpoint);
@@ -166,7 +185,7 @@ server_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 
 @(private="file")
 destroy_client_user_data :: proc (client_user_data : ^Data_client) {
-
+	tracy.Zone();
 	free(client_user_data);
 }
 
@@ -174,7 +193,8 @@ destroy_client_user_data :: proc (client_user_data : ^Data_client) {
 on_listen :: proc "contextless" (server : ^network.Server, interface_handle : network.Interface_handle, user_data : rawptr) -> network.Error {
 	user_data := cast(^Data)user_data;
 	context = restore_context();
-
+	tracy.Zone();
+	
 	user_data.interface_handle = interface_handle;
 
 	if user_data.target == {} {
@@ -195,7 +215,9 @@ on_listen :: proc "contextless" (server : ^network.Server, interface_handle : ne
 	//A thread per client for listening, this could be done better, but it is OS dependent, for future work.
 	//TODO overlapping IO
 	server_side_client_recive_loop : thread.Thread_Proc : proc(t : ^thread.Thread) {
+		tracy.SetThreadName("server_side_client_recive_loop")
 		context = restore_context();
+		tracy.Zone();
 
 		server := cast(^network.Server)t.user_args[0];
 		client := cast(^network.Server_side_client)t.user_args[1];
@@ -204,14 +226,15 @@ on_listen :: proc "contextless" (server : ^network.Server, interface_handle : ne
 		
 		recv_tcp_parse_loop(C{server, client}, client_user_data.socket, user_data.to_type, &user_data.should_close, user_data.use_binary);
 		
-		net.close(client_user_data.socket);
 		log.debugf("disconnected tcp socket %v server side", client_user_data.name);
 		network.push_disconnect_server(server, client);
 	}
-	
+
 	//This loops forever in another thread.
 	acceptor_loop : thread.Thread_Proc : proc(t : ^thread.Thread) {
+		tracy.SetThreadName("acceptor_loop")
 		context = restore_context();
+		tracy.Zone();
 		
 		server := cast(^network.Server) t.user_args[0];
 		user_data := cast(^Data) t.user_args[1];
@@ -221,20 +244,20 @@ on_listen :: proc "contextless" (server : ^network.Server, interface_handle : ne
 		log.debugf("Thread acceptor running");
 		
 		for !server.should_close {
-			
+			tracy.ZoneN("net.accept_tcp");
 			client_user_data := new(Data_client);
 			
 			err : net.Network_Error;
 			
 			//blocks until a client has connected
 			client_user_data.socket, client_user_data.name, err = net.accept_tcp(user_data.acceptor_socket);
+			log.debugf("server acceptor intrrupted");
 
-			if err != nil {
-				if !server.should_close || err != net.Accept_Error.Interrupted {
+			if err != nil || server.should_close {
+				free(client_user_data);
+				if !(server.should_close && (err == net.Accept_Error.Interrupted || err == net.Accept_Error.Not_Listening)) {
 					log.errorf("Failed accept_tcp, err : %v", err);
 				}
-				
-				free(client_user_data);
 				continue;
 			}
 			
@@ -243,7 +266,9 @@ on_listen :: proc "contextless" (server : ^network.Server, interface_handle : ne
 			
 			/////////// setup client thread ///////////
 			assert(net.set_blocking(client_user_data.socket, true) == nil); //We want it to be blocking, since we have 1 thread per client.
-			//assert(net.set_option(base.sock, .Keep_Alive, true) == nil);
+			assert(net.set_option(client_user_data.socket, .Keep_Alive, true) == nil);
+			//assert(net.set_option(client_user_data.socket, .Linger, time.Second) == nil);
+			//assert(net.set_option(client_user_data.socket, .Dont_Linger, true) == nil);
 			//TODO a timeout is needed (and maybe keep alive settings?)
 			
 			ssc := network.push_connect_server(server, user_data.interface_handle, client_user_data);

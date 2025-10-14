@@ -6,8 +6,11 @@ import "core:net"
 import "core:thread"
 import "core:fmt"
 import "core:log"
+import "core:time"
 
 import network ".."
+import "../../tracy"
+
 
 @(private="file")
 Data :: struct {
@@ -41,10 +44,12 @@ Ip_mode :: enum  {
 client_interface :: proc "contextless" (commands_map : map[network.Message_id]typeid, endpoint : union{string, net.Host_Or_Endpoint}, mode : Ip_mode, use_binary := true) -> network.Client_interface {
 	assert_contextless(tcp_allocator != {}, "you must init the library first");
 	context = restore_context();
+	tracy.Zone();
 
 	on_connect :: proc "contextless" (client : ^network.Client, user_data : rawptr) -> network.Error {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
+		tracy.Zone();
 
 		sock, s_err := net.dial_tcp_from_host_or_endpoint(user_data.target);
 		user_data.socket = sock;
@@ -69,7 +74,7 @@ client_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 					err = .dns_error
 				case:
 			}
-
+			
 			log.errorf("Failed to connect to server got error : %v", s_err);
 			return err;
 		}
@@ -78,11 +83,12 @@ client_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 		log.infof("Client connected to server : %v", user_data.target);
 
 		assert(net.set_blocking(sock, true) == nil); //We want it to be blocking
-		//assert(net.set_option(base.sock, .Linger, time.Second) == nil);
-		//assert(net.set_option(base.sock, .Keep_Alive, true) == nil);
+		assert(net.set_option(sock, .Keep_Alive, true) == nil);
+		//assert(net.set_option(sock, .Linger, time.Second) == nil);
 		//TODO a timeout is needed (and maybe keep alive settings?)
 
 		client_recive_loop : thread.Thread_Proc : proc(t : ^thread.Thread) {
+			tracy.SetThreadName("client_recive_loop")
 			context = restore_context();
 
 			client := cast(^network.Client) t.user_args[0]
@@ -92,7 +98,6 @@ client_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 			
 			recv_tcp_parse_loop(client, user_data.socket, user_data.to_type, &user_data.should_close, user_data.use_binary);
 
-			net.close(user_data.socket);
 			log.debugf("disconnected tcp socket client side");
 			network.push_disconnect_client(client);
 		}
@@ -105,10 +110,11 @@ client_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 
 		return .ok;
 	}
-
+	
 	on_send :: proc "contextless" (client : ^network.Client, user_data : rawptr, data : any) -> network.Error {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
+		tracy.Zone();
 		
 		return tcp_send(user_data.socket, user_data.from_type, data, user_data.use_binary);
 	}
@@ -116,11 +122,14 @@ client_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 	on_disconnect :: proc "contextless" (client : ^network.Client, user_data : rawptr) -> network.Error {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
+		tracy.Zone();
 
 		user_data.should_close = true;
 		
-		err := net.shutdown(user_data.socket, .Send)  // disable send/recv
-
+		err := net.shutdown(user_data.socket, .Both)  // disable send/recv
+		net.close(user_data.socket);
+		thread.destroy(user_data.recive_thread);
+		
 		if err != nil {
 			return .network_error;
 		}
@@ -131,11 +140,10 @@ client_interface :: proc "contextless" (commands_map : map[network.Message_id]ty
 	on_destroy :: proc "contextless" (client : ^network.Client, user_data : rawptr) {
 		user_data := cast(^Data)user_data;
 		context = restore_context();
+		tracy.Zone();
 
 		delete(user_data.from_type);
 		delete(user_data.to_type);
-
-		thread.destroy(user_data.recive_thread);
 
 		free(user_data);
 	}

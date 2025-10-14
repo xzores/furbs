@@ -32,8 +32,11 @@ to_python_type :: proc (t: ^runtime.Type_Info, dependencies: ^[dynamic]^runtime.
 				}
 			}
 			strings.write_string(&builder, "]");
-
 			res = strings.to_string(builder);
+			
+			if reflect.is_struct(type.elem) && !slice.contains(dependencies[:], type.elem) {
+				append(dependencies, type.elem);
+			}
 		}
 		case runtime.Type_Info_Boolean: {
 			res = "bool"
@@ -55,6 +58,10 @@ to_python_type :: proc (t: ^runtime.Type_Info, dependencies: ^[dynamic]^runtime.
 			
 			elem_s := to_python_type(sa, dependencies, comment)
 			res = fmt.tprintf("list[%s]", elem_s)
+
+			if reflect.is_struct(sa) && !slice.contains(dependencies[:], sa) {
+				append(dependencies, sa);
+			}
 		}
 		case runtime.Type_Info_Enum: {
 			// Map enums to string (Python doesn't have built-in enum type name)
@@ -118,6 +125,10 @@ to_python_type :: proc (t: ^runtime.Type_Info, dependencies: ^[dynamic]^runtime.
 					strings.write_string(&builder, " | ");
 				}
 				strings.write_string(&builder, member_s);
+				
+				if reflect.is_struct(v) && !slice.contains(dependencies[:], v) {
+					append(dependencies, v);
+				}
 			}
 
 			if len(type.variants) == 1 {
@@ -163,9 +174,35 @@ convert_struct_definition :: proc (t : ^runtime.Type_Info, dependencies : ^[dyna
 		}	
 		strings.write_string(&builder, "\n");
 	}
-	if len(reflect.struct_fields_zipped(t.id)) == 0 {
-		strings.write_string(&builder, "\tpass\n");
+	strings.write_string(&builder, "\n");
+
+	unused_comment : strings.Builder; //unused
+	strings.builder_init(&unused_comment, context.temp_allocator);
+
+	//write the def __init__
+	strings.write_string(&builder, "\tdef __init__(self");
+	for field in reflect.struct_fields_zipped(t.id) {
+		strings.write_string(&builder, ", ");
+		strings.write_string(&builder, field.name);
+		strings.write_string(&builder, ": ");
+
+		strings.write_string(&builder, to_python_type(field.type, dependencies, &unused_comment));
 	}
+	
+	strings.write_string(&builder, "):\n");
+
+	for field in reflect.struct_fields_zipped(t.id) {
+		strings.write_string(&builder, "\t\tself.");
+		strings.write_string(&builder, field.name);
+		strings.write_string(&builder, " = ");
+		strings.write_string(&builder, field.name);
+		strings.write_string(&builder, "\n");
+	}
+
+	if len(reflect.struct_fields_zipped(t.id)) == 0 {
+		strings.write_string(&builder, "\t\tpass\n");
+	}
+	strings.write_string(&builder, "\n");
 
 	return strings.to_string(builder);
 }
