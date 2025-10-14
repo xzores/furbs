@@ -1,6 +1,3 @@
-[submodule "tracy"]
-	path = tracy/tracy
-	url = https://github.com/oskarnp/odin-tracy
 [submodule "miniz"]
 	path = miniz
 	url = https://github.com/sarvex/odin-miniz.git
