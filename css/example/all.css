@@ -1,0 +1,191 @@
+/* === Root Variables & Custom Properties === */
+:root {
+  --main-color: #3498db;
+  --accent: #e74c3c;
+  --radius: 12px;
+  --gap: 10px;
+}
+
+/* === Universal Reset & Box Model === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* === Basic Selectors === */
+body {
+  font-family: system-ui, sans-serif;
+  color: #222;
+  background: linear-gradient(120deg, #fafafa, #eee);
+}
+
+/* === Attribute Selector === */
+[data-theme="dark"] {
+  background: #111;
+  color: #ddd;
+}
+
+/* === Class, ID, Descendant, Child, Adjacent, and Sibling Selectors === */
+.container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gap);
+  padding: 2rem;
+}
+
+#main > .box {
+  border: 2px solid var(--main-color);
+  border-radius: var(--radius);
+  padding: 1rem;
+  transition: transform 0.3s ease, background 0.3s;
+}
+
+.box + .box {
+  margin-top: 1rem;
+}
+
+/* === Pseudo-classes === */
+.box:hover {
+  background: var(--main-color);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.box:active {
+  background: var(--accent);
+}
+
+/* === Pseudo-elements === */
+.box::before {
+  content: "★ ";
+  color: gold;
+}
+
+/* === nth-child example === */
+.box:nth-child(odd) {
+  background: rgba(52, 152, 219, 0.1);
+}
+
+/* === Animation Keyframes === */
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.animated {
+  animation: pulse 2s infinite;
+}
+
+/* === Flexbox Example === */
+.flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--gap);
+}
+
+/* === CSS Grid Example === */
+.grid {
+  display: grid;
+  grid-template-areas:
+    "header header"
+    "sidebar content"
+    "footer footer";
+  grid-template-columns: 1fr 3fr;
+  grid-template-rows: auto 1fr auto;
+}
+
+.grid > .header { grid-area: header; }
+.grid > .sidebar { grid-area: sidebar; }
+.grid > .content { grid-area: content; }
+.grid > .footer { grid-area: footer; }
+
+/* === Transforms === */
+.transform-demo {
+  transform: rotate(5deg) translate(10px, 5px) scale(1.1);
+}
+
+/* === Filters & Blend Modes === */
+.filtered {
+  filter: brightness(1.2) contrast(1.1) blur(1px);
+  mix-blend-mode: multiply;
+}
+
+/* === Mask & Clip === */
+.masked {
+  -webkit-mask-image: radial-gradient(circle, black 60%, transparent 100%);
+  mask-image: radial-gradient(circle, black 60%, transparent 100%);
+}
+
+.clipped {
+  clip-path: polygon(0 0, 100% 0, 80% 100%, 0% 100%);
+}
+
+/* === Gradients & Shadows === */
+.pretty {
+  background: linear-gradient(45deg, var(--main-color), var(--accent));
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+}
+
+/* === Responsive Media Query === */
+@media (max-width: 600px) {
+  body {
+    background: #ccc;
+  }
+  .box {
+    font-size: 0.9rem;
+  }
+}
+
+/* === Container Queries (modern CSS) === */
+@container (min-width: 500px) {
+  .box {
+    border-color: green;
+  }
+}
+
+/* === CSS Counter Example === */
+ol {
+  counter-reset: item;
+}
+
+ol > li {
+  counter-increment: item;
+}
+
+ol > li::before {
+  content: counter(item) ". ";
+  color: var(--main-color);
+}
+
+/* === Layers and Nesting (CSS 2023+) === */
+@layer reset, base, theme, components;
+
+@layer theme {
+  .theme-dark & {
+    background: #222;
+    color: #eee;
+  }
+}
+
+/* === Cascade Layer Usage Example === */
+@layer components {
+  .button {
+    all: unset;
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: var(--main-color);
+    color: white;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .button:hover {
+    background: var(--accent);
+  }
+}
