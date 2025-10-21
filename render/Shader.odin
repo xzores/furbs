@@ -158,7 +158,7 @@ Texture_odin_type :: union {
 	Texture1D,
 	Texture2D,
 	Texture3D,
-	//CubeMap,
+	Texture_cubemap
 	//Texture2DArray,
 }
 
@@ -305,6 +305,8 @@ set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc 
 			gl.active_bind_texture2D(v.id, cast(i32)location);
 		case Texture3D:
 			gl.active_bind_texture3D(v.id, cast(i32)location);
+		case Texture_cubemap:
+			gl.active_bind_texture_cubemap(v.id, cast(i32)location);
 		case:
 			panic("TODO");
 	}

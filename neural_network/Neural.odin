@@ -21,8 +21,13 @@ Activation_function :: enum {
 	none,
 	relu,
 	silu,
+	gelu,
 	hyper_tan,
 	sigmoid,
+}
+
+Operation :: enum {
+	softmax,
 }
 
 Loss_function :: enum {

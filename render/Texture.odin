@@ -1,5 +1,6 @@
 package render;
 
+import "core:reflect"
 import "base:runtime"
 
 import "core:fmt"
@@ -720,5 +721,192 @@ texture2D_atlas_transfer :: proc (atlas : ^Texture2D_atlas, new_size : i32, loc 
 
 
 /////////////////////////////////// Texture cubemap 2D ///////////////////////////////////
-//TODO use glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS)
 
+Cubemap_side :: gl.Cubemap_side;
+
+Texture_cubemap :: struct {
+	id			: gl.Tex_cubemap_id,				// OpenGL texture id
+	width		: i32,			   		// Texture base width of each face
+	height		: i32,			   		// Texture base height of each face
+	
+	using desc : Texture_desc, 			//Wrapmode is ignored
+}
+
+@(require_results)
+texture_cubemap_load_from_file :: proc(filename : string, desc : Texture_desc = {.clamp_to_border, .linear, true, .RGBA8, {0,0,0,0}}, loc := #caller_location) -> (tex : Texture_cubemap, ok : bool) {
+	assert(desc.wrapmode == .clamp_to_border, "wrapmode must be clamp_to_border for cubemap textures", loc);
+
+	data, load_ok := os.read_entire_file_from_filename(filename);
+	defer delete(data);
+	
+	if !load_ok {
+		log.errorf("loading texture data for %v failed", filename, location = loc);
+		return {}, false;
+	}
+
+	return texture_cubemap_load_from_png_bytes(desc, data, filename, loc = loc), true;
+}
+
+//Data is compressed bytes (ex png format)
+@(require_results)
+texture_cubemap_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, texture_path := "", auto_convert_depth := true, flipped := true, loc := #caller_location) -> Texture_cubemap {
+	using image;
+	
+	options := Options{
+		.alpha_add_if_missing,
+	};
+
+	img, err := png.load_from_bytes(data, options);
+	defer image.destroy(img);
+	
+	if err != nil {
+		fmt.panicf("Failed to load texture %s, err : %v", texture_path, err, loc = loc);
+	}
+
+	if auto_convert_depth {
+		switch img.depth {
+			case 8:
+				//do nothing
+			case 16: //convert to 8 bit depth.
+				current := bytes.buffer_to_bytes(&img.pixels);
+				new := make([]u8, len(current) / 2);
+				for &v, i in new {
+					v = current[i*2];
+				}
+				bytes.buffer_destroy(&img.pixels);
+				bytes.buffer_init(&img.pixels, new);
+				img.depth = 8;
+			case:
+				panic("unimplemented");
+		}
+	}
+
+	fmt.assertf(img.depth == 8, "texture %v has depth %v, not 8", texture_path, img.depth, loc = loc);
+	fmt.assertf(img.channels == 4, "texture %v does not have 4 channels", texture_path, loc = loc);
+	fmt.assertf(img.height == 3 * (img.width / 4), "cubemap must have the width be 4 / 3 times the height, size was (%v, %v), expected ()", img.width, img.height, img.width, 3 * (img.width / 4))
+
+	raw_data := bytes.buffer_to_bytes(&img.pixels); //these are owned by the image and it will be deleted at the end of call.
+	
+	if flipped {
+		texture2D_flip(raw_data, img.width, img.height, img.channels);
+	}
+
+	per_side_size : i32 = auto_cast img.width / 4;
+	tc := texture_cubemap_make_desc(desc, per_side_size, per_side_size, loc = loc);
+
+	extract_cubemap_data_from_combined :: proc (raw_data : []u8, per_side_size : i32, side : Cubemap_side) -> [][4]u8 {
+		raw_data := slice.reinterpret([][4]u8, raw_data);
+
+		res := make([][4]u8, per_side_size * per_side_size);
+
+		image_width := per_side_size * 4;
+		image_height := per_side_size * 3;
+		fmt.assertf(auto_cast len(raw_data) == image_width * image_height, "image dimension does not match");
+		
+		mpos : [2]i32;
+
+		switch side {
+			case .pos_x: {
+				mpos = {2,1}
+			}
+			case .neg_x: {
+				mpos = {0,1}
+			}
+			case .pos_y: {
+				mpos = {1,2}
+			}
+			case .neg_y: {
+				mpos = {1,0}
+			}
+			case .pos_z: {
+				mpos = {1,1}
+			}
+			case .neg_z: {
+				mpos = {3,1}
+			}
+		}
+		
+		start_pos := mpos * per_side_size;
+
+		for x in 0..<per_side_size {
+			for y in 0..<per_side_size {
+				xx := x + start_pos.x;
+				yy := y + start_pos.y;
+				res[y * per_side_size + x] = raw_data[yy * image_width + xx];
+			}
+		}
+		
+		texture2D_flip(slice.reinterpret([]u8, res), per_side_size, per_side_size, 4);
+
+		return res;
+	}
+
+	for side in reflect.enum_field_values(Cubemap_side) {
+		side := cast(Cubemap_side) side;
+		data : [][4]u8 = extract_cubemap_data_from_combined(raw_data, per_side_size, side);
+		defer delete(data);
+		texture_cubemap_upload_data(&tc, side, .RGBA8, {0,0}, {per_side_size, per_side_size}, data, loc);
+	}
+
+	return tc
+}
+
+@(require_results)
+texture_cubemap_make :: proc(mipmaps : bool, filtermode : Filtermode, internal_format : Pixel_format_internal, #any_int width, height : i32, label := "", loc := #caller_location) -> Texture_cubemap {
+	
+	desc : Texture_desc = {
+		mipmaps 		= mipmaps,
+		wrapmode 		= .clamp_to_border,
+		filtermode 		= filtermode,
+		format 			= internal_format,
+	};
+	
+	return texture_cubemap_make_desc(desc, width, height, label, loc);
+}
+
+//Clear color is only used if data is nil
+@(require_results)
+texture_cubemap_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, label := "", loc := #caller_location) -> Texture_cubemap {
+	assert(state.is_init, "You must init first", loc);
+	assert(wrapmode != nil, "wrapmode is nil", loc);
+	assert(filtermode != nil, "filtermode is nil", loc);
+	assert(format != nil, "format is nil", loc);
+	
+	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
+
+	id := gl.gen_texture_cubemap(label, loc);
+	assert(id > 0, "TEXTURE: Failed to load texture", loc);
+	
+	gl.filtermode_texture_cubemap(id, desc.filtermode, mipmaps);	
+	gl.setup_texure_cubemap(id, mipmaps, width, height, format);
+	gl.set_texture_border_color_cubemap(id, desc.border_color);
+	
+	tex : Texture_cubemap = {
+		id, 
+		width,
+		height,
+		desc,
+	}
+
+	return tex;
+}
+
+texture_cubemap_upload_data :: proc(tex : ^Texture_cubemap, side : Cubemap_side, upload_format : gl.Pixel_format_upload, pixel_offset : [2]i32, pixel_cnt : [2]i32, data : []$T, loc := #caller_location) {
+	
+	gl.write_texure_data_cubemap(tex.id, side, 0, pixel_offset.x, pixel_offset.y, pixel_cnt.x, pixel_cnt.y, upload_format, slice.reinterpret([]u8, data), loc);
+	
+	if (tex.mipmaps) {
+		gl.generate_mip_maps_cubemap(tex.id);
+	}
+}
+
+//clears all data
+texture_cubemap_resize :: proc (tex : ^Texture_cubemap, new_size : [2]i32) {
+	texture_cubemap_destroy(tex^);
+	tex^ = texture_cubemap_make(tex.mipmaps, tex.filtermode, tex.format, new_size.x, new_size.y); //TODO pass along old label
+}
+
+//TODO should this require the pointer?
+texture_cubemap_destroy :: proc(tex : Texture_cubemap, loc := #caller_location) {
+	gl.delete_texture_cubemap(tex.id, loc);
+}

@@ -220,6 +220,8 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	
 	shaders_init(loc = loc);
 	text_init(loc = loc);
+
+	set_cubemap_seamless(true);
 	
 	return window;
 }

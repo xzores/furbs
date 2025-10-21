@@ -17,7 +17,7 @@ entry :: proc() {
 	
 	//nn.load_safetensors_from_filename("tiny_model/model.safetensors");
 
-	tokenizer, ok := nn.load_tokenizer("examples/tiny_model/vocab.json", "examples/tiny_model/merges.txt",  "examples/tiny_model/special_tokens_map.json");
+	tokenizer, ok := nn.load_tokenizer("tiny_model/vocab.json", "tiny_model/merges.txt",  "tiny_model/special_tokens_map.json");
 	assert(ok, "failed to load tokenizer");
 	
 	// Time tokenization
@@ -34,7 +34,23 @@ entry :: proc() {
 	
 	fmt.printf("config : %#v\n", config);
 	
+	st := nn.load_safetensors("tiny_model/model.safetensors")
+
+	graph := nn.create_graph();
+	defer nn.destroy_graph(graph);
+
+	layers, lok := nn.safetensors_layers(st.tensors);
+	assert(lok)
+	for n, t in layers {
+		log.debugf("found %v : (%v, %v))", n, t.weight.shape, t.bias.shape)
+	}
+
+	modules, missing := nn.map_safetensor_modules(config, layers);
+
+
+	
 	// Time inference
+	/*
 	start_inference := time.now()
 	s := nn.inference_model("tiny_model", tokens);
 	inference_duration := time.diff(start_inference, time.now())
@@ -45,6 +61,7 @@ entry :: proc() {
 	log.infof("Total processing time: %v", total_duration)
 	
 	fmt.printf("output :%v", string(s))
+	*/
 	
 }
 

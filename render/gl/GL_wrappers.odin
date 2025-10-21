@@ -23,7 +23,7 @@ import utils "../../utils"
 _ :: gl.GLenum;
 
 RENDER_DEBUG	:: #config(RENDER_DEBUG, ODIN_DEBUG);
-RECORD_DEBUG	:: #config(RECORD_DEBUG, false);
+RECORD_DEBUG	:: #config(RECORD_DEBUG, ODIN_DEBUG);
 UNBIND_DEBUG	:: #config(UNBIND_DEBUG, false);
 
 /////////// Opengl handles ///////////
@@ -39,6 +39,7 @@ Fbo_id :: distinct u32;
 Tex1d_id :: distinct u32;
 Tex2d_id :: distinct u32;
 Tex3d_id :: distinct u32;
+Tex_cubemap_id :: distinct u32;
 Texg_id :: distinct u32; //generic for all textures 
 Rbo_id :: distinct u32;
 Buffer_id :: distinct i32; //used for generic buffers, like VBO's and EBO's
@@ -1530,12 +1531,13 @@ when RENDER_DEBUG {
 	
 	Living_state :: struct {
 		programs	: map[Shader_program_id]Object_debug_info,
-		buffers	: map[Buffer_id]Object_debug_info,
+		buffers		: map[Buffer_id]Object_debug_info,
 		vaos		: map[Vao_id]Object_debug_info,
 		fbos		: map[Fbo_id]Object_debug_info,
 		tex1ds		: map[Tex1d_id]Object_debug_info,
 		tex2ds		: map[Tex2d_id]Object_debug_info,
 		tex3ds		: map[Tex3d_id]Object_debug_info,
+		tex_cubemaps: map[Tex_cubemap_id]Object_debug_info,
 		rbos		: map[Rbo_id]Object_debug_info,
 		syncs		: map[gl.sync_t]Object_debug_info,
 	}
@@ -1570,6 +1572,7 @@ when RENDER_DEBUG {
 		delete(s.tex1ds);
 		delete(s.tex2ds);
 		delete(s.tex3ds);
+		delete(s.tex_cubemaps);
 		delete(s.rbos);
 		delete(s.syncs);
 		delete(s.accessed_buffers);
@@ -1591,7 +1594,7 @@ GL_state :: struct {
 	//Textures have a 16 slots, so there are 16 textures in play at once. texture_slot denotes the texture currently being changed.
 	//The other textures are still there and still bound in the shader.
 	texture_slot	: i32, //0-15 (specifies what bound_texture is currently changing).
-	bound_texture	: [16]Texg_id,
+	bound_texture	: [16]Texg_id, //TODO: this is incorrect, opengl has one binding per target! TODO!
 
 	//There are a single bound VAO, it keeps track of all the bound buffers, and attributes. It also keeps track on how the attriute data is sourced from the buffers.
 	//When binding a buffer you are really binding a buffer to a VAO, even if you think a VAO is unbind, it acctually just means that the default VAO is active.
@@ -1613,6 +1616,7 @@ GL_state_ex :: struct {
 	depth_clamp_range : [2]f64,
 	viewport : [4]i32,
 	clear_color : [4]f32,
+	cube_map_seamless : bool,
 
 	using gl_state : GL_state,
 }
@@ -2305,6 +2309,20 @@ set_clear_color :: proc(clear_color : [4]f32) {
 	gl.ClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 
 	cpu_state.clear_color = clear_color;
+}
+
+set_cubemap_seamless :: proc (seamless : bool) {
+	if cpu_state.cube_map_seamless == seamless {
+		return;
+	}
+	
+	if seamless {
+		gl.Enable(.TEXTURE_CUBE_MAP_SEAMLESS)
+	}
+	else {
+		gl.Disable(.TEXTURE_CUBE_MAP_SEAMLESS)
+	}
+	cpu_state.cube_map_seamless = seamless
 }
 
 clear :: proc(clear_color : [4]f32, flags : Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
@@ -3794,7 +3812,6 @@ bind_texture1D :: proc(tex : Tex1d_id, loc := #caller_location) {
 	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
 
 	gl.BindTexture(.TEXTURE_1D, auto_cast tex);
-	
 }
 
 unbind_texture1D  :: proc() {
@@ -4242,26 +4259,61 @@ active_texture :: proc(slot : i32) {
 	}
 	
 	gpu_state.texture_slot = slot;
-
 	gl.ActiveTexture(auto_cast (gl.TEXTURE0 + slot));
 }
 
 //activates a texture slot and binds a the texture to that slot.
 active_bind_texture1D :: proc (tex : Tex1d_id, slot : i32) {
-	active_texture(slot);
-	bind_texture1D(tex);
+
+	if cpu_state.gl_version >= .opengl_4_5 { //skips touching actve texture
+		gl.BindTextureUnit(auto_cast slot, auto_cast tex);
+		cpu_state.bound_texture[slot] = cast(Texg_id)tex;
+		gpu_state.bound_texture[slot] = cast(Texg_id)tex;
+	}
+	else {
+		active_texture(slot);
+		bind_texture1D(tex);
+	}
 }
 
 //activates a texture slot and binds a the texture to that slot.
 active_bind_texture2D :: proc (tex : Tex2d_id, slot : i32) {
-	active_texture(slot);
-	bind_texture2D(tex);
+
+	if cpu_state.gl_version >= .opengl_4_5 { //skips touching actve texture
+		gl.BindTextureUnit(auto_cast slot, auto_cast tex);
+		cpu_state.bound_texture[slot] = cast(Texg_id)tex;
+		gpu_state.bound_texture[slot] = cast(Texg_id)tex;
+	}
+	else {
+		active_texture(slot);
+		bind_texture2D(tex);
+	}
 }
 
 //activates a texture slot and binds a the texture to that slot.
 active_bind_texture3D :: proc (tex : Tex3d_id, slot : i32) {
-	active_texture(slot);
-	bind_texture3D(tex);
+	if cpu_state.gl_version >= .opengl_4_5 { //skips touching actve texture
+		gl.BindTextureUnit(auto_cast slot, auto_cast tex);
+		cpu_state.bound_texture[slot] = cast(Texg_id)tex;
+		gpu_state.bound_texture[slot] = cast(Texg_id)tex;
+	}
+	else {
+		active_texture(slot);
+		bind_texture3D(tex);
+	}
+}
+
+//activates a texture slot and binds a the texture to that slot.
+active_bind_texture_cubemap :: proc (tex : Tex_cubemap_id, slot : i32) {
+	if cpu_state.gl_version >= .opengl_4_5 { //skips touching actve texture
+		gl.BindTextureUnit(auto_cast slot, auto_cast tex);
+		cpu_state.bound_texture[slot] = cast(Texg_id)tex;
+		gpu_state.bound_texture[slot] = cast(Texg_id)tex;
+	}
+	else {
+		active_texture(slot);
+		bind_texture_cubemap(tex);
+	}
 }
 
 //TODO move up to 1D stuff
@@ -4646,7 +4698,7 @@ set_texture_border_color_3D :: proc (tex_id : Tex3d_id, border_color : [4]f32) {
 	}
 	else {
 		bind_texture3D(tex_id);
-		gl.TexParameterfv(.TEXTURE_2D, .TEXTURE_BORDER_COLOR, &border_color[0]);
+		gl.TexParameterfv(.TEXTURE_3D, .TEXTURE_BORDER_COLOR, &border_color[0]);
 		unbind_texture3D();
 	}
 }
@@ -4772,6 +4824,213 @@ filtermode_texture3D :: proc(tex_id : Tex3d_id, mode : Filtermode, using_mipmaps
 		unbind_texture3D();
 	}
 }
+
+
+//// cubemap textures ////
+gen_texture_cubemap :: proc (label : string, loc := #caller_location) -> (tex : Tex_cubemap_id) {
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.CreateTextures(.TEXTURE_CUBE_MAP, 1, auto_cast &tex);
+	}
+	else {
+		gl.GenTextures(1, auto_cast &tex);
+	}
+	
+	when RENDER_DEBUG {
+		debug_state.tex_cubemaps[tex] = {loc, strings.clone(label)};;
+		if label != "" && cpu_state.gl_version >= .opengl_4_3 {
+			if cpu_state.gl_version < .opengl_4_5 {
+				bind_texture_cubemap(tex);
+				unbind_texture_cubemap();
+			}
+			clabel := fmt.ctprintf("Texture Cubemap %v: %v", tex, label);
+			gl.ObjectLabel(.TEXTURE, auto_cast tex, auto_cast len(clabel), clabel);
+		}
+	}
+	
+	return tex;
+}
+
+delete_texture_cubemap :: proc (texture : Tex_cubemap_id, loc := #caller_location) {
+	texture := texture;
+
+	if cpu_state.bound_texture[cpu_state.texture_slot] == 0 {
+		if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)texture {
+			gl.BindTexture(.TEXTURE_CUBE_MAP, 0);
+			gpu_state.bound_texture[cpu_state.texture_slot]= 0;
+		}
+	}
+	
+	gl.DeleteTextures(1, cast([^]u32)&texture);
+
+	when RENDER_DEBUG {
+		assert(texture in debug_state.tex_cubemaps, "Cannot delete invalid Cubemap Texture", loc);
+		delete(debug_state.tex_cubemaps[texture].label);
+		delete_key(&debug_state.tex_cubemaps, texture);
+	}
+}
+
+bind_texture_cubemap :: proc (tex : Tex_cubemap_id, loc := #caller_location) {
+
+	cpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
+	
+	if gpu_state.bound_texture[cpu_state.texture_slot] == cast(Texg_id)tex {
+		return;
+	}
+	
+	gpu_state.bound_texture[cpu_state.texture_slot] = cast(Texg_id)tex;
+
+	gl.BindTexture(.TEXTURE_CUBE_MAP, auto_cast tex);
+}
+
+unbind_texture_cubemap :: proc () {
+	assert(cpu_state.texture_slot == gpu_state.texture_slot);
+	
+	when UNBIND_DEBUG {
+		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+		gpu_state.bound_texture[cpu_state.texture_slot] = 0;
+		gl.BindTexture(.TEXTURE_CUBE_MAP, 0);
+	}
+	else {
+		cpu_state.bound_texture[cpu_state.texture_slot] = 0;
+	}
+}
+
+set_texture_border_color_cubemap :: proc (tex_id : Tex_cubemap_id, border_color : [4]f32) {
+	border_color := border_color;
+	
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.TextureParameterfv(auto_cast tex_id, .TEXTURE_BORDER_COLOR, &border_color[0]);
+	}
+	else {
+		bind_texture_cubemap(tex_id);
+		gl.TexParameterfv(.TEXTURE_CUBE_MAP, .TEXTURE_BORDER_COLOR, &border_color[0]);
+		unbind_texture_cubemap();
+	}
+}
+
+Cubemap_side :: enum u32 {
+	pos_x = gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+	neg_x = gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+	pos_y = gl.TEXTURE_CUBE_MAP_POSITIVE_Y,
+	neg_y = gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+	pos_z = gl.TEXTURE_CUBE_MAP_POSITIVE_Z,
+	neg_z = gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+}
+
+write_texure_data_cubemap :: proc (tex : Tex_cubemap_id, side : Cubemap_side, level, xoffset, yoffset : i32, width, height : gl.GLsizei, format : Pixel_format_upload, data : union {[]u8, Resource}, loc := #caller_location) {
+	data_ptr : rawptr;
+	
+	if d, ok := data.([]u8); ok {
+		assert(d != nil, "Data is nil", loc);
+		data_ptr = raw_data(d);
+	}
+	else if d, ok := data.(Resource); ok {
+		panic("TODO pixel_unpack_buffer");
+	}
+	else {
+		panic("???");
+	}
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		faces : [Cubemap_side]i32 = {.pos_x = 0, .neg_x = 1, .pos_y = 2, .neg_y = 3, .pos_z = 4, .neg_z = 5};
+		//YES this is 3D they last coordinate is used as the cubemap face
+		gl.TextureSubImage3D (cast(u32)tex, level, xoffset, yoffset, faces[side], width, height, 1, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
+	}
+	else {
+		bind_texture_cubemap(tex);
+		gl.TexSubImage2D(auto_cast side, level, xoffset, yoffset, width, height, upload_format_gl_channel_format(format), upload_format_gl_type(format), data_ptr);
+		unbind_texture_cubemap();
+	}
+}
+
+//TODO look at glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+
+//This will for opengl 4.2 or below not generate mip maps, and they must be generated by generate_mip_maps_XD or the mipmap level must be set directly
+setup_texure_cubemap :: proc (tex : Tex_cubemap_id, mipmaps : bool, width, height : gl.GLsizei, format : Pixel_format_internal, loc := #caller_location) {
+	//type could be an option here, for now we only allow GL_UNSIGNED_BYTE as the type.
+	levels : i32 = 1;
+
+	if mipmaps {
+		levels = 1 + cast(i32)math.floor(math.log2(cast(f32)math.max(width, height)));
+	}
+
+	if cpu_state.gl_version >= .opengl_4_5 {
+		gl.TextureStorage2D(cast(u32)tex, levels, auto_cast format, width, height);
+	}
+	else if cpu_state.gl_version >= .opengl_4_3 { 
+		bind_texture_cubemap(tex);
+		gl.TexStorage2D(.TEXTURE_CUBE_MAP, levels, auto_cast format, width, height);
+		unbind_texture_cubemap();
+	}
+	else {
+		bind_texture_cubemap(tex);
+		for side in reflect.enum_field_values(Cubemap_side) {
+			//TODO: .RGBA should match format, so for format=.R16, then it should be .R, not RGBA!
+			gl.TexImage2D(auto_cast side, 0, auto_cast format, width, height, 0, internal_format_gl_channel_format(format), .UNSIGNED_BYTE, nil);
+		}
+		unbind_texture_cubemap();
+	}
+}
+
+generate_mip_maps_cubemap :: proc (tex_id : Tex_cubemap_id) {
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.GenerateTextureMipmap(auto_cast tex_id);
+	}
+	else {
+		bind_texture_cubemap(tex_id);
+		gl.GenerateMipmap(.TEXTURE_3D);
+		unbind_texture_cubemap();
+	}
+}
+
+filtermode_texture_cubemap :: proc(tex_id : Tex_cubemap_id, mode : Filtermode, using_mipmaps : bool) {
+	
+	min_mode : gl.GLenum;
+	mag_mode : gl.GLenum;
+
+	switch mode {
+		case .nearest:
+			
+			if using_mipmaps {
+				min_mode = .NEAREST_MIPMAP_NEAREST;
+			}
+			else {
+				min_mode = .NEAREST;
+			}
+
+			mag_mode = .NEAREST;
+		case .linear:
+			
+			if using_mipmaps {
+				min_mode = .LINEAR_MIPMAP_LINEAR;;
+			}
+			else {
+				min_mode = .LINEAR;
+			}
+
+			mag_mode = .LINEAR;
+		case .invalid:
+			panic("invalid");
+	}
+
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
+		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
+	}
+	else {
+		bind_texture_cubemap(tex_id);
+		gl.TexParameteri(.TEXTURE_CUBE_MAP, .TEXTURE_MIN_FILTER, cast(i32)min_mode);
+		gl.TexParameteri(.TEXTURE_CUBE_MAP, .TEXTURE_MAG_FILTER, cast(i32)mag_mode);
+		unbind_texture_cubemap();
+	}
+}
+
+
+
+
 
 //////////////////////////////////////////// Shader functions ////////////////////////////////////////////
 

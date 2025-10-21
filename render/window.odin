@@ -389,7 +389,7 @@ window_set_fullscreen :: proc(window : ^Window, mode : Fullscreen_mode, monitor 
 	
 	// Get the position of the window
 	xpos, ypos := glfw.GetWindowPos(window.glfw_window);
-	ww, wh := glfw.GetWindowPos(window.glfw_window);
+	ww, wh := glfw.GetWindowSize(window.glfw_window);
 	
 	monitor := window_get_monitor(window);
 	
@@ -408,28 +408,29 @@ window_set_fullscreen :: proc(window : ^Window, mode : Fullscreen_mode, monitor 
 	if mode != window.current_fullscreen {
 		
 		switch mode {
-			case .fullscreen:
+			case .fullscreen: {
 				window.old_windowed_rect = {xpos, ypos, ww, wh};
 				glfw.SetWindowMonitor(window.glfw_window, monitor, 0, 0, mon_mode.width, mon_mode.height, mon_mode.refresh_rate);
-
-			case .borderless_fullscreen:
+			}
+			case .borderless_fullscreen: {
 				//HAHA, windows does fun stuff, it ignores the SetWindowPos and SetWindowAttrib if the size is set to the same as the window.
 				//So on windows this looks like it goes fullscreen, but idk, it might be different of other OS's.
 				window.old_windowed_rect = {xpos, ypos, ww, wh};
 				glfw.SetWindowAttrib(window.glfw_window, glfw.DECORATED, 0);
-				glfw.SetWindowSize(window.glfw_window, mon_mode.width, mon_mode.height);
 				glfw.SetWindowPos(window.glfw_window, 0, 0);
-
-			case .windowed:
+				glfw.SetWindowSize(window.glfw_window, mon_mode.width, mon_mode.height);
+			}
+			case .windowed: {
 				r := window.old_windowed_rect;
 				glfw.SetWindowMonitor(window.glfw_window, nil, r.x, r.y, r.z, r.w, glfw.DONT_CARE);
-
+				
 				if window.decorated {
 					glfw.SetWindowAttrib(window.glfw_window, glfw.DECORATED, 1);
 				}
 				else {
 					glfw.SetWindowAttrib(window.glfw_window, glfw.DECORATED, 0);
 				}
+			}
 		}
 	}
 
