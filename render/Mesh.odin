@@ -532,12 +532,12 @@ mesh_draw_single :: proc (mesh : ^Mesh_single, model_matrix : matrix[4,4]f32, co
 		index_count = r.y - r.x;
 	}
 	
-	set_uniform(state.bound_shader, .color_diffuse, color);
-	set_uniform(state.bound_shader, .model_mat, model_matrix);
-	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
+	set_uniform(.color_diffuse, color);
+	set_uniform(.model_mat, model_matrix);
+	set_uniform(.inv_model_mat, linalg.matrix4_inverse(model_matrix));
 	mvp := state.prj_mat * state.view_mat * model_matrix;
-	set_uniform(state.bound_shader, .mvp, mvp);
-	set_uniform(state.bound_shader, .inv_mvp, linalg.matrix4_inverse(mvp));
+	set_uniform(.mvp, mvp);
+	set_uniform(.inv_mvp, linalg.matrix4_inverse(mvp));
 	
 	switch mesh.indices_type {
 		case .no_index_buffer:
@@ -571,13 +571,13 @@ mesh_draw_single_instanced :: proc (mesh : ^Mesh_single, #any_int instance_cnt :
 		index_count = r.y - r.x;
 	}
 	
-	set_uniform(state.bound_shader, .color_diffuse, color);
+	set_uniform(.color_diffuse, color);
 	model_matrix : matrix[4,4]f32 = 1;
-	set_uniform(state.bound_shader, .model_mat, model_matrix);
-	set_uniform(state.bound_shader, .inv_model_mat, linalg.matrix4_inverse(model_matrix));
+	set_uniform(.model_mat, model_matrix);
+	set_uniform(.inv_model_mat, linalg.matrix4_inverse(model_matrix));
 	mvp := state.view_prj_mat * model_matrix;
-	set_uniform(state.bound_shader, .mvp, mvp);
-	set_uniform(state.bound_shader, .inv_mvp, linalg.matrix4_inverse(mvp));
+	set_uniform(.mvp, mvp);
+	set_uniform(.inv_mvp, linalg.matrix4_inverse(mvp));
 	
 	switch mesh.indices_type {
 		case .no_index_buffer:

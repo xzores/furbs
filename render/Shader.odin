@@ -216,13 +216,14 @@ shader_unbind :: proc(shader : ^Shader) {
 	state.bound_shader = nil;
 }
 
-set_uniform :: proc(shader : ^Shader, uniform : Uniform_location, value : Uniform_odin_type, loc := #caller_location) {
+set_uniform :: proc(uniform : Uniform_location, value : Uniform_odin_type, loc := #caller_location) {
 	using glgl;
 
 	when ODIN_DEBUG {
-		assert(state.bound_shader == shader, "Shader must be bound before setting the uniform", loc);
+		assert(state.bound_shader != nil, "A shader must be bound before setting the uniform", loc);
 	}
-
+	
+	shader := state.bound_shader;
 	value := value;
 	
 	if !shader.uniform_locations[uniform].active {
@@ -298,15 +299,18 @@ set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc 
 	
 	switch v in value {
 		case nil:
-			gl.active_bind_texture2D(0, cast(i32)location);
+			gl.bind_texture1D(0, cast(u32)location);
+			gl.bind_texture2D(0, cast(u32)location);
+			gl.bind_texture3D(0, cast(u32)location);
+			gl.bind_texture_cubemap(0, cast(u32)location);
 		case Texture1D:
-			gl.active_bind_texture1D(v.id, cast(i32)location);
+			gl.bind_texture1D(v.id, cast(u32)location);
 		case Texture2D:
-			gl.active_bind_texture2D(v.id, cast(i32)location);
+			gl.bind_texture2D(v.id, cast(u32)location);
 		case Texture3D:
-			gl.active_bind_texture3D(v.id, cast(i32)location);
+			gl.bind_texture3D(v.id, cast(u32)location);
 		case Texture_cubemap:
-			gl.active_bind_texture_cubemap(v.id, cast(i32)location);
+			gl.bind_texture_cubemap(v.id, cast(u32)location);
 		case:
 			panic("TODO");
 	}

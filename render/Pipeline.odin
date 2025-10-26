@@ -84,17 +84,17 @@ pipeline_begin :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 		
 		camera_bind(camera);
 
-		set_uniform(pipeline.shader, .prj_mat, state.prj_mat);
-		set_uniform(pipeline.shader, .inv_prj_mat, state.inv_prj_mat);
+		set_uniform(.prj_mat, state.prj_mat);
+		set_uniform(.inv_prj_mat, state.inv_prj_mat);
 		
-		set_uniform(pipeline.shader, .view_mat, state.view_mat);
-		set_uniform(pipeline.shader, .inv_view_mat, state.inv_view_mat);
+		set_uniform(.view_mat, state.view_mat);
+		set_uniform(.inv_view_mat, state.inv_view_mat);
 
-		set_uniform(pipeline.shader, .view_prj_mat, state.view_prj_mat);
-		set_uniform(pipeline.shader, .inv_view_prj_mat, state.inv_view_prj_mat);
+		set_uniform(.view_prj_mat, state.view_prj_mat);
+		set_uniform(.inv_view_prj_mat, state.inv_view_prj_mat);
 
-		set_uniform(pipeline.shader, .time, 		state.time_elapsed);
-		set_uniform(pipeline.shader, .delta_time, 	state.delta_time);
+		set_uniform(.time, 		state.time_elapsed);
+		set_uniform(.delta_time, 	state.delta_time);
 
 		state.current_pipeline = pipeline;
 	}

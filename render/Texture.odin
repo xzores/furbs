@@ -293,7 +293,7 @@ texture2D_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, textur
 		texture2D_flip(raw_data, img.width, img.height, img.channels);
 	}
 
-	return texture2D_make_desc(desc, img.width, img.height, .RGBA8, raw_data, loc = loc);
+	return texture2D_make_desc(desc, img.width, img.height, .RGBA8, raw_data, label = texture_path, loc = loc);
 }
 
 //Clear color is only used if data is nil
@@ -790,9 +790,9 @@ texture_cubemap_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, 
 	if flipped {
 		texture2D_flip(raw_data, img.width, img.height, img.channels);
 	}
-
+	
 	per_side_size : i32 = auto_cast img.width / 4;
-	tc := texture_cubemap_make_desc(desc, per_side_size, per_side_size, loc = loc);
+	tc := texture_cubemap_make_desc(desc, per_side_size, per_side_size, label = texture_path, loc = loc);
 
 	extract_cubemap_data_from_combined :: proc (raw_data : []u8, per_side_size : i32, side : Cubemap_side) -> [][4]u8 {
 		raw_data := slice.reinterpret([][4]u8, raw_data);
