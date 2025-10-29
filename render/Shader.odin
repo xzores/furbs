@@ -158,7 +158,8 @@ Texture_odin_type :: union {
 	Texture1D,
 	Texture2D,
 	Texture3D,
-	Texture_cubemap
+	Texture_cubemap,
+	Texture3D_atlas,
 	//Texture2DArray,
 }
 
@@ -309,6 +310,8 @@ set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc 
 			gl.bind_texture2D(v.id, cast(u32)location);
 		case Texture3D:
 			gl.bind_texture3D(v.id, cast(u32)location);
+		case Texture3D_atlas:
+			gl.bind_texture3D(v.backing.id, cast(u32)location);
 		case Texture_cubemap:
 			gl.bind_texture_cubemap(v.id, cast(u32)location);
 		case:

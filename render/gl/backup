@@ -15,7 +15,7 @@ import utils "../../utils"
 _ :: gl.GLenum;
 
 RENDER_DEBUG	:: #config(DEBUG_RENDER, ODIN_DEBUG)
-RECORD_DEBUG 	:: #config(DEBUG_RECORD, ODIN_DEBUG)
+RECORD_DEBUG 	:: #config(DEBUG_RECORD, false)
 
 //TODO glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
 

@@ -1,5 +1,6 @@
 package render;
 
+import "core:math/linalg"
 import "core:reflect"
 import "base:runtime"
 
@@ -16,6 +17,7 @@ import "core:time"
 
 import "core:image"
 import "core:image/png"
+import "core:container/priority_queue"
 
 import "gl"
 
@@ -106,9 +108,8 @@ texture1D_clear :: proc(tex : ^Texture1D, clear_color : [4]f64, loc := #caller_l
 	gl.clear_texture_1D(tex.id, clear_color, loc);
 }
 
-texture1D_destroy :: proc(tex : ^Texture1D) {
+texture1D_destroy :: proc(tex : Texture1D) {
 	gl.delete_texture1D(tex.id);
-	tex^ = {};
 }
 
 texture1D_upload_data :: proc(tex : ^Texture1D, #any_int pixel_offset : i32, #any_int pixel_cnt : i32, format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) {
@@ -476,6 +477,7 @@ texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 @(require_results)
 texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture3D {
 	assert(state.is_init, "You must init first", loc);
+	assert(desc.wrapmode != nil, "mode is invalid", loc);
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO this is done at startup is that enough?
 	
@@ -524,13 +526,16 @@ texture3D_clear :: proc(tex : ^Texture3D, clear_color : [4]f64, loc := #caller_l
 	gl.clear_texture_3D(tex.id, clear_color, loc);
 }
 
-texture3D_destroy :: proc(tex : ^Texture3D) {
+texture3D_destroy :: proc(tex : Texture3D) {
 	gl.delete_texture3D(tex.id);
-	tex^ = {};
 }
 
 texture3D_upload_data :: proc(tex : ^Texture3D, pixel_offset : [3]i32, pixel_cnt : [3]i32, format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) {
 	
+	pixel_size := gl.upload_format_channel_cnt(format) * gl.upload_format_component_size(format)
+	exp_size := pixel_size * auto_cast pixel_cnt.x * auto_cast pixel_cnt.y * auto_cast pixel_cnt.z;
+	fmt.assertf(exp_size == len(data), "The dimensions of the uploaded data and the number of pixels does not match, expected %v bytes for %v with upload type %v, got %v", exp_size, pixel_cnt, format, len(data), loc = loc)
+
 	gl.write_texure_data_3D(tex.id, 0, pixel_offset.x, pixel_offset.y, pixel_offset.z, pixel_cnt.x, pixel_cnt.y, pixel_cnt.z, format, data, loc);
 	
 	if (tex.mipmaps) {
@@ -583,7 +588,7 @@ texture2D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 //Success may return false if the GPU texture size limit is reached.
 //TODO this has a "bug", where it does not add a free_quad if the row is grown. This is because we do not remember the "source/refence" of the row and column.
 @(require_results)
-texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_handle, success : bool) {
+texture2D_atlas_claim :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_handle, success : bool) {
 	fmt.assertf(cast(i32)len(data) == cast(i32)gl.upload_format_channel_cnt(atlas.upload_format) * pixel_cnt.x * pixel_cnt.y, "upload size must match, data len : %v, but size resulted in %v", len(data), pixel_cnt.x * pixel_cnt.y * 4, loc = loc);
 	quad : [4]i32;
 	handle, quad, success = fs.atlas_add(&atlas.impl, pixel_cnt, loc = loc);
@@ -604,7 +609,9 @@ texture2D_atlas_upload :: proc (atlas : ^Texture2D_atlas, pixel_cnt : [2]i32, da
 		
 		//TODO make it not store pixels client side and just do an GPU-GPU copy.
 		fs.copy_pixels(gl.upload_format_channel_cnt(atlas.upload_format), quad.z, quad.w, 0, 0, data, atlas.backing.width, atlas.backing.height, quad.x, quad.y, atlas.pixels, quad.z, quad.w);
-		texture2D_upload_data(&atlas.backing, atlas.upload_format, quad.xy, quad.zw, data);
+		if data != nil {
+			texture2D_upload_data(&atlas.backing, atlas.upload_format, quad.xy, quad.zw, data);
+		}
 	}
 	
 	return handle, success;
@@ -618,7 +625,7 @@ texture2D_atlas_get_coords :: proc (atlas : Texture2D_atlas, handle : Atlas_hand
 	return fs.atlas_get_coords(atlas.impl, handle);
 }
 
-texture2D_atlas_remove :: proc(atlas : ^Texture2D_atlas, handle : Atlas_handle) {
+texture2D_atlas_unclaim :: proc(atlas : ^Texture2D_atlas, handle : Atlas_handle) {
 	//TODO add a list of deleted quads and then try those before increasing the row widht/height.
 	quad := fs.atlas_remove(&atlas.impl, handle);
 	
@@ -640,6 +647,7 @@ texture2D_atlas_prune :: proc (atlas : ^Texture2D_atlas, loc := #caller_location
 
 //TODO, read from opengl
 max_texture_size :: 10000;
+max_3d_texture_size :: 10000;
 
 //Will double the size (in each dimension) of the atlas, the old rects will be repacked in a smart way to increase the packing ratio.
 //Retruns false if the GPU texture size limit is reached.
@@ -705,11 +713,238 @@ texture2D_atlas_transfer :: proc (atlas : ^Texture2D_atlas, new_size : i32, loc 
 }
 
 /////////////////////////////////// Texture 2D Atlas Array ///////////////////////////////////
-
 //Might do in the future
 
 /////////////////////////////////// Texture 3D Atlas ///////////////////////////////////
 
+Atlas_3D_handle :: distinct i32;
+
+@(private="file")
+Atlas_3D_sort :: struct  {
+	size : i32,
+	arr : [dynamic][3]i32,
+}
+
+//This is a dumb algorithem, use only for similar sized cubes to the power of 2, preferably exactly the same size.
+//it is an implicit octree implementation
+Texture3D_atlas :: struct {
+	backing : Texture3D,
+	upload_format : gl.Pixel_format_upload,
+	next_handle : Atlas_3D_handle,
+	handle_map : map[Atlas_3D_handle]struct{index : [3]i32, size : [3]i32, occupy : i32},
+	
+	//a sorted list of unsorted list
+	free_slots : [dynamic]Atlas_3D_sort,
+}
+
+@(require_results)
+texture3D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Texture_desc = {.clamp_to_edge, .linear, false, .RGBA8, {0,0,0,0}}, 
+								label := "", #any_int init_size : i32 = 128, loc := #caller_location) -> (atlas : Texture3D_atlas) {
+
+	backing := texture3D_make_desc(desc, init_size, init_size, init_size, .no_upload, nil, [4]f64{0,0,0,0}, label, loc);
+	
+	free_slots := make([dynamic]Atlas_3D_sort)
+	temp := make([dynamic][3]i32, 0, 10, loc = loc);
+	append(&temp, [3]i32{0,0,0}, loc)
+	append(&free_slots, Atlas_3D_sort{size = init_size, arr = temp}, loc)
+
+
+	return Texture3D_atlas {
+		backing,
+		upload_format,
+		0,
+		make(map[Atlas_3D_handle]struct{index : [3]i32, size : [3]i32, occupy : i32}),
+		free_slots,
+	}
+}
+
+//Uploads a texture into the atlas and returns a handle.
+//Success may return false if the GPU texture size limit is reached.
+@(require_results)
+texture3D_atlas_claim :: proc (atlas : ^Texture3D_atlas, size : [3]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_3D_handle, success : bool) {
+	
+	h, ok := texture3D_atlas_allocate(atlas, size, loc);
+	index, i_size := texture3D_atlas_get_coords_int(atlas^, h);
+	assert(size == i_size)
+	
+	//upload it.
+	if data != nil {
+		texture3D_upload_data(&atlas.backing, index, size, atlas.upload_format, data, loc);
+	}
+
+	return h, ok;
+}
+
+//TODO this should be called upload and upload should be called something else.
+texture3D_atlas_upload :: proc (atlas : ^Texture3D_atlas, handle : Atlas_3D_handle, index : [3]i32, size : [3]i32, data : []u8, loc := #caller_location) {
+	assert(handle in atlas.handle_map, "not a valid handle", loc);
+
+	atlas_index, i_size := texture3D_atlas_get_coords_int(atlas^, handle);
+	assert(size.x <= i_size.x, "size parameter is bigger then the allocated size of the handle", loc);
+	assert(size.y <= i_size.y, "size parameter is bigger then the allocated size of the handle", loc);
+	assert(size.z <= i_size.z, "size parameter is bigger then the allocated size of the handle", loc);
+
+	texture3D_upload_data(&atlas.backing, index + atlas_index, size, atlas.upload_format, data, loc);
+}
+
+//Returns the texture coordinates in (0,0,0) -> (1,1,1) coordinates. 
+//The coordinates until the atlas is resized or destroy.
+@(require_results)
+texture3D_atlas_get_coords_float :: proc (atlas : Texture3D_atlas, handle : Atlas_3D_handle) -> (index : [3]f32, size : [3]f32) {
+	i, s := texture3D_atlas_get_coords_int(atlas, handle);
+	return linalg.array_cast(i, f32) / f32(atlas.backing.width), linalg.array_cast(s, f32) / f32(atlas.backing.width);
+}
+
+//Returns the texture coordinates in (0,0,0) -> (size,size,size) coordinates.  Size might be 128, 256, 512, 736 or whatever
+//The coordinates until the atlas is resized or destroy.
+@(require_results)
+texture3D_atlas_get_coords_int :: proc (atlas : Texture3D_atlas, handle : Atlas_3D_handle, loc := #caller_location) -> (index : [3]i32, size : [3]i32) {
+	assert(handle in atlas.handle_map, "handle is not registiered", loc)
+	v := atlas.handle_map[handle];
+	return v.index, v.size
+}
+
+//free data from the atlas
+texture3D_atlas_remove :: proc (atlas : Texture3D_atlas, handle : Atlas_3D_handle) {
+	panic("TODO");
+}
+
+//Will double the size (in each dimension) of the atlas, the old rects will be repacked in a smart way to increase the packing ratio.
+//Retruns false if the GPU texture size limit is reached.
+@(require_results)
+texture3D_atlas_grow :: proc (atlas : ^Texture3D_atlas, loc := #caller_location) -> (success : bool) {
+	assert(atlas.backing.desc.wrapmode != .invalid, "Cannot texture3D_atlas_grow corrupted texture desc", loc);
+
+	if atlas.backing.width * 2 > max_3d_texture_size {
+		return false;
+	}
+
+	return texture3D_atlas_transfer(atlas, atlas.backing.width * 2, loc);
+}
+
+//Will try and shrink the atlas to half the size, returns true if success, returns false if it could not shrink.
+//To shrink as much as possiable do "for texture2D_atlas_shirnk(atlas) {};"
+texture3D_atlas_shirnk :: proc (atlas : ^Texture3D_atlas) -> (success : bool) {
+	return texture3D_atlas_transfer(atlas, math.max(1, atlas.backing.width / 2));
+}
+
+texture3D_atlas_destroy :: proc (using atlas : Texture3D_atlas) {
+	texture3D_destroy(atlas.backing)
+	delete(atlas.handle_map)
+	for fs in atlas.free_slots {
+		delete(fs.arr);
+	}
+	delete(atlas.free_slots);
+}
+
+//used internally
+@(private="file", require_results)
+texture3D_atlas_transfer :: proc (atlas : ^Texture3D_atlas, new_size : i32, loc := #caller_location) -> (success : bool) {
+	
+	assert(atlas.backing.desc.wrapmode != .invalid, "Hugh??? corrupted texture desc", loc);
+	new_atlas := texture3D_atlas_make(atlas.upload_format, atlas.backing.desc, gl.get_label(atlas.backing.id), new_size, loc);
+	
+	for key, entry in atlas.handle_map {
+		handle, ok := texture3D_atlas_allocate(&new_atlas, entry.size, loc);
+		dst, size := texture3D_atlas_get_coords_int(new_atlas, handle);
+		assert(entry.size == size)
+		assert(ok);
+
+		gl.copy_texture3D_sub_data(atlas.backing.id, new_atlas.backing.id, entry.index, dst, size);
+	}
+	
+	new_atlas, atlas^ = atlas^, new_atlas;
+	texture3D_atlas_destroy(new_atlas);
+
+	return true;
+}
+
+//finds a free space and allocates it, used internally
+@(private="file", require_results)
+texture3D_atlas_allocate :: proc (atlas : ^Texture3D_atlas, size : [3]i32, loc := #caller_location) -> (Atlas_3D_handle, bool) {
+
+	//This algorithem works with block size, and no element can be bigger then a block, so we need to redo the blocksize if we got a new element which is bigger.
+	max_size := math.max(size.x, math.max(size.y, size.z));
+	pow_2_max_size : i32 = 1 << cast(u32)math.ceil(math.log2(f32(max_size)));
+
+	//find small index which can fit the cube.
+	index : [3]i32 = {-1,-1,-1};
+	for index == {-1,-1,-1} {
+		for &fs in atlas.free_slots {
+			if fs.size >= pow_2_max_size {
+				index = pop(&fs.arr);
+			}
+			if fs.size > pow_2_max_size {
+				//This is a reccursive splitting of the tree
+				//add 7 others, descrease the size, if we hit the size stop, otherwise do it again.
+				half_size := fs.size / 2;
+				for half_size >= pow_2_max_size {
+
+					cur_free_slots : ^Atlas_3D_sort
+					//find the array with the right size
+					for &fs in atlas.free_slots {
+						if fs.size == half_size {
+							cur_free_slots = &fs;
+							break;
+						}
+					}
+					if cur_free_slots == nil {
+						
+						append(&atlas.free_slots, Atlas_3D_sort{half_size, make([dynamic][3]i32)})
+						
+						slice.sort_by(atlas.free_slots[:], proc(i,j : Atlas_3D_sort) -> bool {
+							return i.size < j.size;
+						});
+						
+						for &fs in atlas.free_slots {
+							if fs.size == half_size {
+								cur_free_slots = &fs
+								break;
+							}
+						}
+					}
+					assert(cur_free_slots != nil);
+					assert(cur_free_slots.size == half_size);
+
+					for x in 0..=i32(1) {
+						for y in 0..=i32(1) {
+							for z in 0..=i32(1) {
+								v := [3]i32{x,y,z};
+								if v != {0,0,0} {
+									append(&cur_free_slots.arr, index + v * half_size, loc = loc)
+								}
+							}
+						}
+					}
+					half_size = half_size / 2;
+				}
+			}
+			if index != {-1,-1,-1} {
+				break;
+			}
+		}
+
+		if index == {-1,-1,-1} {
+			//we failed finding a big enough one.
+			assert(texture3D_atlas_grow(atlas)) //TODO dont assert
+		}
+	}
+
+	assert(index != {-1,-1,-1})
+	
+	#reverse for fs, i in atlas.free_slots {
+		if len(fs.arr) == 0 {
+			delete(fs.arr);
+			ordered_remove(&atlas.free_slots, i);
+		}
+	}
+
+	//put this in the map
+	atlas.next_handle += 1;
+	atlas.handle_map[atlas.next_handle] = {index, size, pow_2_max_size};
+
+	return atlas.next_handle, true;
+}
 
 
 /////////////////////////////////// Texture 2D multisampled ///////////////////////////////////
@@ -745,6 +980,93 @@ texture_cubemap_load_from_file :: proc(filename : string, desc : Texture_desc = 
 	}
 
 	return texture_cubemap_load_from_png_bytes(desc, data, filename, loc = loc), true;
+}
+
+//order is x->z positive->negative
+//like xp, np, py, ny, zp, nz
+@(require_results)
+texture_cubemap_load_from_files :: proc(filenames : [6]string, desc : Texture_desc = {.clamp_to_border, .linear, true, .RGBA8, {0,0,0,0}}, multi_threaded_load := true, loc := #caller_location) -> (tex : Texture_cubemap, ok : bool) {
+	assert(desc.wrapmode == .clamp_to_border, "wrapmode must be clamp_to_border for cubemap textures", loc);
+	
+	loc := loc;
+
+	texture_datas : [6]struct{img : ^image.Image, err : bool};
+	defer {
+		for t in texture_datas {
+			image.destroy(t.img);
+		}
+	}
+	
+	do_texture_image_load :: proc (filename : string, texture_datas : ^[6]struct{img : ^image.Image, err : bool}, self : int, loc : ^runtime.Source_Code_Location) {
+		data, load_ok := os.read_entire_file_from_filename(filename);
+		defer delete(data);
+		
+		if !load_ok {
+			log.errorf("loading texture data for %v failed", filename, location = loc^);
+			texture_datas[self].err = true;
+			return;
+		}
+		options := image.Options{
+			.alpha_add_if_missing,
+		};
+
+		img, err := png.load_from_bytes(data, options);
+		if err != nil {
+			log.errorf("Faild to read png data for %v, err: %v", filename, err, location = loc^);
+			texture_datas[self].err = true;
+			return;
+		}
+		texture_datas[self].img = img;
+	}
+	
+	if multi_threaded_load {
+		threads : [6]^thread.Thread;
+		for filename, i in filenames {
+			threads[i] = thread.create_and_start_with_poly_data4(filename, &texture_datas, i, &loc, do_texture_image_load, context);
+		}
+		for t in threads {
+			thread.destroy(t);
+		}
+	}
+	else {
+		for filename, i in filenames {
+			do_texture_image_load(filename, &texture_datas, i, &loc);
+		}
+	}
+
+	size := [2]int{texture_datas[0].img.width, texture_datas[0].img.height}
+	for t in texture_datas {
+		if size != {t.img.width, t.img.height} {
+			log.error("cubemap images must be the same size", loc);
+			return {}, false;
+		}
+		if t.err {
+			return {}, false;
+		}
+	}
+
+	res := texture_cubemap_make_desc(desc, size.x, size.y, filenames[0], loc);
+	
+	i := 0;
+	for side in reflect.enum_field_values(Cubemap_side) {
+		assert(texture_datas[i].img.channels == 4)
+		assert(texture_datas[i].img.which == .PNG);
+		
+		upload_format : gl.Pixel_format_upload;
+		switch texture_datas[i].img.depth {
+			case 8:
+				upload_format = .RGBA8;
+			case 16:
+				upload_format = .RGBA16;
+			case:
+				panic("depth not supported");
+		}
+		
+		texture_cubemap_upload_data(&res, auto_cast side, upload_format, {0,0}, {auto_cast size.x, auto_cast size.y}, texture_datas[i].img.pixels.buf[:], loc);
+		i += 1;
+	}
+
+	return res, true;
 }
 
 //Data is compressed bytes (ex png format)

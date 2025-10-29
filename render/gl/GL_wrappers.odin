@@ -23,8 +23,8 @@ import utils "../../utils"
 _ :: gl.GLenum;
 
 RENDER_DEBUG	:: #config(RENDER_DEBUG, ODIN_DEBUG);
-RECORD_DEBUG	:: #config(RECORD_DEBUG, ODIN_DEBUG);
-UNBIND_DEBUG	:: #config(UNBIND_DEBUG, ODIN_DEBUG);
+RECORD_DEBUG	:: #config(RECORD_DEBUG, false);
+UNBIND_DEBUG	:: #config(UNBIND_DEBUG, false);
 
 /////////// Opengl handles ///////////
 Shader_program_id :: distinct u32;
@@ -1558,23 +1558,31 @@ when RENDER_DEBUG {
 
 	@(private)
 	init_debug_state :: proc() -> (s : GL_debug_state) {
-		log.infof("init_debug_state");
+		log.debugf("init_debug_state");
 		return;
 	}
 
 	@(private)
 	destroy_debug_state :: proc(s : GL_debug_state) {
 		log.infof("destroy_debug_state");
-		delete(s.programs);
-		delete(s.buffers);
-		delete(s.vaos);
-		delete(s.fbos);
-		delete(s.tex1ds);
-		delete(s.tex2ds);
-		delete(s.tex3ds);
-		delete(s.tex_cubemaps);
-		delete(s.rbos);
-		delete(s.syncs);
+
+		delete_object_debug_info :: proc (m : map[$T]Object_debug_info) {
+			for _, di in m {
+				delete(di.label);
+			}
+			delete(m);
+		}
+
+		delete_object_debug_info(s.programs);
+		delete_object_debug_info(s.buffers);
+		delete_object_debug_info(s.vaos);
+		delete_object_debug_info(s.fbos);
+		delete_object_debug_info(s.tex1ds);
+		delete_object_debug_info(s.tex2ds);
+		delete_object_debug_info(s.tex3ds);
+		delete_object_debug_info(s.tex_cubemaps);
+		delete_object_debug_info(s.rbos);
+		delete_object_debug_info(s.syncs);
 		delete(s.accessed_buffers);
 	}
 }
@@ -1718,7 +1726,7 @@ init :: proc(gl_context := context) {
 	when gl.GL_DEBUG {
 		if cpu_state.gl_version >= .opengl_4_3 {
 			// Enable debug messages
-			log.infof("Enable opengl debug messages");
+			log.debugf("Enable opengl debug messages");
 			gl.Enable(.DEBUG_OUTPUT);
 			gl.Enable(.DEBUG_OUTPUT_SYNCHRONOUS);
 			
@@ -1730,6 +1738,7 @@ init :: proc(gl_context := context) {
 	gl.capture_error_callback = record_err;
 
 	info = fetch_gl_info();
+	log.infof("OpenGL version : %v", cpu_state.gl_version);
 	log.debugf("System info : %#v", info);
 	
 	gl.PixelStorei(.UNPACK_ALIGNMENT, 1); //TODO should this be here?
@@ -3708,6 +3717,54 @@ blit_fbo_depth_attach :: proc(src, dst : Fbo_id, src_x, src_y, src_width, src_he
 
 //////////////////////////////////////////// Textures ////////////////////////////////////////////
 
+get_label :: proc (tex : union{Tex1d_id, Tex2d_id, Tex3d_id, Tex_cubemap_id}) -> string {
+	/*
+	id : i32;
+	switch t in tex {
+		case Tex1d_id: 
+			id = auto_cast t;
+		case Tex2d_id: 
+			id = auto_cast t;
+		case Tex3d_id: 
+			id = auto_cast t;
+		case Tex_cubemap_id: 
+			id = auto_cast t;
+	}
+
+	max_length : i32;
+	gl.GetIntegeri_v(.TEXTURE, gl.MAX_LABEL_LENGTH, &max_length);
+
+	bytes := make([]u8, max_length);
+	defer delete(bytes);
+	length : i32;
+	
+	gl.GetObjectLabel(.TEXTURE, auto_cast id, auto_cast len(bytes), &length, &bytes[0]);
+
+	if length == 0 {
+		return "";
+	}
+	
+	return strings.clone(string(bytes[:length]));
+	*/
+
+	when RENDER_DEBUG {
+		switch t in tex {
+			case Tex1d_id: 
+				return debug_state.tex1ds[t].label
+			case Tex2d_id: 
+				return debug_state.tex2ds[t].label
+			case Tex3d_id: 
+				return debug_state.tex3ds[t].label
+			case Tex_cubemap_id: 
+				return debug_state.tex_cubemaps[t].label
+		}
+		unreachable();
+	}
+	else {
+		return "";
+	}
+}
+
 active_texture_unit :: proc (slot : u32) {
 	assert(cpu_state.gl_version < .opengl_4_5, "glActiveTexture is not needed on opengl 4.5 or above, dont use it");
 	
@@ -4482,7 +4539,6 @@ active_bind_texture2Ds :: proc (tex : []struct{Tex2d_id, slot : u32}) {
 	panic("TODO");
 }
 
-
 //The copy_frame_buffer is used internally, it must exist only for the purpose of copying texture data.
 copy_texture2D_sub_data :: proc (src_tex : Tex2d_id, dst_tex : int) {
 	
@@ -4691,8 +4747,9 @@ generate_mip_maps_3D :: proc (tex_id : Tex3d_id) {
 	}
 }
 
-wrapmode_texture3D :: proc(tex_id : Tex3d_id, mode : Wrapmode) {
-
+wrapmode_texture3D :: proc(tex_id : Tex3d_id, mode : Wrapmode, loc := #caller_location) {
+	assert(mode != .invalid, "mode is invalid", loc);
+	
 	if cpu_state.gl_version >= .opengl_4_5 { 
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_S, cast(i32)mode);
 		gl.TextureParameteri(auto_cast tex_id, .TEXTURE_WRAP_T, cast(i32)mode);
@@ -4748,6 +4805,27 @@ filtermode_texture3D :: proc(tex_id : Tex3d_id, mode : Filtermode, using_mipmaps
 		unbind_texture3D(15);
 	}
 }
+
+//The copy_frame_buffer is used internally, it must exist only for the purpose of copying texture data.
+copy_texture3D_sub_data :: proc (src_tex : Tex3d_id, dst_tex : Tex3d_id, src_index : [3]i32, dst_index : [3]i32, size : [3]i32) {
+
+	// Create renderbuffer objects
+	if cpu_state.gl_version >= .opengl_4_3 {
+		gl.CopyImageSubData(auto_cast src_tex, .TEXTURE_3D, 0, src_index.x, src_index.y, src_index.z, auto_cast dst_tex, .TEXTURE_3D, 0, dst_index.x, dst_index.y, dst_index.z, size.x, size.y, size.z);
+	}
+	else {
+		/*
+		bind_texture3D(src_tex, 15);
+		gl.CopyTexSubImage2D(.TEXTURE_3D, 0, src_index.x, src_index.y, src_index.z, size.x, size.y, size.z);
+		unbind_texture3D(15);
+		*/
+		panic("TODO");
+	}
+}
+
+
+
+
 
 //// cubemap textures ////
 gen_texture_cubemap :: proc (label : string, loc := #caller_location) -> (tex : Tex_cubemap_id) {
