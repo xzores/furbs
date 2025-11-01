@@ -4208,31 +4208,62 @@ setup_texture_2D :: proc (tex : Tex2d_id, mipmaps : bool, width, height : gl.GLs
 	}
 }
 
-get_texture_image2D  :: proc (tex_id : Tex2d_id, level : i32, loc := #caller_location) -> (write_buffer : [][4]u8) {
-	
+get_texture_image2D  :: proc (tex_id : Tex2d_id, level : i32, offset : [2]i32, size : [2]i32, loc := #caller_location) -> (write_buffer : []u8, download_format : Pixel_format_upload) {
 	width, height : i32;
+	format : Pixel_format_internal;
 	
 	if cpu_state.gl_version >= .opengl_4_5 { 
-		
 		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_WIDTH, &width);
 		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_HEIGHT, &height);
-		
-		write_buffer = make([][4]u8, width * height, loc = loc);
-		
-		gl.GetTextureImage(auto_cast tex_id, level, .RGBA, .UNSIGNED_BYTE, 4 * auto_cast len(write_buffer), raw_data(write_buffer));
+		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
 	}
 	else {
 		bind_texture2D(tex_id, 15);
 		
 		gl.GetTexLevelParameteriv(.TEXTURE_2D, level, .TEXTURE_WIDTH, &width);
 		gl.GetTexLevelParameteriv(.TEXTURE_2D, level, .TEXTURE_HEIGHT, &height);
-		
-		write_buffer = make([][4]u8, width * height, loc = loc);
-		
-		gl.GetTexImage(.TEXTURE_2D, level, .RGBA, .UNSIGNED_BYTE, raw_data(write_buffer));
-		unbind_texture2D(15);
+		gl.GetTexLevelParameteriv(.TEXTURE_2D, level, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
 	}
 	
+	assert(offset.x>=0 && offset.y>=0 && size.x>0 && size.y>0 && offset.x+size.x<=width && offset.y+size.y<=height, "out of texture bounds", loc);
+	assert(!is_internal_format_compressed(format), "TODO, we cannot yet download compressed textures");
+
+	channel_cnt : i32 = auto_cast internal_format_channel_cnt(format);
+	download_format = upload_format_from_internal_format(format);
+	component_size : i32 = auto_cast upload_format_component_size(download_format);
+	pixel_size := channel_cnt * component_size;
+	write_buffer = make([]u8, pixel_size * size.x * size.y, loc = loc);
+
+	if (offset == {0, 0} && size == [2]i32{width, height}) {
+		//Read the entire texture
+		if cpu_state.gl_version >= .opengl_4_5 { 
+			gl.GetTextureImage(auto_cast tex_id, level, internal_format_gl_channel_format(format), upload_format_gl_type(download_format), auto_cast len(write_buffer), raw_data(write_buffer));
+		} 
+		else {
+			gl.GetTexImage(.TEXTURE_2D, level, internal_format_gl_channel_format(format), upload_format_gl_type(download_format), raw_data(write_buffer));
+			unbind_texture2D(15);
+		}
+	}
+	else {
+		//Read a sub-part of the texture, we need to fallback on old versions
+		if cpu_state.gl_version >= .opengl_4_5 {
+			gl.GetTextureSubImage(auto_cast tex_id, level, offset.x, offset.y, 0, size.x, size.y, 1, internal_format_gl_channel_format(format), upload_format_gl_type(download_format), auto_cast len(write_buffer), raw_data(write_buffer));
+		} 
+		else {
+			temp_buffer := make([]u8, pixel_size * width * height, loc = loc);
+			defer delete(temp_buffer);
+
+			//we fallback to reading the entire texture and sampling a sub part.
+			gl.GetTexImage(.TEXTURE_2D, level, internal_format_gl_channel_format(format), upload_format_gl_type(download_format), raw_data(temp_buffer));
+			unbind_texture2D(15);
+			
+			//Copy the subregion
+			for y in 0..<size.y {
+				mem.copy(&write_buffer[pixel_size * (y * size.x)], &temp_buffer[pixel_size * ((y + offset.y) * width + offset.x)], auto_cast (pixel_size * size.x))
+			}
+		}
+	}
+
 	return;
 }
 
@@ -4823,8 +4854,72 @@ copy_texture3D_sub_data :: proc (src_tex : Tex3d_id, dst_tex : Tex3d_id, src_ind
 	}
 }
 
+get_texture_image3D  :: proc (tex_id : Tex3d_id, level : i32, offset : [3]i32, size : [3]i32, loc := #caller_location) -> (write_buffer : []u8, download_format : Pixel_format_upload) {
+	width, height, depth : i32;
+	format : Pixel_format_internal;
+	
+	if cpu_state.gl_version >= .opengl_4_5 { 
+		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_WIDTH, &width);
+		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_HEIGHT, &height);
+		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_DEPTH, &depth);
+		gl.GetTextureLevelParameteriv(auto_cast tex_id, level, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
+	}
+	else {
+		bind_texture3D(tex_id, 15);
+		
+		gl.GetTexLevelParameteriv(.TEXTURE_3D, level, .TEXTURE_WIDTH, &width);
+		gl.GetTexLevelParameteriv(.TEXTURE_3D, level, .TEXTURE_HEIGHT, &height);
+		gl.GetTexLevelParameteriv(.TEXTURE_3D, level, .TEXTURE_DEPTH, &depth);
+		gl.GetTexLevelParameteriv(.TEXTURE_3D, level, .TEXTURE_INTERNAL_FORMAT, auto_cast &format);
+	}
+	
+	assert(offset.x >= 0 && size.x > 0 && offset.x + size.x <= width, "X axis out of texture bounds", loc);
+	assert(offset.y >= 0 && size.y > 0 && offset.y + size.y <= height, "Y axis out of texture bounds", loc);
+	assert(offset.z >= 0 && size.z > 0 && offset.z + size.z <= depth, "Z axis out of texture bounds", loc);
+	assert(!is_internal_format_compressed(format), "TODO, we cannot yet download compressed textures");
 
+	channel_cnt : i32 = auto_cast internal_format_channel_cnt(format);
+	download_format = upload_format_from_internal_format(format);
+	component_size : i32 = auto_cast upload_format_component_size(download_format);
+	pixel_size := channel_cnt * component_size;
+	write_buffer = make([]u8, pixel_size * size.x * size.y * size.z, loc = loc);
 
+	if (offset == {0, 0, 0} && size == [3]i32{width, height, depth}) {
+		//Read the entire texture
+		if cpu_state.gl_version >= .opengl_4_5 { 
+			gl.GetTextureImage(auto_cast tex_id, level, internal_format_gl_channel_format(format), upload_format_gl_type(download_format), auto_cast len(write_buffer), raw_data(write_buffer));
+		} 
+		else {
+			gl.GetTexImage(.TEXTURE_3D, level, internal_format_gl_channel_format(format), upload_format_gl_type(download_format), raw_data(write_buffer));
+			unbind_texture3D(15);
+		}
+	}
+	else {
+		//Read a sub-part of the texture, we need to fallback on old versions
+		if cpu_state.gl_version >= .opengl_4_5 {
+			gl.GetTextureSubImage(auto_cast tex_id, level, offset.x, offset.y, offset.z, size.x, size.y, size.z, internal_format_gl_channel_format(format), upload_format_gl_type(download_format), auto_cast len(write_buffer), raw_data(write_buffer));
+		}
+		else {
+			temp_buffer := make([]u8, pixel_size * width * height * depth, loc = loc);
+			defer delete(temp_buffer);
+
+			//we fallback to reading the entire texture and sampling a sub part.
+			gl.GetTexImage(.TEXTURE_3D, level, internal_format_gl_channel_format(format), upload_format_gl_type(download_format), raw_data(temp_buffer));
+			unbind_texture3D(15);
+			
+			//Copy the subregion
+			for z in 0..<size.z {
+				for y in 0..<size.y {
+					dst := pixel_size * (z * size.y 				+ y) * size.x;
+					src := pixel_size * ((z + offset.z) * height 	+ (y + offset.y) * width 	+ offset.x);
+					mem.copy(&write_buffer[dst], &temp_buffer[src], auto_cast (pixel_size * size.x))
+				}
+			}
+		}
+	}
+
+	return;
+}
 
 
 //// cubemap textures ////

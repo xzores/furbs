@@ -388,13 +388,14 @@ texture2D_destroy :: proc(tex : Texture2D, loc := #caller_location) {
 }
 
 @(require_results)
-texture2D_download_texture :: proc(tex : Texture2D, loc := #caller_location) -> (data : [][4]u8) {
+texture2D_download_data :: proc(tex : Texture2D, offset : [2]i32, size : [2]i32, mip_level : i32 = 0, loc := #caller_location) -> (data : []u8, format : gl.Pixel_format_upload) {
 	
-	res := gl.get_texture_image2D(tex.id, 0, loc);
+	data, format = gl.get_texture_image2D(tex.id, mip_level, offset, size, loc);
 	
-	assert(auto_cast len(res) == tex.width * tex.height, "Internal error. There is a mismatch is GL and Odin states, they dont agree on texture size.");
+	pixel_size : i32 = auto_cast gl.upload_format_channel_cnt(format) * auto_cast gl.upload_format_component_size(format)
+	assert(auto_cast len(data) == pixel_size * tex.width * tex.height, "Internal error. There is a mismatch is GL and Odin states, they dont agree on texture size.");
 	
-	return res;
+	return data, format;
 }
 
 texture2D_flip :: proc(data : []byte, #any_int width, height, channels : int) {
@@ -528,6 +529,11 @@ texture3D_clear :: proc(tex : ^Texture3D, clear_color : [4]f64, loc := #caller_l
 
 texture3D_destroy :: proc(tex : Texture3D) {
 	gl.delete_texture3D(tex.id);
+}
+
+texture3D_download_data :: proc(tex : ^Texture3D, pixel_offset : [3]i32, pixel_cnt : [3]i32, mip_level : i32 = 0, loc := #caller_location) -> (data : []u8, format : gl.Pixel_format_upload) {
+	data, format = gl.get_texture_image3D(tex.id, mip_level, pixel_offset, pixel_cnt, loc);
+	return;
 }
 
 texture3D_upload_data :: proc(tex : ^Texture3D, pixel_offset : [3]i32, pixel_cnt : [3]i32, format : gl.Pixel_format_upload, data : []u8, loc := #caller_location) {
@@ -763,8 +769,10 @@ texture3D_atlas_make :: proc (upload_format : gl.Pixel_format_upload, desc : Tex
 @(require_results)
 texture3D_atlas_claim :: proc (atlas : ^Texture3D_atlas, size : [3]i32, data : []u8, loc := #caller_location) -> (handle : Atlas_3D_handle, success : bool) {
 	
-	h, ok := texture3D_atlas_allocate(atlas, size, loc);
-	index, i_size := texture3D_atlas_get_coords_int(atlas^, h);
+	atlas.next_handle += 1;
+	ok := texture3D_atlas_allocate(atlas, size, atlas.next_handle, loc);
+	assert(ok);
+	index, i_size := texture3D_atlas_get_coords_int(atlas^, atlas.next_handle);
 	assert(size == i_size)
 	
 	//upload it.
@@ -772,7 +780,7 @@ texture3D_atlas_claim :: proc (atlas : ^Texture3D_atlas, size : [3]i32, data : [
 		texture3D_upload_data(&atlas.backing, index, size, atlas.upload_format, data, loc);
 	}
 
-	return h, ok;
+	return atlas.next_handle, ok;
 }
 
 //TODO this should be called upload and upload should be called something else.
@@ -799,7 +807,7 @@ texture3D_atlas_get_coords_float :: proc (atlas : Texture3D_atlas, handle : Atla
 //The coordinates until the atlas is resized or destroy.
 @(require_results)
 texture3D_atlas_get_coords_int :: proc (atlas : Texture3D_atlas, handle : Atlas_3D_handle, loc := #caller_location) -> (index : [3]i32, size : [3]i32) {
-	assert(handle in atlas.handle_map, "handle is not registiered", loc)
+	fmt.assertf(handle in atlas.handle_map, "handle %v is not registiered", handle, loc = loc)
 	v := atlas.handle_map[handle];
 	return v.index, v.size
 }
@@ -844,9 +852,11 @@ texture3D_atlas_transfer :: proc (atlas : ^Texture3D_atlas, new_size : i32, loc 
 	assert(atlas.backing.desc.wrapmode != .invalid, "Hugh??? corrupted texture desc", loc);
 	new_atlas := texture3D_atlas_make(atlas.upload_format, atlas.backing.desc, gl.get_label(atlas.backing.id), new_size, loc);
 	
+	new_atlas.next_handle = atlas.next_handle;
+
 	for key, entry in atlas.handle_map {
-		handle, ok := texture3D_atlas_allocate(&new_atlas, entry.size, loc);
-		dst, size := texture3D_atlas_get_coords_int(new_atlas, handle);
+		ok := texture3D_atlas_allocate(&new_atlas, entry.size, key, loc);
+		dst, size := texture3D_atlas_get_coords_int(new_atlas, key);
 		assert(entry.size == size)
 		assert(ok);
 
@@ -861,7 +871,7 @@ texture3D_atlas_transfer :: proc (atlas : ^Texture3D_atlas, new_size : i32, loc 
 
 //finds a free space and allocates it, used internally
 @(private="file", require_results)
-texture3D_atlas_allocate :: proc (atlas : ^Texture3D_atlas, size : [3]i32, loc := #caller_location) -> (Atlas_3D_handle, bool) {
+texture3D_atlas_allocate :: proc (atlas : ^Texture3D_atlas, size : [3]i32, handle : Atlas_3D_handle, loc := #caller_location) -> (bool) {
 
 	//This algorithem works with block size, and no element can be bigger then a block, so we need to redo the blocksize if we got a new element which is bigger.
 	max_size := math.max(size.x, math.max(size.y, size.z));
@@ -880,7 +890,7 @@ texture3D_atlas_allocate :: proc (atlas : ^Texture3D_atlas, size : [3]i32, loc :
 				half_size := fs.size / 2;
 				for half_size >= pow_2_max_size {
 
-					cur_free_slots : ^Atlas_3D_sort
+					cur_free_slots : ^Atlas_3D_sort;
 					//find the array with the right size
 					for &fs in atlas.free_slots {
 						if fs.size == half_size {
@@ -940,10 +950,9 @@ texture3D_atlas_allocate :: proc (atlas : ^Texture3D_atlas, size : [3]i32, loc :
 	}
 
 	//put this in the map
-	atlas.next_handle += 1;
-	atlas.handle_map[atlas.next_handle] = {index, size, pow_2_max_size};
-
-	return atlas.next_handle, true;
+	atlas.handle_map[handle] = {index, size, pow_2_max_size};
+	
+	return true;
 }
 
 
