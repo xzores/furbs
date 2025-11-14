@@ -81,7 +81,7 @@ draw_fps_overlay :: proc (offset : [2]f32 = {0,0}, scale : f32 = 1, loc := #call
 	assert(state.current_pipeline == {}, "There must not be a pipeline, move draw_coordinate_overlay out of the pipeline", loc);
 	
 	//A low pass filter XD
-	smoothing : f32 = 0.94; // larger=more smoothing
+	smoothing : f32 = 0.98; // larger=more smoothing
 	state.fps_measurement = (state.fps_measurement * smoothing) + (state.delta_time * (1.0-smoothing))
 	
 	t := fmt.aprintf("FPS : %i", cast(int)(1.0 / state.fps_measurement));
