@@ -206,8 +206,8 @@ end :: proc(s : ^State) {
 				switch c.rect_type {
 					
 					case .menu_item_front:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						switch c.state {
 							case .cold:
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.25, 0.15, 0.25, 1});
@@ -218,12 +218,12 @@ end :: proc(s : ^State) {
 						}
 					
 					case .split_panel_splitter:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						render.set_uniform(render.Uniform_location.gui_fill, true);
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.55, 0.55, 0.55, 1});
 						
 					case .menu_background:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						switch c.state {
 							case .cold:
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.25, 0.15, 0.15, 1});
@@ -234,17 +234,17 @@ end :: proc(s : ^State) {
 						}
 					
 					case .menu_item_background:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.35, 0.35, 0.35, 1});
 					
 					case .debug_rect:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
+						render.set_uniform(render.Uniform_location.gui_fill, true);
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.75, 0.15, 0.15, 0.3});
 						
 					case .button_background:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						
 						switch c.state {
 							case .cold:
@@ -256,8 +256,8 @@ end :: proc(s : ^State) {
 						}
 					
 					case .checkbox_background:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						
 						switch c.state {
 							case .cold:
@@ -269,13 +269,13 @@ end :: proc(s : ^State) {
 						}
 						
 					case .window_background:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.15, 0.15, 0.15, 1});
 				
 					case .window_top_bar:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						switch c.state {
 							case .cold:
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.6, 0.25, 0.25, 1});
@@ -286,8 +286,8 @@ end :: proc(s : ^State) {
 						}
 					
 					case .scrollbar_background:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						switch c.state {
 							case .cold:
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.7, 0.7, 0.7, 0.2});
@@ -296,8 +296,8 @@ end :: proc(s : ^State) {
 						}
 						
 					case .scrollbar_front:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						switch c.state {
 							case .cold:
 								render.draw_quad_rect(c.rect * unit_size, 0, {0.5, 0.5, 0.5, 1});
@@ -308,20 +308,20 @@ end :: proc(s : ^State) {
 						}
 					
 					case .checkbox_border, .window_border, .button_border, .menu_border, .menu_item_background_border, .menu_item_front_border:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, false);
-						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.border_thickness * unit_size);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, false);
+						render.set_uniform(render.Uniform_location.gui_line_thickness, cast(f32)c.border_thickness * unit_size);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.25, 0.25, 0.25, 1});
 						
 					case .checkbox_foreground:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)0); //TODO roundness
 						render.draw_quad_rect(c.rect * unit_size, 0, {0.6, 0.25, 0.25, 1});
 						
 					case .window_collapse_button_up, .window_collapse_button_down, .window_collapse_button_left, .window_collapse_button_right:
-						render.set_uniform(s.shader, render.Uniform_location.gui_fill, true);
-						render.set_uniform(s.shader, render.Uniform_location.gui_line_thickness, cast(f32)c.border_thickness * unit_size);
-						//render.set_uniform(s.shader, render.Uniform_location.gui_roundness, cast(f32)c.roundness * unit_size);
+						render.set_uniform(render.Uniform_location.gui_fill, true);
+						render.set_uniform(render.Uniform_location.gui_line_thickness, cast(f32)c.border_thickness * unit_size);
+						//render.set_uniform(render.Uniform_location.gui_roundness, cast(f32)c.roundness * unit_size);
 						
 						a, b, d : [2]f32;
 						
