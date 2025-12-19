@@ -137,6 +137,7 @@ Element :: struct {
 	size : [2]i32,
 	position : [2]i32,
 	user_ptr : rawptr,
+	debug_name : cstring,
 
 	using param : Parameters,
 }
@@ -159,6 +160,7 @@ make_layout_state :: proc (params : Parameters = default_root_params) -> ^Layout
 		{0,0},
 		{0,0},
 		nil,
+		"root",
 
 		params
 	}
@@ -201,12 +203,13 @@ begin_layout_state :: proc (ls : ^Layout_state, screen_size : [2]i32) {
 	ls.has_begun = true;
 }
 
-open_element :: proc (ls : ^Layout_state, params : Parameters, user_data : rawptr = nil) {
+open_element :: proc (ls : ^Layout_state, params : Parameters, user_data : rawptr = nil, debug_name : cstring = "") {
 	assert(ls.has_begun, "you must begin the layout state once at the start of the frame");
 
 	ne := new(Element);
 	ne.param = params;
 	ne.user_ptr = user_data;
+	ne.debug_name = debug_name;
 
 	if len(ls.element_stack) != 0 {
 		ne.parent = ls.element_stack[len(ls.element_stack)-1];
@@ -357,7 +360,9 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 		}
 		remaning_width -= (cast(i32) len(expand_in_flow) - 1) * elem.child_gap[axis];
 		total_width := remaning_width;
-
+		if remaning_width == 0 {
+			fmt.printf("element : %v\n", elem);
+		}
 		
 		for remaning_width > 0 && len(expand_in_flow) != 0 {
 			least_pressence : i32 = max(i32)
@@ -437,6 +442,7 @@ do_size_fit :: proc (elem : ^Element, axis : int) {
 			panic("TODO");
 		case Grow: {
 			//grow does not make space for children
+			elem.size[axis] = 0;
 		}
 	}
 	
