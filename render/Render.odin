@@ -484,9 +484,17 @@ restore_pipeline :: proc(state : Stored_pipeline, loc := #caller_location) {
 }
 
 set_shader_define :: proc (entry : string, value : string) {
-	using strings;
+	set_shader_defines({entry, value});
+}
 
-	state.shader_defines[clone(entry)] = clone(value);
+set_shader_defines :: proc (entries : [][2]string) {
+	using strings;
+	
+	for e in entries {
+		state.shader_defines[clone(e[0])] = clone(e[1]);
+	}
+	//panic("TODO recompile all shaders with that define");
+	log.errorf("TODO recompile all shaders with that define");
 }
 
 delta_time :: proc () -> f32 {

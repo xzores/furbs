@@ -2415,7 +2415,6 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 	gl.ShaderSource(shader_id_vertex, 1, auto_cast &shader_sources_vertex, nil);
 
 	if err, msg := compile_shader(auto_cast shader_id_vertex); err {
-		log.errorf("Failed to compile vertex shader %v, ERROR :\n%s", name, msg);
 		gl.DeleteShader(shader_id_vertex);
 		gl.DeleteShader(shader_id_fragment);
 		return 0, Compilation_error{msg, .vertex};
@@ -2427,7 +2426,6 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 	gl.ShaderSource(shader_id_fragment, 1, auto_cast &shader_sources_fragment, nil);
 
 	if err, msg := compile_shader(auto_cast shader_id_fragment); err {
-		log.errorf("Failed to compile fragment shader %v, ERROR :\n%s", name, msg);
 		gl.DeleteShader(shader_id_vertex);
 		gl.DeleteShader(shader_id_fragment);
 		return 0, Compilation_error{msg, .fragment};
@@ -2438,7 +2436,6 @@ load_shader_program :: proc(name : string, vertex_src : string, fragment_src : s
 	gl.AttachShader(auto_cast shader_program, auto_cast shader_id_fragment);
 	
 	if err := link_shader_program(auto_cast shader_program); err != {} {
-		log.errorf("Failed to link shader program %v, ERROR : %s", name, err);
 		gl.DeleteShader(shader_id_vertex);
 		gl.DeleteShader(shader_id_fragment);
 		gl.DeleteProgram(auto_cast shader_program);

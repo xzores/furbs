@@ -8,7 +8,7 @@ import "core:math"
 
 ///////////TODO TODO///////////
 //We need some more features here.
-//First we need the ability to be able to pick min and max sizes.
+//First we need the ability to be able to pick min and max sizes. (i think this works)
 //Then we need to be able to pick % of parent, so 50% of parent (50% of screen can be easily absracted in the next layer)
 //Then we need to be able to do text, this requires doing all the steps.
 //then we have absolute position that needs to be done.
@@ -53,6 +53,13 @@ Anchor_point :: enum {
 	top_right,
 }
 
+Axis :: enum {
+	up_right,
+	up_left,
+	down_right,
+	down_left,
+}
+
 Fixed :: i32;
 Parent_ratio :: distinct f32;
 Fit :: struct {};
@@ -85,6 +92,7 @@ Max_size :: union {
 Absolute_postion :: struct {
 	anchor : Anchor_point,
 	self_anchor : Anchor_point,
+	axis : Axis,
 	offset : [2]i32,
 }
 
@@ -148,9 +156,13 @@ Element_layout :: struct {
 	user_data : rawptr,
 }
 
-make_layout_state :: proc (params : Parameters = default_root_params) -> ^Layout_state {
-	ls := new(Layout_state);
-
+make_layout_state :: proc (ls : ^Layout_state = nil, params : Parameters = default_root_params) -> ^Layout_state {
+	ls := ls;
+	
+	if ls == nil {
+		ls = new(Layout_state);
+	}
+	
 	ne := new(Element);
 	ne^ = {
 		nil, 
@@ -220,7 +232,6 @@ open_element :: proc (ls : ^Layout_state, params : Parameters, user_data : rawpt
 		append(&ne.parent.children, ne);
 	}
 
-	append(&ne.parent.children, ne);
 	if _, ok := ne.abs_position.?; ok {
 		append(&ne.parent.out_flow, ne);
 	}
@@ -341,7 +352,7 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 
 			case Parent_ratio:
 				panic("TODO");
-			
+				
 			case Grow, Grow_fit:
 				append(&expand_in_flow, c);
 		}
@@ -353,17 +364,17 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 		remaning_width := elem.size[axis] - elem.padding[axis] - elem.padding[axis + 2];
 		
 		//how much width is there in total and how much weight, we can use to determine how many pixels a single width is worth
+		for child in elem.in_flow {
+			remaning_width -= child.size[axis];
+		}
+		remaning_width -= (cast(i32) len(elem.in_flow) - 1) * elem.child_gap[axis];
+		total_width := remaning_width;
+		
 		total_weight : i32 = 0;
 		for child in expand_in_flow {
-			remaning_width -= child.size[axis];
 			total_weight += child.grow_weight;
 		}
-		remaning_width -= (cast(i32) len(expand_in_flow) - 1) * elem.child_gap[axis];
-		total_width := remaning_width;
-		if remaning_width == 0 {
-			fmt.printf("element : %v\n", elem);
-		}
-		
+
 		for remaning_width > 0 && len(expand_in_flow) != 0 {
 			least_pressence : i32 = max(i32)
 			next_least_pressence : i32 = max(i32)
@@ -381,9 +392,8 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 			#reverse for &child, i in expand_in_flow {
 				consumed : i32;
 
-				if i == len(expand_in_flow) - 1 { //we do give the last element the rest of the width, this is a way to handle floating point precision.
+				if i == 0 { //we do give the last element the rest of the width, this is a way to handle floating point precision.
 					consumed = remaning_width;
-					fmt.printf("remaning_width : %v, parent size : %v\n", remaning_width, elem.parent);
 				}
 				else {
 					if next_least_pressence == max(i32) {
@@ -405,6 +415,7 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 					child.size[axis] += consumed;
 					remaning_width -= consumed;
 				}
+
 			}
 		}
 		
@@ -427,7 +438,7 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 do_size_fit_recursive :: proc (elem : ^Element, axis : int) {
 	
 }
- 
+
 @(private="file")
 do_size_fit :: proc (elem : ^Element, axis : int) {
 
@@ -546,6 +557,15 @@ do_position_recursive :: proc (elem : ^Element, screen_offset : [2]i32) {
 		}
 	}
 	
+	for child, i in elem.out_flow {
+		if abs, ok := child.abs_position.?; ok {
+			child.position = position_abs_rect(abs.anchor, abs.self_anchor, abs.axis, abs.offset, child.size, elem.position, elem.size);
+		}
+		else {
+			panic("out of flow must be abs position");
+		}
+	}
+
 	for child, i in elem.children {
 		do_position_recursive(child, child.position);
 	}
@@ -604,7 +624,7 @@ get_fit_space :: proc (elem : ^Element, axis : int) -> i32 {
 		
 		for child, i in elem.in_flow {
 			size = math.max(size, child.size[axis]);
-			panic("todo, this does not work for centered abs position elements")
+			//panic("todo, this does not work for centered abs position elements")
 		}
 
 		return size + elem.padding[axis] + elem.padding[axis + 2];
@@ -625,4 +645,106 @@ is_primary_axis :: proc (elem : ^Element, axis : int) -> bool {
 	}
 
 	return is_prim;
+}
+
+@(private="file")
+position_abs_rect :: proc(anchor : Anchor_point, self_anchor : Anchor_point, axis : Axis, child_offset, child_size, parent_pos, parent_size : [2]i32) -> [2]i32 {
+	offset := [2]i32{0, 0};
+	parent_rect := [4]i32{parent_pos.x, parent_pos.y, parent_size.x, parent_size.y};
+
+	switch self_anchor {
+		
+		case .bottom_left:
+			//No code required
+
+		case .bottom_center:
+			offset.x = -child_size.x / 2;
+
+		case .bottom_right:
+			offset.x = -child_size.x
+
+		case .center_left:
+			offset.y = -child_size.y / 2;
+
+		case .center_center:
+			offset.x = -child_size.x / 2;
+			offset.y = -child_size.y / 2;
+		
+		case .center_right:
+			offset.x = -child_size.x
+			offset.y = -child_size.y / 2;
+
+		case .top_left:
+			offset.y = -child_size.y
+		
+		case .top_center:
+			offset.x = -child_size.x / 2
+			offset.y = -child_size.y
+
+		case .top_right:
+			offset.x = -child_size.x
+			offset.y = -child_size.y		
+		
+		case: // default
+			unreachable();
+	}
+	
+	offset += parent_rect.xy;
+
+	switch anchor {
+
+		case .bottom_left	 :
+			//No code required
+
+		case .bottom_center   :
+			offset.x += parent_rect.z / 2;
+			
+		case .bottom_right	:
+			offset.x += parent_rect.z;
+
+		case .center_left  :
+			offset.y += parent_rect.w / 2;
+
+		case .center_center:
+			offset.x += parent_rect.z / 2;
+			offset.y += parent_rect.w / 2;
+		
+		case .center_right :
+			offset.x += parent_rect.z
+			offset.y += parent_rect.w / 2;
+
+		case .top_left  :
+			offset.y += parent_rect.w;
+
+		case .top_center:
+			offset.x += parent_rect.z / 2;
+			offset.y += parent_rect.w;
+
+		case .top_right :
+			offset.x += parent_rect.z;
+			offset.y += parent_rect.w;
+
+		case: // default
+			unreachable();
+	}
+	
+	switch axis {
+		
+		case .up_right:
+			offset += child_offset;
+
+		case .up_left:
+			offset += {-child_offset.x, child_offset.y};
+		
+		case .down_right:
+			offset += {child_offset.x, -child_offset.y};
+
+		case .down_left:
+			offset += {-child_offset.x, -child_offset.y};
+
+		case: // default
+			unreachable();
+	}
+
+	return offset;
 }

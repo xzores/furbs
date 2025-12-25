@@ -1,6 +1,10 @@
 #+feature dynamic-literals
 package render
 
+import "core:unicode"
+import "core:unicode/utf8"
+import "core:container/rbtree"
+import "core:strconv"
 import "core:fmt"
 import "core:reflect"
 import "core:strings"
@@ -16,18 +20,19 @@ import glgl "gl/OpenGL"
 import ex_defs "../../furbs_defs"
 
 Shader_file_error :: enum {
+	ok,
 	invalid_path,
 	failed_fileopen,
 }
 
 Shader_invalid_attribute :: struct {
-	invalid : enum {illigal_name, illigal_placement},
+	invalid : enum {ok, illigal_name, illigal_placement},
 	required_placement : i32,
 	attrib_name : string,
 }
 
 Shader_invalid_uniform :: struct {
-	invalid : enum {illigal_name},
+	invalid : enum {ok, illigal_name},
 	uniform_name : string,
 }
 
@@ -323,9 +328,14 @@ set_texture :: proc(location : Texture_location, value : Texture_odin_type, loc 
 	//glgl.Uniform1i(u_loc, cast(i32)location);
 }
 
+Preprocessor_info :: struct {
+	vertex_offset : int,
+	fragment_offset : int,
+}
+
 //You must destoy the error. (if it is there)
 @(require_results)
-run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : string, src : string, path : string) -> (vertex_src : string, fragment_src : string, err : Maybe(Shader_preprocessor_error)) {
+run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : string, src : string, path : string) -> (vertex_src : string, fragment_src : string, info : Preprocessor_info, err : Maybe(Shader_preprocessor_error)) {
 	using strings;
 
 	err = nil;
@@ -484,7 +494,7 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 
 					target = .all;
 					
-					_, _, err = run_preprocessor(preprocessor, fmt.tprintf("%s/%s", shader_name, file_identifier), include_src, include_path);
+					_, _, info, err = run_preprocessor(preprocessor, fmt.tprintf("%s/%s", shader_name, file_identifier), include_src, include_path);
 					if err != nil {
 						return;
 					}
@@ -528,10 +538,12 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 
 				if to_string(current_identifier) == vertex {
 					log.debugf("found tag @vertex");
+					info.vertex_offset = line + 1;
 					target = .target_vertex;
 				}
 				else if to_string(current_identifier) == fragment {
 					log.debugf("found tag @fragment");
+					info.fragment_offset = line + 1;
 					target = .target_fragment;
 				}
 				else {
@@ -559,7 +571,7 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 		}
 	}
 
-	return to_string(vertex_builder), to_string(fragment_builder), nil;
+	return to_string(vertex_builder), to_string(fragment_builder), info, nil;
 }
 
 //You must destoy the error. (if it is there)
@@ -619,7 +631,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 		path = l.path;
 	}
 	
-	vertex_src, fragment_src, pre_err := run_preprocessor(&preprocessor, name, combined_src, path);
+	vertex_src, fragment_src, meta_data, pre_err := run_preprocessor(&preprocessor, name, combined_src, path);
 	if e, ok := pre_err.?; ok {
 		log.errorf(e.msg);
 		free(shader);
@@ -637,6 +649,52 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 	shader_id, comp_err := load_shader_program(name, vertex_src, fragment_src, name);
 	
 	if e, ok := comp_err.?; ok {
+
+		replace_error_line :: proc (msg : string, offset : int, alloc := context.allocator) -> string {
+			
+			new_string := strings.builder_make(alloc);
+
+			replace := false;
+			replacing_begin := -1;
+			for c, i in msg {
+				
+				if unicode.is_number(c) && replace {
+					replacing_begin = i;
+				}
+				if !unicode.is_number(c) && replacing_begin != -1 {
+					s := msg[replacing_begin-1:i];
+					i, ok := strconv.parse_int(s);
+					fmt.assertf(ok, "was : %v", s);
+					strings.write_int(&new_string, offset + i);
+
+					replace = false;
+					replacing_begin = -1;
+				}
+				if c == '(' && msg[i-1] == '0' {
+					replace = true;
+				}
+
+				if replacing_begin == -1 {
+					strings.write_rune(&new_string, c);
+				}
+			}
+
+			return strings.to_string(new_string);
+		}
+
+		if e.type == .vertex {
+			log.errorf("Failed to compile vertex shader %v, ERROR :\n%s", name, e.msg);
+		}
+		else if e.type == .fragment {
+			log.errorf("Failed to compile vertex fragment %v, ERROR :\n%s", name, replace_error_line(e.msg, meta_data.fragment_offset, context.temp_allocator));
+		}
+		else if e.type == .link {
+			log.errorf("Failed to link shader program %v, ERROR : %s", name, e.msg);
+		}
+		else {
+			unreachable();
+		}
+
 		free(shader);		
 		if l, ok := loaded.?; ok {
 			delete(l.path);
@@ -658,7 +716,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 		value : Attribute_location = auto_cast enum_field.value;
 		attrib_names[name] = value;
 	}
-
+	
 	//Load uniforms into uniform_names
 	uniform_enums := reflect.enum_fields_zipped(Uniform_location);
 	for enum_field, i in uniform_enums {

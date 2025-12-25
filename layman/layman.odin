@@ -19,7 +19,6 @@ import "../render"
 padding inserts a space between the parent and the elements and its children.
 */
 
-
 /*
 This is a layout manager for an immitiate mode GUI, 
 to init, do init, to destroy do destroy
