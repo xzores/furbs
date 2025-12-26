@@ -366,9 +366,11 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 			case .no_state:
 				do_write = false;
 				if c == '/' {
-					if to_string(current_identifier) == "/" {
+					/*if to_string(current_identifier) == "/" {
 						p_state = .in_comment;
-					}
+					}*/
+					p_state = .in_comment;
+					write_target(preprocessor, "/");
 				}
 				else if c == '#' {
 					p_state = .potential_include;
@@ -385,7 +387,7 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 					p_state = .in_code;
 				}
 			case .in_comment:
-				do_write = false;
+				do_write = true;
 				if c == '\n' {
 					p_state = .no_state;
 				}
@@ -460,8 +462,8 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 					log.debugf("found include identifier : %v", file_identifier);
 					if (path == "") {
 						err = Shader_preprocessor_error{
-							msg = fmt.aprintf("The shader %s cannot #include if it do not have a path. Only shaders loaded from a path may #include", shader_name),
-							line = line,
+							fmt.aprintf("The shader %s cannot #include if it do not have a path. Only shaders loaded from a path may #include", shader_name),
+							line,
 						};
 						return;
 					}
@@ -470,8 +472,8 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 					defer os.file_info_delete(file_info);
 					if info_ok != 0 {
 						err = Shader_preprocessor_error{
-							msg = fmt.aprintf("Something is very wrong the shader %s loaded from no longer exists...", shader_name, path),
-							line = line,
+							fmt.aprintf("Something is very wrong the shader %s loaded from no longer exists...", shader_name, path),
+							line,
 						};
 						return;
 					}
@@ -482,8 +484,8 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 
 					if !ok {
 						err = Shader_preprocessor_error{
-							msg = fmt.aprintf("Could not load file %s", include_path),
-							line = line,
+							fmt.aprintf("Could not load file %s", include_path),
+							line,
 						};
 						return;
 					}
@@ -538,18 +540,18 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 
 				if to_string(current_identifier) == vertex {
 					log.debugf("found tag @vertex");
-					info.vertex_offset = line + 1;
+					info.vertex_offset = line - 1;
 					target = .target_vertex;
 				}
 				else if to_string(current_identifier) == fragment {
 					log.debugf("found tag @fragment");
-					info.fragment_offset = line + 1;
+					info.fragment_offset = line - 1;
 					target = .target_fragment;
 				}
 				else {
 					//fmt.tprintf("tag found, but was invalid. The tag : '%v'. It must be @vertex or @fragment", to_string(current_identifier))
 				}
-
+				
 				if c == '\n' {
 					p_state = .no_state;
 				}
