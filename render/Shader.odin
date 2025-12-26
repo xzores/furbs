@@ -126,9 +126,9 @@ Shader :: struct {
 	id : Shader_program_id,				 					// Shader program id
 	name : string,
 	loaded : Maybe(Shader_load_desc),
-	attribute_locations : [Attribute_location]Attribute_info, 	// Shader locations array (MAX_SHADER_LOCATIONS)
-	uniform_locations : [Uniform_location]Uniform_info,
-	texture_locations : [Texture_location]Uniform_info,
+	attribute_locations : #sparse [Attribute_location]Attribute_info, 	// Shader locations array (MAX_SHADER_LOCATIONS)
+	uniform_locations : #sparse [Uniform_location]Uniform_info,
+	texture_locations : #sparse [Texture_location]Uniform_info,
 }
 
 Uniform_odin_type :: union {
