@@ -121,6 +121,12 @@ texture1D_upload_data :: proc(tex : ^Texture1D, #any_int pixel_offset : i32, #an
 	}
 }
 
+//will destroy data
+texture1D_resize :: proc (tex : ^Texture1D, new_size : i32) {
+	texture1D_destroy(tex^);
+	tex^ = texture1D_make(tex.mipmaps, tex.wrapmode, tex.filtermode, tex.format, new_size, .no_upload, nil, {}, nil);
+}
+
 /////////////////////////////////// Texture 2D ///////////////////////////////////
 Texture2D :: struct {
 	id			: gl.Tex2d_id,				// OpenGL texture id
@@ -373,6 +379,7 @@ texture2D_upload_data :: proc(tex : ^Texture2D, upload_format : gl.Pixel_format_
 	}
 }
 
+//will destroy data
 texture2D_resize :: proc (tex : ^Texture2D, new_size : [2]i32) {
 	texture2D_destroy(tex^);
 	tex^ = texture2D_make(tex.mipmaps, tex.wrapmode, tex.filtermode, tex.format, new_size.x, new_size.y, .no_upload, nil, nil);
@@ -859,7 +866,7 @@ texture3D_atlas_transfer :: proc (atlas : ^Texture3D_atlas, new_size : i32, loc 
 		dst, size := texture3D_atlas_get_coords_int(new_atlas, key);
 		assert(entry.size == size)
 		assert(ok);
-
+		
 		gl.copy_texture3D_sub_data(atlas.backing.id, new_atlas.backing.id, entry.index, dst, size);
 	}
 	

@@ -1,10 +1,12 @@
 package furbs_layren;
 
+import "base:runtime"
 import "core:c"
 import "vendor:fontstash"
 import "core:fmt"
 import "core:relative"
 import "core:math"
+import "core:slice"
 import "core:reflect"
 
 import "../render"
@@ -80,6 +82,7 @@ Rect_options :: struct {
 		Gradient,
 	},
 	
+	fill : bool,
 	border : Maybe(i32), //set this if it is border (width is pixels) default is fill.
 	shadow : Maybe(Shadow),
 	rounding : [4]f32 // TL, TR, BR, BL
@@ -87,33 +90,36 @@ Rect_options :: struct {
 	//clip : enum { none, hard, rounded }
 }
 
+To_render :: struct{
+	rect : [4]f32,
+	tex : render.Texture2D,
+	index : int
+}
+
 Layout_render :: struct {
 	pipeline : render.Pipeline,
 	shader : ^render.Shader,
+
+	//render data
+	to_render : [dynamic]To_render,
+	gui_data : [dynamic]u32,
+	gui_texture : render.Texture1D,
+
+	has_begun : bool,
 }
 
-@private
-Rect_gpu_layout :: struct #packed {
-	fill : b32,
-	is_color : b32,
-	color : [4]u8,
-
-	//gradients is a length and of how many after this struct:
-	gradient_cnt : i32,
-	//lines is after gradients
-	line_cnt : i32,
-}
 
 make_layout_render :: proc (lr : ^Layout_render = nil) -> ^Layout_render {
 	lr := lr;
-
+	
 	defines : [dynamic][2]string;
 	defer delete(defines);
 
 	for field in reflect.struct_fields_zipped(Rect_gpu_layout) {
-		append(&defines, [2]string{fmt.tprintf("%v%v", "lr_", field.name), fmt.tprintf("%v", field.offset)});
+		append(&defines, [2]string{fmt.tprintf("%v%v", "lr_", field.name), fmt.tprintf("%v", field.offset / 4)});
 	}
-
+	append(&defines, [2]string{"lr_struct_size", fmt.tprintf("%v", size_of(Rect_gpu_layout))});
+	
 	render.set_shader_defines(defines[:]);
 
 	if lr == nil {
@@ -121,12 +127,11 @@ make_layout_render :: proc (lr : ^Layout_render = nil) -> ^Layout_render {
 	}
 
 	ok : render.Shader_load_error;
-	lr.shader, ok = render.shader_load_from_path("bezier_shader.glsl");
+	lr.shader, ok = render.shader_load_from_path("gui_shader.glsl");
 	assert(ok == nil, "could not load rect shader");
 
-	lr.pipeline = render.pipeline_make(render.get_default_shader(), .blend, true, false, .fill, .no_cull);
-
-	
+	lr.pipeline = render.pipeline_make(lr.shader, .blend, true, false, .fill, .no_cull);
+	lr.gui_texture = render.texture1D_make(false, .clamp_to_border, .nearest, .R32_uint, 1, .no_upload, nil, {}, nil);
 
 	return lr;
 }
@@ -136,23 +141,114 @@ destroy_layout_render :: proc (lr : ^Layout_render) {
 }
 
 begin_render :: proc (lr : ^Layout_render, loc := #caller_location) {
-	render.pipeline_begin(lr.pipeline, render.camera_get_pixel_space(render.get_current_render_target()), loc);
+	assert(lr.has_begun == false, "you must first end with 'end_render'", loc);
+	lr.has_begun = true;
+	clear(&lr.gui_data);
+	clear(&lr.to_render);
 }
 
-end_render :: proc(loc := #caller_location) {
-	render.pipeline_end(loc);
-}
+render_rect :: proc (lr : ^Layout_render, rect : [4]f32, tex : render.Texture2D, options : Rect_options, loc := #caller_location) {
+	assert(lr.has_begun == true, "you must first begin with 'begin_render'", loc);
 
-render :: proc (lr : ^Layout_render, rect : [4]f32, options : Rect_options) {
-	
-	render.set_texture(.texture_diffuse, render.texture2D_get_white());
-	render.draw_quad(rect, 0, options.color.([4]f32));
-	
+	index := len(lr.gui_data);
+	write_rect_options(&lr.gui_data, options);
+	append(&lr.to_render, To_render{rect, tex, index});
+
 	return;
 }
 
-@(private)
-write_options_to_texture :: proc (tex : render.Texture1D, index : i32, rect : Rect_options) {
-	
-	
+render_polygon :: proc (lr : ^Layout_render, loc := #caller_location) {
+	assert(lr.has_begun == true, "you must first begin with 'begin_render'", loc);
+
+	panic("TODO");
 }
+
+end_render :: proc(lr : ^Layout_render, loc := #caller_location) {
+	assert(lr.has_begun == true, "you must first begin with 'begin_render'", loc);
+	lr.has_begun = false;
+	
+	render.pipeline_begin(lr.pipeline, render.camera_get_pixel_space(render.get_current_render_target()), loc);
+
+		if lr.gui_texture.width <= auto_cast len(lr.gui_data) {
+			render.texture1D_resize(&lr.gui_texture, auto_cast len(lr.gui_data));
+		}
+		assert(lr.gui_texture.width >= auto_cast len(lr.gui_data), "texture not big enough");
+
+		if lr.gui_data != nil {
+			data := slice.reinterpret([]u8, lr.gui_data[:]);
+			render.texture1D_upload_data(&lr.gui_texture, 0, len(lr.gui_data), .R32_uint, data);
+		}
+
+		render.set_texture(.texture_layren, lr.gui_texture, loc);
+		for obj in lr.to_render {
+			render.set_texture(.texture_diffuse, obj.tex, loc);
+			render.set_uniform(.layren_index, cast(i32)obj.index);
+			render.draw_quad(obj.rect);
+		}
+
+	render.pipeline_end(loc);
+}
+
+//GPU side this is a []u32
+//everything must be 4 bytes
+@private
+Rect_gpu_layout :: struct #packed {
+	fill : b32,
+	is_color : b32,
+	color_r : f32,
+	color_g : f32,
+	color_b : f32,
+	color_a : f32,
+
+	is_rect : b32, //otherwise it is a polygon, if rect use the verticies data, if polygon use the lines data.
+
+	rounding : f32,
+	
+	//gradients is a length and of how many after this struct:
+	gradient_cnt : u32,
+	//lines is after gradients
+	line_cnt : u32,
+}
+
+//texture must be a R32_uint
+@(private)
+write_rect_options :: proc (data : ^[dynamic]u32, opts : Rect_options) {
+	
+	s : Rect_gpu_layout = {};
+
+	s.fill = auto_cast opts.fill;
+	s.is_rect = true; //for this function we upload rects, so this is already true.
+
+	s.rounding = opts.rounding[0];
+
+	switch c in opts.color {
+		case [4]f32: {
+			s.is_color = true;
+			s.color_r = c.r;
+			s.color_g = c.g;
+			s.color_b = c.b;
+			s.color_a = c.a;
+		} 
+		case Gradient:{
+			s.is_color = false;
+			s.gradient_cnt = auto_cast len(c.color_stops);		
+		}
+	}
+
+	s_data := transmute([]u32)runtime.Raw_Slice{&s, size_of(Rect_gpu_layout)};
+	for b in s_data {
+		append(data, b);
+	}
+
+	//fmt.printf("asd : %v\n", s_data);
+
+	switch c in opts.color {
+		case [4]f32: {
+			//nothing to do here
+		}
+		case Gradient:{
+			panic("todo write the gradient data here in the end");
+		}
+	}
+}
+
