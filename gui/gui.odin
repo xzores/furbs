@@ -12,7 +12,7 @@ import "core:fmt"
 import "core:strings"
 
 import "../render"
-import lm "../layman"
+import lm "../layman_old"
 
 State :: struct {
 	

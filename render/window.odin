@@ -1,5 +1,6 @@
 package render;
 
+import "core:log"
 import "core:unicode/utf16"
 import "core:fmt"
 import "base:runtime"
@@ -165,6 +166,8 @@ Window_desc :: struct {
 	resize_behavior : Resize_behavior,
 	antialiasing : Antialiasing,
 	hide : bool,
+	transparrent : Maybe(f32),
+	decorations : bool,
 }
 
 Window :: struct {
@@ -246,7 +249,23 @@ setup_window_no_backbuffer :: proc(desc : Window_desc, window : ^Window) {
 	window.height = desc.height;
 	window.resize_behavior = desc.resize_behavior;
 	window.current_fullscreen = .windowed;
-	window.decorated = true;
+	window.decorated = desc.decorations;
+
+	if desc.hide {
+		glfw.WindowHint(glfw.VISIBLE, glfw.FALSE);  // Make the window invisible
+	}
+
+	if desc.antialiasing != .none {
+		glfw.WindowHint_int(glfw.SAMPLES, auto_cast desc.antialiasing);
+	}
+
+	if !desc.decorations {
+		glfw.WindowHint(glfw.DECORATED, glfw.FALSE);
+	}
+
+	if t, ok := desc.transparrent.?; ok {
+		glfw.WindowHint(glfw.TRANSPARENT_FRAMEBUFFER, glfw.TRUE);
+	}
 
 	if desc.resize_behavior == .dont_allow_resize {
 		glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE);
@@ -267,6 +286,15 @@ setup_window_no_backbuffer :: proc(desc : Window_desc, window : ^Window) {
 	glfw.SetWindowFocusCallback(window.glfw_window, window_focus_callback);
 
 	glfw.SetWindowUserPointer(window.glfw_window, window);
+
+	if t, ok := desc.transparrent.?; ok {
+		glfw.SetWindowOpacity(window.glfw_window, t);
+		assert(glfw.GetWindowOpacity(window.glfw_window) == t, "SetWindowOpacity did nothing");
+	}
+
+	glfw.WindowHint(glfw.VISIBLE, glfw.TRUE);  // Reset to default state (shown on create)
+	glfw.WindowHint(glfw.TRANSPARENT_FRAMEBUFFER, glfw.FALSE); // Reset to default state
+	glfw.WindowHint(glfw.DECORATED, glfw.TRUE); // Reset to default state
 
 	state.window_in_focus = window;
 }
@@ -591,6 +619,49 @@ window_do_drag :: proc "contextless" (window: ^Window) {
 		panic("TODO for non-windows");
 	}
 }
+
+/*
+when ODIN_OS == .Windows {	
+
+	foreign import user32 "system:User32.lib";
+
+	ULW_ALPHA :: 0x00000002;
+
+	@(default_calling_convention="system")
+	foreign user32 {
+		UpdateLayeredWindow :: proc(
+			hWnd: win32.HWND,
+			hdcDest: win32.HDC,
+			pptDest: ^win32.POINT,
+			psize: ^win32.SIZE,
+			hdcSrc: win32.HDC,
+			pptSrc: ^win32.POINT,
+			crKey: win32.COLORREF,
+			pblend: ^win32.BLENDFUNCTION,
+			dwFlags: win32.DWORD
+		) -> win32.BOOL ---;
+	}
+}
+
+set_per_pixel_transparency :: proc (window: ^Window, enable : bool) -> bool {
+	if enable {
+		when ODIN_OS == .Windows {	
+			hwnd := glfw.GetWin32Window(window.glfw_window);
+
+			blend := win32.BLENDFUNCTION{BlendOp=0, BlendFlags=0, SourceConstantAlpha=255, AlphaFormat=win32.AC_SRC_ALPHA};
+			UpdateLayeredWindow(hwnd, nil, nil, nil, nil, nil, 0, &blend, ULW_ALPHA);
+		}
+		else {
+			panic("TODO for non-windows");
+		}
+	} 
+	else {
+		panic("todo");
+	}
+
+	return true;
+}
+*/
 
 /////////////////// Cursor stuff ///////////////////
 

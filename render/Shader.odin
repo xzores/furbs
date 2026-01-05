@@ -653,7 +653,12 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 	if e, ok := comp_err.?; ok {
 
 		replace_error_line :: proc (msg : string, offset : int, alloc := context.allocator) -> string {
-			
+			log.debug(msg);
+
+			if len(msg) < 2 {
+				return msg;
+			}
+
 			new_string := strings.builder_make(alloc);
 
 			replace := false;
@@ -672,7 +677,7 @@ shader_load_from_src :: proc(name : string, combined_src : string, loaded : Mayb
 					replace = false;
 					replacing_begin = -1;
 				}
-				if c == '(' && msg[i-1] == '0' {
+				if c == '(' && i != 0 && msg[i-1] == '0' {
 					replace = true;
 				}
 

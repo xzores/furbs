@@ -151,7 +151,6 @@ target_begin :: proc (render_target : Render_target, clear_method : Maybe([4]f32
 	}
 
 	state.current_target = render_target;
-
 }
 
 target_end :: proc (loc := #caller_location) {

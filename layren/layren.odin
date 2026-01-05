@@ -82,18 +82,33 @@ Rect_options :: struct {
 		Gradient,
 	},
 	
+	grad_start : [2]f32,
+	grad_end : [2]f32,
+	wrap_gradient : bool,
+
 	fill : bool,
-	border : Maybe(i32), //set this if it is border (width is pixels) default is fill.
+	border : f32, //set this if it is border (width is pixels) default is fill.
 	shadow : Maybe(Shadow),
 	rounding : [4]f32 // TL, TR, BR, BL
 	
 	//clip : enum { none, hard, rounded }
 }
 
-To_render :: struct{
+Render_rect :: struct{
 	rect : [4]f32,
 	tex : render.Texture2D,
 	index : int
+}
+
+Render_polygon :: struct{
+	points : [4]f32,
+	tex : render.Texture2D,
+	index : int
+}
+
+To_render :: union {
+	Render_rect,
+	Render_polygon,
 }
 
 Layout_render :: struct {
@@ -108,7 +123,6 @@ Layout_render :: struct {
 	has_begun : bool,
 }
 
-
 make_layout_render :: proc (lr : ^Layout_render = nil) -> ^Layout_render {
 	lr := lr;
 	
@@ -119,6 +133,7 @@ make_layout_render :: proc (lr : ^Layout_render = nil) -> ^Layout_render {
 		append(&defines, [2]string{fmt.tprintf("%v%v", "lr_", field.name), fmt.tprintf("%v", field.offset / 4)});
 	}
 	append(&defines, [2]string{"lr_struct_size", fmt.tprintf("%v", size_of(Rect_gpu_layout))});
+	append(&defines, [2]string{"lr_gradient_size", fmt.tprintf("%v", size_of(Color_stop_gpu))});
 	
 	render.set_shader_defines(defines[:]);
 
@@ -152,7 +167,7 @@ render_rect :: proc (lr : ^Layout_render, rect : [4]f32, tex : render.Texture2D,
 
 	index := len(lr.gui_data);
 	write_rect_options(&lr.gui_data, options);
-	append(&lr.to_render, To_render{rect, tex, index});
+	append(&lr.to_render, Render_rect{rect, tex, index});
 
 	return;
 }
@@ -180,10 +195,17 @@ end_render :: proc(lr : ^Layout_render, loc := #caller_location) {
 		}
 
 		render.set_texture(.texture_layren, lr.gui_texture, loc);
-		for obj in lr.to_render {
-			render.set_texture(.texture_diffuse, obj.tex, loc);
-			render.set_uniform(.layren_index, cast(i32)obj.index);
-			render.draw_quad(obj.rect);
+		for object in lr.to_render {
+			switch obj in object {
+				case Render_rect: {
+					render.set_texture(.texture_diffuse, obj.tex, loc);
+					render.set_uniform(.layren_index, cast(i32)obj.index);
+					render.draw_quad(obj.rect);
+				}
+				case Render_polygon: {
+					panic("TODO");
+				}
+			}
 		}
 
 	render.pipeline_end(loc);
@@ -194,20 +216,40 @@ end_render :: proc(lr : ^Layout_render, loc := #caller_location) {
 @private
 Rect_gpu_layout :: struct #packed {
 	fill : b32,
+	border_width : f32,
+
 	is_color : b32,
 	color_r : f32,
 	color_g : f32,
 	color_b : f32,
 	color_a : f32,
 
+	grad_start_x : f32,
+	grad_start_y : f32,
+	grad_end_x : f32,
+	grad_end_y : f32,
+	grad_wrap : b32,
+
 	is_rect : b32, //otherwise it is a polygon, if rect use the verticies data, if polygon use the lines data.
 
-	rounding : f32,
-	
+	rounding_bl : f32,
+	rounding_tl : f32,
+	rounding_tr : f32,
+	rounding_br : f32,
+
 	//gradients is a length and of how many after this struct:
 	gradient_cnt : u32,
 	//lines is after gradients
 	line_cnt : u32,
+}
+
+//how is the color stops stored gpu side
+Color_stop_gpu :: struct #packed {
+	color_r : f32,
+	color_g : f32,
+	color_b : f32,
+	color_a : f32,
+	stop : f32,
 }
 
 //texture must be a R32_uint
@@ -217,9 +259,19 @@ write_rect_options :: proc (data : ^[dynamic]u32, opts : Rect_options) {
 	s : Rect_gpu_layout = {};
 
 	s.fill = auto_cast opts.fill;
+	s.border_width = opts.border;
 	s.is_rect = true; //for this function we upload rects, so this is already true.
 
-	s.rounding = opts.rounding[0];
+	s.rounding_bl = opts.rounding[0];
+	s.rounding_tl = opts.rounding[1];
+	s.rounding_tr = opts.rounding[2];
+	s.rounding_br = opts.rounding[3];
+
+	s.grad_start_x = opts.grad_start.x;
+	s.grad_start_y = opts.grad_start.y;
+	s.grad_end_x = opts.grad_end.x;
+	s.grad_end_y = opts.grad_end.y;
+	s.grad_wrap = auto_cast opts.wrap_gradient;
 
 	switch c in opts.color {
 		case [4]f32: {
@@ -235,20 +287,33 @@ write_rect_options :: proc (data : ^[dynamic]u32, opts : Rect_options) {
 		}
 	}
 
+	assert(size_of(Rect_gpu_layout) %% 4 == 0)
 	s_data := transmute([]u32)runtime.Raw_Slice{&s, size_of(Rect_gpu_layout)};
 	for b in s_data {
 		append(data, b);
 	}
-
-	//fmt.printf("asd : %v\n", s_data);
 
 	switch c in opts.color {
 		case [4]f32: {
 			//nothing to do here
 		}
 		case Gradient:{
-			panic("todo write the gradient data here in the end");
+			for stop in c.color_stops {
+				cs : Color_stop_gpu;
+				cs.color_r = stop.color.r; 
+				cs.color_g = stop.color.g; 
+				cs.color_b = stop.color.b;
+				cs.color_a = stop.color.a;
+				cs.stop = stop.stop; 
+				
+				assert(size_of(Color_stop_gpu) %% 4 == 0)
+				s_data := transmute([]u32)runtime.Raw_Slice{&cs, size_of(Color_stop_gpu)};
+				for b in s_data {
+					append(data, b);
+				}
+			}
 		}
 	}
+
 }
 

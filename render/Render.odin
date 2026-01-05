@@ -156,19 +156,10 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	when ODIN_DEBUG {
 		glfw.WindowHint(glfw.OPENGL_DEBUG_CONTEXT, glfw.TRUE);
 	}
-	
 
 	if desc, ok := window_desc.?; ok {
-		if desc.hide {
-			glfw.WindowHint(glfw.VISIBLE, glfw.FALSE);  // Make the window invisible
-		}
-
 		assert(desc.resize_behavior == .allow_resize || desc.resize_behavior == .dont_allow_resize, "when calling init with a window descriptor, the resize_behavior must be .resize_backbuffer or .dont_allow", loc);
 
-		if desc.antialiasing != .none {
-			glfw.WindowHint_int(glfw.SAMPLES, auto_cast desc.antialiasing);
-		}
-		
 		window = new(Window);
 		window.gl_states = gl.init_state();
 		setup_window_no_backbuffer(desc, window);
@@ -176,8 +167,6 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 		state.owner_context = window.glfw_window;
 		state.owner_gl_states = window.gl_states
 		state.main_window = window;
-
-		glfw.WindowHint(glfw.VISIBLE, glfw.TRUE);  // Reset to default state (shown on create)
 	}
 	else {
 		// Create a dummy window for context sharing
@@ -505,13 +494,13 @@ elapsed_time :: proc () -> f32 {
 	return state.time_elapsed;
 }
 
-get_render_target_size :: proc (target : Render_target) -> (w, h : i32){
+get_render_target_size :: proc (target : Render_target) -> ([2]i32){
 
 	switch v in target {
 		case ^Frame_buffer:
-			return v.width, v.height;
+			return {v.width, v.height};
 		case ^Window:
-			return v.width, v.height;
+			return {v.width, v.height};
 	}
 
 	unreachable();
