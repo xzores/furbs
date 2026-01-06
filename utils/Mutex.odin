@@ -11,7 +11,7 @@ import "../tracy"
 
 when LOCK_DEBUG || TRACY_ENABLE {
 
-	Mutex :: struct #no_copy {
+	Mutex :: struct {
 		locked_loc : runtime.Source_Code_Location,
 		locking_thread : int,
 		location_mutex : sync.Mutex,

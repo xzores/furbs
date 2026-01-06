@@ -1,4 +1,4 @@
-package furbs_layman;
+package furbs_layman_old;
 
 import "base:runtime"
 

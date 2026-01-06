@@ -4,9 +4,16 @@ import "../render"
 import "../layren"
 import "../laycal"
 
+Element :: struct {
+	render : layren.To_render,
+	options : layren.Rect_options,
+}
+
 Layout_mananger :: struct {
 	ls : laycal.Layout_state,
 	lr : layren.Layout_render,
+
+	renders : #soa [dynamic]Element,
 }
 
 Layout_dir :: laycal.Layout_dir;
@@ -29,6 +36,16 @@ Render_polygon :: layren.Render_polygon;
 To_render :: layren.To_render; 
 Layout_render :: layren.Layout_render;
 
+Fixed :: laycal.Fixed;
+Parent_ratio :: laycal.Parent_ratio;
+Fit :: laycal.Fit;
+Grow :: laycal.Grow;
+Grow_fit :: laycal.Grow_fit;
+fit :: laycal.fit;
+grow :: laycal.grow;
+grow_fit :: laycal.grow_fit;
+parameters :: laycal.parameters;
+
 make_layout_render :: proc (lm : ^Layout_mananger = nil) -> ^Layout_mananger {
 	lm := lm;
 
@@ -38,7 +55,7 @@ make_layout_render :: proc (lm : ^Layout_mananger = nil) -> ^Layout_mananger {
 
 	laycal.make_layout_state(&lm.ls);
 	layren.make_layout_render(&lm.lr);
-
+	
 	return lm;
 }
 
@@ -48,14 +65,16 @@ destroy_layout_render :: proc (lm : ^Layout_mananger) {
 }
 
 begin :: proc (lm : ^Layout_mananger) {
-
 	laycal.begin_layout_state(&lm.ls, render.get_render_target_size(render.get_current_render_target()));
-	layren.begin_render(&lm.lr);
 }
 
-open_element :: proc (lm : ^Layout_mananger, params : laycal.Parameters, debug_name : cstring = "") {
+open_element :: proc (lm : ^Layout_mananger, params : laycal.Parameters, options : layren.Rect_options, debug_name : cstring = "") {
 
 	laycal.open_element(&lm.ls, params, nil, debug_name);
+	append(&lm.renders, Element{
+		{},
+		options,
+	});
 }
 
 close_element :: proc (lm : ^Layout_mananger) {
@@ -64,19 +83,19 @@ close_element :: proc (lm : ^Layout_mananger) {
 }
 
 end :: proc (lm : ^Layout_mananger) {
-
+	clear(&lm.renders)
 	elems := laycal.end_layout_state(&lm.ls);
 	
 	for e, i in elems {
 		pos := [4]f32{cast(f32)e.position.x, cast(f32)e.position.y, cast(f32)e.size.x, cast(f32)e.size.y};
-		layren.render_rect(&lm.lr, pos,render.texture2D_get_white(), opts);
+		
+		lm.renders.render[i] = layren.Render_rect{
+			pos,
+			render.texture2D_get_white(), 
+			lm.renders.options[i],
+			0,
+		}
 	}
-	layren.end_render(&lm.lr);
+	
+	layren.render(&lm.lr, lm.renders.render[:len(lm.renders)]);
 }
-
-
-
-
-
-
-

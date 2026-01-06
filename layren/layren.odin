@@ -97,13 +97,14 @@ Rect_options :: struct {
 Render_rect :: struct{
 	rect : [4]f32,
 	tex : render.Texture2D,
-	index : int
+	options : Rect_options,
+	index : int, //this is for internal use, just dont set it
 }
 
 Render_polygon :: struct{
 	points : [4]f32,
 	tex : render.Texture2D,
-	index : int
+	//options : Rect_options,
 }
 
 To_render :: union {
@@ -116,7 +117,6 @@ Layout_render :: struct {
 	shader : ^render.Shader,
 
 	//render data
-	to_render : [dynamic]To_render,
 	gui_data : [dynamic]u32,
 	gui_texture : render.Texture1D,
 
@@ -155,60 +155,71 @@ destroy_layout_render :: proc (lr : ^Layout_render) {
 	
 }
 
-begin_render :: proc (lr : ^Layout_render, loc := #caller_location) {
-	assert(lr.has_begun == false, "you must first end with 'end_render'", loc);
-	lr.has_begun = true;
+render :: proc(lr : ^Layout_render, renders : []To_render, loc := #caller_location) {
 	clear(&lr.gui_data);
-	clear(&lr.to_render);
-}
 
-render_rect :: proc (lr : ^Layout_render, rect : [4]f32, tex : render.Texture2D, options : Rect_options, loc := #caller_location) {
-	assert(lr.has_begun == true, "you must first begin with 'begin_render'", loc);
-
-	index := len(lr.gui_data);
-	write_rect_options(&lr.gui_data, options);
-	append(&lr.to_render, Render_rect{rect, tex, index});
-
-	return;
-}
-
-render_polygon :: proc (lr : ^Layout_render, loc := #caller_location) {
-	assert(lr.has_begun == true, "you must first begin with 'begin_render'", loc);
-
-	panic("TODO");
-}
-
-end_render :: proc(lr : ^Layout_render, loc := #caller_location) {
-	assert(lr.has_begun == true, "you must first begin with 'begin_render'", loc);
-	lr.has_begun = false;
-	
-	render.pipeline_begin(lr.pipeline, render.camera_get_pixel_space(render.get_current_render_target()), loc);
-
-		if lr.gui_texture.width <= auto_cast len(lr.gui_data) {
-			render.texture1D_resize(&lr.gui_texture, auto_cast len(lr.gui_data));
-		}
-		assert(lr.gui_texture.width >= auto_cast len(lr.gui_data), "texture not big enough");
-
-		if lr.gui_data != nil {
-			data := slice.reinterpret([]u8, lr.gui_data[:]);
-			render.texture1D_upload_data(&lr.gui_texture, 0, len(lr.gui_data), .R32_uint, data);
-		}
-
-		render.set_texture(.texture_layren, lr.gui_texture, loc);
-		for object in lr.to_render {
-			switch obj in object {
-				case Render_rect: {
-					render.set_texture(.texture_diffuse, obj.tex, loc);
-					render.set_uniform(.layren_index, cast(i32)obj.index);
-					render.draw_quad(obj.rect);
-				}
-				case Render_polygon: {
-					panic("TODO");
-				}
+	for &tr in renders {
+		switch &obj in tr {
+			case Render_rect: {
+				obj.index = len(lr.gui_data);
+				write_rect_options(&lr.gui_data, obj.options);
+			}
+			case Render_polygon: {
+				
 			}
 		}
+	}
+	
+	render.pipeline_begin(lr.pipeline, render.camera_get_pixel_space(render.get_current_render_target()), loc);
+	
+	if lr.gui_texture.width <= auto_cast len(lr.gui_data) {
+		render.texture1D_resize(&lr.gui_texture, auto_cast len(lr.gui_data));
+	}
+	assert(lr.gui_texture.width >= auto_cast len(lr.gui_data), "texture not big enough");
 
+	if lr.gui_data != nil {
+		data := slice.reinterpret([]u8, lr.gui_data[:]);
+		render.texture1D_upload_data(&lr.gui_texture, 0, len(lr.gui_data), .R32_uint, data);
+	}
+
+	render.set_texture(.texture_layren, lr.gui_texture, loc);
+	for object in renders {
+		switch obj in object {
+			case Render_rect: {
+				render.set_texture(.texture_diffuse, obj.tex, loc);
+				render.set_uniform(.layren_index, cast(i32)obj.index);
+				render.draw_quad(obj.rect);
+			}
+			case Render_polygon: {
+				panic("TODO");
+			}
+		}
+	}
+	
 	render.pipeline_end(loc);
+}
+
+clone_options :: proc (options : Rect_options) -> Rect_options {
+
+	res := options;
+	switch &v in res.color {
+		case Gradient:
+			v.color_stops = slice.clone(v.color_stops);
+		case [4]f32:
+			//nothing
+	}
+	
+	return res;
+}
+
+delete_options :: proc (options : Rect_options) {
+
+	switch v in options.color {
+		case Gradient:
+			delete(v.color_stops);
+		case [4]f32:
+			//nothing
+	}
 }
 
 //GPU side this is a []u32
