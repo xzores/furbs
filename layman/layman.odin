@@ -13,7 +13,8 @@ Layout_mananger :: struct {
 	ls : laycal.Layout_state,
 	lr : layren.Layout_render,
 
-	renders : #soa [dynamic]Element,
+	renders : [dynamic]layren.To_render,
+	options : [dynamic]Options,	
 }
 
 Layout_dir :: laycal.Layout_dir;
@@ -29,8 +30,7 @@ Parameters :: laycal.Parameters;
 
 Shadow :: layren.Shadow;
 Color_stop :: layren.Color_stop;
-Gradient :: layren.Gradient; 
-Rect_options :: layren.Rect_options; 
+Gradient :: layren.Gradient;
 Render_rect :: layren.Render_rect; 
 Render_polygon :: layren.Render_polygon; 
 To_render :: layren.To_render; 
@@ -44,7 +44,8 @@ Grow_fit :: laycal.Grow_fit;
 fit :: laycal.fit;
 grow :: laycal.grow;
 grow_fit :: laycal.grow_fit;
-parameters :: laycal.parameters;
+layout :: laycal.parameters;
+visual :: laycal.parameters;
 
 make_layout_render :: proc (lm : ^Layout_mananger = nil) -> ^Layout_mananger {
 	lm := lm;
@@ -68,13 +69,29 @@ begin :: proc (lm : ^Layout_mananger) {
 	laycal.begin_layout_state(&lm.ls, render.get_render_target_size(render.get_current_render_target()));
 }
 
-open_element :: proc (lm : ^Layout_mananger, params : laycal.Parameters, options : layren.Rect_options, debug_name : cstring = "") {
+Rect_options :: layren.Rect_options;
 
-	laycal.open_element(&lm.ls, params, nil, debug_name);
-	append(&lm.renders, Element{
-		{},
-		options,
-	});
+Animation :: struct {
+	rect_options : []Rect_options,
+	params : laycal.Parameters,
+
+	global_time : bool,
+	time_multiplier : f32,
+}
+
+Options :: struct {
+	parameters : Parameters,
+	mode : union {
+		Rect_options,
+		Animation,
+	},
+}
+
+//This uses the temp allocator.
+open_element :: proc (lm : ^Layout_mananger, options : Options, debug_name : cstring = "") {
+
+	laycal.open_element(&lm.ls, options.parameters, debug_name);
+	append(&lm.options, clone_options(options, context.temp_allocator));
 }
 
 close_element :: proc (lm : ^Layout_mananger) {
@@ -83,19 +100,68 @@ close_element :: proc (lm : ^Layout_mananger) {
 }
 
 end :: proc (lm : ^Layout_mananger) {
-	clear(&lm.renders)
 	elems := laycal.end_layout_state(&lm.ls);
+	
+	options := Rect_options {
+		Gradient{
+			[]Color_stop{
+				{
+					[4]f32{0.8,0.2,0.5,1},
+					0.1,
+				},
+				{
+					[4]f32{0.3,0.4,0.8,1},
+					0.8,
+				}
+			},
+			{0,0},	//start the gradient at start and end it at end.
+			{1,1},	//0,0 is bottom left, 1,1 is top right
+			true, 	//repeat when outside 0 to 1
+		},
+
+		true,
+		0, //set this if there is border (width is pixels) default is fill.
+		nil,
+		[4]f32{5,5,5,5} // TL, TR, BR, BL
+	}
 	
 	for e, i in elems {
 		pos := [4]f32{cast(f32)e.position.x, cast(f32)e.position.y, cast(f32)e.size.x, cast(f32)e.size.y};
-		
-		lm.renders.render[i] = layren.Render_rect{
-			pos,
-			render.texture2D_get_white(), 
-			lm.renders.options[i],
-			0,
+		opts := lm.options[i];
+
+		switch o in opts.mode {
+			case layren.Rect_options: {
+				append(&lm.renders, layren.Render_rect{
+					pos,
+					render.texture2D_get_white(), 
+					o,
+					0,
+				});
+			}
+			case Animation: {
+				panic("TODO");
+			}
 		}
 	}
 	
-	layren.render(&lm.lr, lm.renders.render[:len(lm.renders)]);
+	layren.render(&lm.lr, lm.renders[:]);
+	clear(&lm.renders)
+	clear(&lm.options)
 }
+
+clone_options :: proc (options : Options, alloc := context.allocator) -> Options {
+	options := options;
+
+	switch &o in options.mode {
+		case layren.Rect_options: {
+			o = layren.clone_options(o, alloc);
+			return options;
+		}
+		case Animation: {
+			panic("TODO");
+		}
+	}
+
+	unreachable();
+}
+

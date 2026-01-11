@@ -144,7 +144,6 @@ Element :: struct {
 	out_flow : [dynamic]^Element,
 	size : [2]i32,
 	position : [2]i32,
-	user_ptr : rawptr,
 	debug_name : cstring,
 
 	using param : Parameters,
@@ -171,10 +170,9 @@ make_layout_state :: proc (ls : ^Layout_state = nil, params : Parameters = defau
 		make([dynamic]^Element),
 		{0,0},
 		{0,0},
-		nil,
 		"root",
 
-		params
+		params,
 	}
 
 	ls.root = ne;
@@ -215,14 +213,13 @@ begin_layout_state :: proc (ls : ^Layout_state, screen_size : [2]i32) {
 	ls.has_begun = true;
 }
 
-open_element :: proc (ls : ^Layout_state, params : Parameters, user_data : rawptr = nil, debug_name : cstring = "") {
+open_element :: proc (ls : ^Layout_state, params : Parameters, debug_name : cstring = "") {
 	assert(ls.has_begun, "you must begin the layout state once at the start of the frame");
 
 	ne := new(Element);
 	ne.param = params;
-	ne.user_ptr = user_data;
 	ne.debug_name = debug_name;
-
+	
 	if len(ls.element_stack) != 0 {
 		ne.parent = ls.element_stack[len(ls.element_stack)-1];
 		append(&ne.parent.children, ne);
@@ -232,7 +229,7 @@ open_element :: proc (ls : ^Layout_state, params : Parameters, user_data : rawpt
 		append(&ne.parent.children, ne);
 	}
 
-	if _, ok := ne.abs_position.?; ok {
+	if _, ok := ne.param.abs_position.?; ok {
 		append(&ne.parent.out_flow, ne);
 	}
 	else {
@@ -305,7 +302,6 @@ end_layout_state :: proc (ls : ^Layout_state, loc := #caller_location) -> []Elem
 			el := Element_layout {
 				size = elem.size,
 				position = elem.position, //todo
-				user_data = elem.user_ptr,
 			}
 
 			append(commands, el);

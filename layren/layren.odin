@@ -82,10 +82,6 @@ Rect_options :: struct {
 		Gradient,
 	},
 	
-	grad_start : [2]f32,
-	grad_end : [2]f32,
-	wrap_gradient : bool,
-
 	fill : bool,
 	border : f32, //set this if it is border (width is pixels) default is fill.
 	shadow : Maybe(Shadow),
@@ -186,8 +182,16 @@ render :: proc(lr : ^Layout_render, renders : []To_render, loc := #caller_locati
 	for object in renders {
 		switch obj in object {
 			case Render_rect: {
-				render.set_texture(.texture_diffuse, obj.tex, loc);
 				render.set_uniform(.layren_index, cast(i32)obj.index);
+
+				if shadow, ok := obj.options.shadow.?; ok {
+					render.set_texture(.texture_diffuse, render.texture2D_get_white(), loc);
+					render.set_uniform(.lr_is_shadow, true);
+					render.draw_quad(obj.rect + [4]f32{shadow.offset.x, shadow.offset.y, 2 * shadow.spread, 2 * shadow.spread});
+				}
+
+				render.set_uniform(.lr_is_shadow, false);
+				render.set_texture(.texture_diffuse, obj.tex, loc);
 				render.draw_quad(obj.rect);
 			}
 			case Render_polygon: {
@@ -199,7 +203,7 @@ render :: proc(lr : ^Layout_render, renders : []To_render, loc := #caller_locati
 	render.pipeline_end(loc);
 }
 
-clone_options :: proc (options : Rect_options) -> Rect_options {
+clone_options :: proc (options : Rect_options, alloc := context.allocator) -> Rect_options {
 
 	res := options;
 	switch &v in res.color {
@@ -252,6 +256,14 @@ Rect_gpu_layout :: struct #packed {
 	gradient_cnt : u32,
 	//lines is after gradients
 	line_cnt : u32,
+
+	shadow_color_r : f32,
+	shadow_color_g : f32,
+	shadow_color_b : f32,
+	shadow_color_a : f32,
+
+	shadow_blur : f32,
+	shadow_spread : f32,
 }
 
 //how is the color stops stored gpu side
@@ -278,11 +290,14 @@ write_rect_options :: proc (data : ^[dynamic]u32, opts : Rect_options) {
 	s.rounding_tr = opts.rounding[2];
 	s.rounding_br = opts.rounding[3];
 
-	s.grad_start_x = opts.grad_start.x;
-	s.grad_start_y = opts.grad_start.y;
-	s.grad_end_x = opts.grad_end.x;
-	s.grad_end_y = opts.grad_end.y;
-	s.grad_wrap = auto_cast opts.wrap_gradient;
+	if shadow, ok := opts.shadow.?; ok {
+		s.color_r = shadow.color.r;
+		s.color_g = shadow.color.g;
+		s.color_b = shadow.color.b;
+		s.color_a = shadow.color.a;
+		s.shadow_blur = shadow.blur;
+		s.shadow_spread = shadow.spread;
+	}
 
 	switch c in opts.color {
 		case [4]f32: {
@@ -294,7 +309,12 @@ write_rect_options :: proc (data : ^[dynamic]u32, opts : Rect_options) {
 		} 
 		case Gradient:{
 			s.is_color = false;
-			s.gradient_cnt = auto_cast len(c.color_stops);		
+			s.grad_start_x = c.start.x;
+			s.grad_start_y = c.start.y;
+			s.grad_end_x = c.end.x;
+			s.grad_end_y = c.end.y;
+			s.grad_wrap = auto_cast c.wrap;
+			s.gradient_cnt = auto_cast len(c.color_stops);
 		}
 	}
 

@@ -2085,8 +2085,10 @@ get_version :: proc() -> GL_version {
 	v := gl.GetString(auto_cast gl.VERSION); //This must not be deleted.
 	version := strings.clone_from(v);
 
-	Major : int = strconv.atoi(version[0:1]);
-	Minor : int = strconv.atoi(version[2:3]);
+	Major, major_ok := strconv.parse_int(version[0:1]);
+	Minor, minor_ok := strconv.parse_int(version[2:3]);
+	assert(major_ok);
+	assert(minor_ok);
 	
 	delete(version);
 
