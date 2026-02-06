@@ -582,6 +582,8 @@ eval_min_size :: proc (elem : ^Element, axis : int) -> i32 {
 }
 
 eval_max_size :: proc (elem : ^Element, axis : int) -> i32 {
+	fmt.assertf(elem.max_size[axis] != nil, "element %v has max size that is nil", elem.debug_name);
+	
 	switch max in elem.max_size[axis] {
 		case i32:
 			return max;

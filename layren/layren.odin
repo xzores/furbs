@@ -74,13 +74,16 @@ Gradient :: struct {
 	start : [2]f32,	//start the gradient at start and end it at end.
 	end   : [2]f32,	//0,0 is bottom left, 1,1 is top right
 	wrap : bool, 	//repeat when outside 0 to 1
+	offset : f32,
 }
 
+Color_or_gradient :: union {
+	[4]f32,
+	Gradient,
+};
+
 Rect_options :: struct {
-	color : union {
-		[4]f32,
-		Gradient,
-	},
+	color : Color_or_gradient,
 	
 	fill : bool,
 	border : f32, //set this if it is border (width is pixels) default is fill.
@@ -244,6 +247,7 @@ Rect_gpu_layout :: struct #packed {
 	grad_end_x : f32,
 	grad_end_y : f32,
 	grad_wrap : b32,
+	grad_offset : f32,
 
 	is_rect : b32, //otherwise it is a polygon, if rect use the verticies data, if polygon use the lines data.
 
@@ -298,7 +302,7 @@ write_rect_options :: proc (data : ^[dynamic]u32, opts : Rect_options) {
 		s.shadow_blur = shadow.blur;
 		s.shadow_spread = shadow.spread;
 	}
-
+	
 	switch c in opts.color {
 		case [4]f32: {
 			s.is_color = true;
@@ -314,6 +318,7 @@ write_rect_options :: proc (data : ^[dynamic]u32, opts : Rect_options) {
 			s.grad_end_x = c.end.x;
 			s.grad_end_y = c.end.y;
 			s.grad_wrap = auto_cast c.wrap;
+			s.grad_offset = auto_cast c.offset;
 			s.gradient_cnt = auto_cast len(c.color_stops);
 		}
 	}
