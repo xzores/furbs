@@ -1,5 +1,8 @@
 package furbs_layani
 
+import "../layren"
+import "../laycal"
+
 /*
 Visuals :: struct {
 	color : Color_or_gradient,
@@ -289,3 +292,147 @@ clone_options :: proc (options : Options, alloc := context.allocator) -> Options
 
 
 */
+
+Color_or_gradient :: layren.Color_or_gradient;
+Color_stop :: layren.Color_stop;
+Gradient :: layren.Gradient;
+
+
+Fixed :: laycal.Fixed;
+Fit :: laycal.Fit;
+Parent_ratio :: laycal.Parent_ratio;
+Min_size :: laycal.Min_size;
+Max_size :: laycal.Max_size;
+Size :: laycal.Size;
+
+
+interpolate_color_or_gradient :: proc (a, b : Color_or_gradient, t : f32, loc := #caller_location) -> Color_or_gradient {
+
+	res : Color_or_gradient;
+	
+	switch c1 in a {
+		case layren.Gradient: {
+			switch c2 in b {
+				case layren.Gradient:
+					//create a new slice with the new color stops
+					assert(len(c1.color_stops) == len(c2.color_stops), "must have same number of color stops", loc);
+					stops := make([]Color_stop, len(c1.color_stops));
+					
+					for &s, i in stops {
+						s1 := c1.color_stops[i];
+						s2 := c2.color_stops[i];
+
+						color := s1.color * t + s2.color * (1-t);
+						//log.debugf("color 1 : %v, color 2 : %v, t : %v, ", s1.color, s2.color, t);
+						stop := s1.stop * t + s2.stop * (1-t);
+
+						s = {color, stop}
+					}
+
+					new_grad : Gradient = {
+						stops,
+						c1.start * t + c2.start * (1-t),
+						c1.end * t + c2.end * (1-t),	//0,0 is bottom left, 1,1 is top right
+						c1.wrap, 	//repeat when outside 0 to 1
+						c1.offset * t + c2.offset * (1-t),
+					}
+
+					res = new_grad;
+
+				case [4]f32:
+					panic("TODO");
+			}
+		}
+		case [4]f32: {
+			switch c2 in b {
+				case layren.Gradient:
+					panic("TODO");
+				case [4]f32:
+					res = c1 * t + c2 * (1 * t);
+			}
+		}
+	}
+
+
+	return res;
+}
+
+@(private, require_results)
+interpolate_min_size :: proc (a, b : Min_size, t : f32) -> Min_size {
+	switch m1 in a {
+		case laycal.Fixed: {
+			t := cast(Fixed)t;
+			m2, ok := b.(laycal.Fixed);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return t * m1 + m2 * (1-t);
+		}
+		case laycal.Fit: {
+			m2, ok := b.(laycal.Fit);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return laycal.Fit{};
+		}
+		case laycal.Parent_ratio: {
+			t := cast(Parent_ratio)t;
+			m2, ok := b.(laycal.Parent_ratio);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return t * m1 + m2 * (1-t);
+		}
+	}
+	
+	unreachable();
+}
+
+@(private, require_results)
+interpolate_max_size :: proc (a, b : Max_size, t : f32) -> Max_size {
+	switch m1 in a {
+		case laycal.Fixed: {
+			t := cast(Fixed)t;
+			m2, ok := b.(laycal.Fixed);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return t * m1 + m2 * (1-t);
+		}
+		case laycal.Parent_ratio: {
+			t := cast(Parent_ratio)t;
+			m2, ok := b.(laycal.Parent_ratio);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return t * m1 + m2 * (1-t);
+		}
+	}
+	
+	unreachable();
+}
+
+@(private, require_results)
+interpolate_size :: proc (a, b : Size, t : f32) -> Size {
+	switch s1 in a {
+		case laycal.Fixed: {
+			t := cast(Fixed)t;
+			s2, ok := b.(laycal.Fixed);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return t * s1 + s2 * (1-t);
+		}
+		case laycal.Parent_ratio: {
+			t := cast(Parent_ratio)t;
+			s2, ok := b.(laycal.Parent_ratio);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return t * s1 + s2 * (1-t);
+		}
+		case laycal.Fit: {
+			s2, ok := b.(laycal.Fit);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return laycal.Fit{};
+		}
+		case laycal.Grow: {
+			s2, ok := b.(laycal.Grow);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return laycal.Grow{};
+		}
+		case laycal.Grow_fit: {
+			s2, ok := b.(laycal.Grow_fit);
+			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
+			return laycal.Grow_fit{};
+		}
+	}
+
+	unreachable();
+}

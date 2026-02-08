@@ -382,6 +382,7 @@ begin :: proc (s : ^State, screen_width : f32, screen_height : f32, user_id := 0
 		0, //For elements with many interactive components
 	}
 	
+	//this is root node?
 	push_node(s, uid, false, false, dont_touch);
 	
 	panel := Panel{

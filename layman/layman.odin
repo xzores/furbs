@@ -1,5 +1,6 @@
 package furbs_layman;
 
+import "core:crypto/legacy/sha1"
 import "core:math"
 import "core:slice"
 import "core:fmt"
@@ -8,29 +9,105 @@ import "vendor:OpenEXRCore"
 import "core:math/linalg"
 import "base:runtime"
 
-import "../render"
-import "../layren"
 import "../laycal"
 
-Element :: struct {
-	render : layren.To_render,
-	options : layren.Rect_options,
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//																	
+//		The point of this is to create a persistents state for the gui elements (implemented on top of this) and manage the hot path.
+//		That is it know what element is currently begin hovered, clicked or was clicked (and is now active)
+//		Also it manages if the order of elements needs to be changed, that is if there are elements which orders can be swapped, like in a window system.
+// 		It also swaps the cursor on hover or drag.
+//																	
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//The manager does not know what is a button and how it behaves, it does not set any values.
+//It only supports rects (and rounded rects).
+
+/*
+So it is responsiable for collision detection, render order, active/hot/cold elements, cursor management, clipping, opacity (that is a framebuffer) and caching.
+
+An elements is opened and then all elements inside that belongs to that (so a tree), from here it is possiable.
+Each open has a uid
+TODO remember what the nuaceces of the UID is.
+
+So since we need all drawn things to have some UID? (or do we, should there be a difference, a single UID can draw many thigns?)
+Yes a single UID can have things draw before and after its sub-elements.
+
+so opening a uid means giving a list of layout/visual/transforms to the layout manager.
+*/
+
+///////////////////////////////////////////////////////////////////////////////////////
+
+Unique_id :: struct {
+	src : runtime.Source_Code_Location,
+	call_count : i32,
+	user_number : i32,
+}
+
+Panel :: struct {
+	scroll_offset : [2]f32,
+	virtual_size : [2]f32, //the size which there exists items/elements
+	
+	use_scissor : bool, 
+	enable_hor_scroll : bool,
+	enable_ver_scroll : bool,
+	
+	uid : Maybe(Unique_id),
+}
+
+Node :: struct {
+	uid : Unique_id,
+	sub_nodes : [dynamic]^Node,
+	sub_commands : [dynamic]Sub_command,
+	parent : ^Node,
+	is_overlay : bool,
+	
+	refound : bool,
 }
 
 Layout_mananger :: struct {
 	ls : laycal.Layout_state,
-	lr : layren.Layout_render,
+	
+	font_size : f32,
+	panel_stack : [dynamic]Panel,
+	scissor_stack : [dynamic]Cmd_scissor,
 
-	renders : [dynamic]layren.To_render,
-	options : [dynamic]Options_or_pop,	
+	hot : Unique_id,
+	active : Unique_id,
+	next_hot : Unique_id,
+	next_active : Unique_id,
+	to_promote : ^Node, //This is used to figure out what elements go in top of what other elements
+
+	highest_priority : u32,
+	prio_cnt : u32,
+	
+	root : ^Node,
+	current_node : ^Node,
+	uid_to_node : map[Unique_id]^Node,
+	priorities : map[^Node]u16, //last priorties used to control which one is next_active and next_hot
+
+	mouse_pos : [2]f32,
+	mouse_delta : [2]f32,
+	scroll_delta : [2]f32,
+	mouse_state : Key_state,
+
+	current_cursor : Cursor_type,
+	next_cursor : Cursor_type,
+
+	originations : map[Unique_look_up]int, //resets every frame
+
+	items : [dynamic]Item_or_pop,
+	
+	//stored here for speed increase
+	renders : [dynamic]Command,
 }
 
 Pop :: struct {}
 
 @(private)
-Options_or_pop :: struct {
+Item_or_pop :: struct {
 	what : union {
-		Options,
+		Item,
 		Pop,
 	},
 	loc : runtime.Source_Code_Location,
@@ -46,14 +123,6 @@ Max_size :: laycal.Max_size;
 Absolute_postion :: laycal.Absolute_postion;
 Overflow :: laycal.Overflow;
 
-Shadow :: layren.Shadow;
-Color_stop :: layren.Color_stop;
-Gradient :: layren.Gradient;
-Render_rect :: layren.Render_rect; 
-Render_polygon :: layren.Render_polygon; 
-To_render :: layren.To_render; 
-Layout_render :: layren.Layout_render;
-
 Fixed :: laycal.Fixed;
 Parent_ratio :: laycal.Parent_ratio;
 Fit :: laycal.Fit;
@@ -65,7 +134,7 @@ grow_fit :: laycal.grow_fit;
 
 layout :: laycal.parameters;
 
-make_layout_render :: proc (lm : ^Layout_mananger = nil) -> ^Layout_mananger {
+init :: proc (lm : ^Layout_mananger = nil) -> ^Layout_mananger {
 	lm := lm;
 
 	if lm == nil {
@@ -78,7 +147,7 @@ make_layout_render :: proc (lm : ^Layout_mananger = nil) -> ^Layout_mananger {
 	return lm;
 }
 
-destroy_layout_render :: proc (lm : ^Layout_mananger) {
+destroy :: proc (lm : ^Layout_mananger) {
 	laycal.destroy_laytout_state(&lm.ls);
 	layren.destroy_layout_render(&lm.lr);
 }
@@ -86,8 +155,6 @@ destroy_layout_render :: proc (lm : ^Layout_mananger) {
 begin :: proc (lm : ^Layout_mananger) {
 	laycal.begin_layout_state(&lm.ls, render.get_render_target_size(render.get_current_render_target()));
 }
-
-Color_or_gradient :: layren.Color_or_gradient;
 
 Transform :: struct {
 	offset : [2]int,
@@ -98,15 +165,13 @@ Transform :: struct {
 	rotation_anchor : Anchor_point,
 }
 
-Layout :: laycal.Parameters;
-Visuals :: layren.Rect_options;
-
-@(private)
-Options :: struct {
+@(private="file")
+Item :: struct {
 	layout : Layout,
-	visual : Visuals,
 	transform : Transform,
 }
+
+Layout :: laycal.Parameters;
 
 default_transform := Transform {
 	{0,0},
@@ -117,13 +182,25 @@ default_transform := Transform {
 	.center_center,
 }
 
-//This uses the temp allocator.
-open_element :: proc (lm : ^Layout_mananger, layout : Layout, visual : Visuals, transform := default_transform, loc := #caller_location) {
-	append(&lm.options, Options_or_pop{clone_options({layout, visual, transform}, context.temp_allocator), loc});
+open_element :: proc (lm : ^Layout_mananger, loc := #caller_location) {
+
 }
 
 close_element :: proc (lm : ^Layout_mananger, loc := #caller_location) {
-	append(&lm.options, Options_or_pop{Pop{}, loc});
+	
+}
+
+//An item is a rect that is drawn and layout'ed
+//An element can contian many items, like a background and a border.
+//The element is pushed once and popped once.
+//pusing an element can push and pop multiple items.
+//This uses the temp allocator.
+open_item :: proc (lm : ^Layout_mananger, layout : Layout, transform := default_transform, loc := #caller_location) {
+	append(&lm.items, Item_or_pop{Item{layout, transform}, loc});
+}
+
+close_item :: proc (lm : ^Layout_mananger, loc := #caller_location) {
+	append(&lm.items, Item_or_pop{Pop{}, loc});
 }
 
 interpolate_abs_position :: proc (a, b : Maybe(Absolute_postion), t : f32) -> Absolute_postion {
@@ -135,18 +212,18 @@ acast :: linalg.array_cast;
 
 //time: what is the current time.
 end :: proc (lm : ^Layout_mananger, time : f32, loc := #caller_location) {
-	options := make([dynamic]Options, 0, len(lm.options) / 2, context.temp_allocator)
+	item := make([dynamic]Item, 0, len(lm.items) / 2, context.temp_allocator)
 	
 	//time := time;
 	//time = time - math.floor(time);
 
-	for opt in lm.options {
+	for opt in lm.items {
 		switch o in opt.what {
-			case Options: {
+			case Item: {
 				
 				//log.debugf("interpolated_params : %v\n", interpolated_params);
 				laycal.open_element(&lm.ls, o.layout, fmt.ctprint("", opt.loc));
-				append_elem(&options, o);
+				append_elem(&item, o);
 			}
 			case Pop: {
 				laycal.close_element(&lm.ls);
@@ -157,154 +234,137 @@ end :: proc (lm : ^Layout_mananger, time : f32, loc := #caller_location) {
 	elems := laycal.end_layout_state(&lm.ls);
 	for e, i in elems {
 		pos := [4]f32{cast(f32)e.position.x, cast(f32)e.position.y, cast(f32)e.size.x, cast(f32)e.size.y};
-		opts := options[i];
+		itm := item[i];
 		
 		append(&lm.renders, layren.Render_rect{
 			pos,
 			render.texture2D_get_white(), 
-			opts.visual,
+			itm.visual,
 			0,
 		});
 	}
 	
 	layren.render(&lm.lr, lm.renders[:]);
 	clear(&lm.renders);
-	clear(&lm.options);
+	clear(&lm.items);
 }
 
-clone_options :: proc (options : Options, alloc := context.allocator) -> Options {
-	options := options;
-	options.visual = layren.clone_options(options.visual);
-	return options; 
+
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////
+
+Text_type :: enum {
+	button_text,
+	checkbox_text,
+	title_text,
+	menu_item,
 }
 
-interpolate_color_or_gradient :: proc (a, b : Color_or_gradient, t : f32, loc := #caller_location) -> Color_or_gradient {
-
-	res : Color_or_gradient;
+Cursor_type :: enum {
+	normal,
 	
-	switch c1 in a {
-		case layren.Gradient: {
-			switch c2 in b {
-				case layren.Gradient:
-					//create a new slice with the new color stops
-					assert(len(c1.color_stops) == len(c2.color_stops), "must have same number of color stops", loc);
-					stops := make([]Color_stop, len(c1.color_stops));
-					
-					for &s, i in stops {
-						s1 := c1.color_stops[i];
-						s2 := c2.color_stops[i];
+	text_edit,
+	
+	crosshair,
+	
+	//These are the same on some OS
+	draging, //when draging like a window
+	clickable,
+	
+	scale_horizontal,
+	scale_verical,
+	scale_NWSE,
+	scale_NESW,
+	scale_all,
+	
+	not_allowed,
+}
 
-						color := s1.color * t + s2.color * (1-t);
-						//log.debugf("color 1 : %v, color 2 : %v, t : %v, ", s1.color, s2.color, t);
-						stop := s1.stop * t + s2.stop * (1-t);
+Display_state :: enum {
+	cold, 
+	hot,
+	active,
+}
 
-						s = {color, stop}
-					}
+///////////////////////////////////////////////////////////////////////////////////////
 
-					new_grad : Gradient = {
-						stops,
-						c1.start * t + c2.start * (1-t),
-						c1.end * t + c2.end * (1-t),	//0,0 is bottom left, 1,1 is top right
-						c1.wrap, 	//repeat when outside 0 to 1
-						c1.offset * t + c2.offset * (1-t),
-					}
+Cmd_scissor :: struct{
+	area : [4]f32,
+	enable : bool,
+}; //
 
-					res = new_grad;
+Cmd_rect :: struct {
+	rect : [4]f32,
+	element_kind : i32, //use this to store what kind element needs to be rendered. 
+	part_kind  : i32, //use this to store what, use this to store if it the border or background or whatever.
+	border_thickness : f32, 	//optional for some rects, -1 if not used
+	state : Display_state, 	//Used by some interactive elements
+}
 
-				case [4]f32:
-					panic("TODO");
+Cmd_swap_cursor :: struct {
+	type : Cursor_type,
+	user_id : int,
+}
+
+Cmd_text :: struct {
+	position : [2]f32,
+	val : string,
+	size : f32, //in pixels
+	rotation : f32, //rotation around the begining of the baseline 
+	type : Text_type,
+}
+
+Command :: union {
+	Cmd_scissor,
+	Cmd_rect,
+	Cmd_text,
+	Cmd_swap_cursor,
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////
+
+push_scissor :: proc(s : ^State, scissor : Cmd_scissor) {
+	scissor := scissor;
+	
+	//make sure the scissor stays inside the current one
+	//scissor_stack is x, y, width, height
+	dx : f32 = 0;
+	dy : f32 = 0;
+	
+	if len(s.scissor_stack) >= 1 {
+		parent_scissor := s.scissor_stack[len(s.scissor_stack)-1];
+		
+		if parent_scissor.enable {
+			r := parent_scissor.area;
+			if scissor.area.x < r.x {
+				dx = r.x - scissor.area.x;
+				scissor.area.x = r.x;
 			}
-		}
-		case [4]f32: {
-			switch c2 in b {
-				case layren.Gradient:
-					panic("TODO");
-				case [4]f32:
-					res = c1 * t + c2 * (1 * t);
+			if scissor.area.y < r.y {
+				dy = r.y - scissor.area.y;
+				scissor.area.y = r.y;
 			}
-		}
-	}
-
-
-	return res;
-}
-
-@(private, require_results)
-interpolate_min_size :: proc (a, b : Min_size, t : f32) -> Min_size {
-	switch m1 in a {
-		case laycal.Fixed: {
-			t := cast(Fixed)t;
-			m2, ok := b.(laycal.Fixed);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return t * m1 + m2 * (1-t);
-		}
-		case laycal.Fit: {
-			m2, ok := b.(laycal.Fit);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return laycal.Fit{};
-		}
-		case laycal.Parent_ratio: {
-			t := cast(Parent_ratio)t;
-			m2, ok := b.(laycal.Parent_ratio);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return t * m1 + m2 * (1-t);
+			
+			scissor.area.z = math.min(scissor.area.z - dx, r.x + r.z - scissor.area.x);
+			scissor.area.w = math.min(scissor.area.w - dy, r.y + r.w - scissor.area.y);
 		}
 	}
 	
-	unreachable();
-}
-
-@(private, require_results)
-interpolate_max_size :: proc (a, b : Max_size, t : f32) -> Max_size {
-	switch m1 in a {
-		case laycal.Fixed: {
-			t := cast(Fixed)t;
-			m2, ok := b.(laycal.Fixed);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return t * m1 + m2 * (1-t);
-		}
-		case laycal.Parent_ratio: {
-			t := cast(Parent_ratio)t;
-			m2, ok := b.(laycal.Parent_ratio);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return t * m1 + m2 * (1-t);
-		}
-	}
+	scissor.area.z = math.max(scissor.area.z, 0);
+	scissor.area.w = math.max(scissor.area.w, 0);
 	
-	unreachable();
+	append(&s.scissor_stack, scissor);
+	append_command(s, scissor);
 }
 
-@(private, require_results)
-interpolate_size :: proc (a, b : Size, t : f32) -> Size {
-	switch s1 in a {
-		case laycal.Fixed: {
-			t := cast(Fixed)t;
-			s2, ok := b.(laycal.Fixed);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return t * s1 + s2 * (1-t);
-		}
-		case laycal.Parent_ratio: {
-			t := cast(Parent_ratio)t;
-			s2, ok := b.(laycal.Parent_ratio);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return t * s1 + s2 * (1-t);
-		}
-		case laycal.Fit: {
-			s2, ok := b.(laycal.Fit);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return laycal.Fit{};
-		}
-		case laycal.Grow: {
-			s2, ok := b.(laycal.Grow);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return laycal.Grow{};
-		}
-		case laycal.Grow_fit: {
-			s2, ok := b.(laycal.Grow_fit);
-			assert(ok, "todo, cannot yet interpolate between differnt sizing options");
-			return laycal.Grow_fit{};
-		}
+pop_scissor :: proc(s : ^State) {
+	pop(&s.scissor_stack);
+	if len(s.scissor_stack) >= 1 {
+		r := s.scissor_stack[len(s.scissor_stack)-1];
+		append_command(s, r);
 	}
-
-	unreachable();
 }
