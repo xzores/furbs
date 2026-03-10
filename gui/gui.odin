@@ -5,6 +5,7 @@ import "../layren"
 /*
 import "../layman_new"
 
+
 Gui :: struct {
 
 	man : layman.State,
@@ -55,4 +56,16 @@ end :: proc (gui : ^Gui) {
 	clear(&lm.renders);
 	clear(&lm.items);
 }
+
+
+Overflow :: enum {
+	auto_scroll, //only show the scroll bar if needed
+	visible,	//show everything even if it overflows
+	hidden,		//hide overflow, never show scrollbars
+	scroll,		//hide overflow, always show scrollbars
+}
+
+
+Cursor_type :: distinct int
+
 */

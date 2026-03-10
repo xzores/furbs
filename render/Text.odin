@@ -181,6 +181,17 @@ text_get_descender :: proc(font : Font, size : f32, use_EM := false) -> f32 {
 }
 
 @(require_results)
+text_get_line_gap :: proc (font : Font, size : f32, use_EM := false) -> f32 {
+	using state;
+	
+	fs.push_font(&font_context, font);
+	defer fs.pop_font(&font_context);
+	
+	_set_font_size(use_EM, size);
+	return fs.get_line_gap(&state.font_context);
+}
+
+@(require_results)
 text_get_max_height :: proc(font : Font, size : f32, use_EM := false) -> f32 {
 	using state;
 	
@@ -202,25 +213,25 @@ text_get_size_from_max_height :: proc(font : Font, max_height : f32) -> f32 {
 }
 
 @(require_results)
-text_get_bounds :: proc(text : string, size : f32, font : Font = state.default_fonts.normal) -> (bounds : [4]f32) {
+text_get_bounds :: proc(text : string, size : f32, font : Font = state.default_fonts.normal, use_EM := false) -> (bounds : [4]f32) {
 	using state;
 	
 	fs.push_font(&font_context, font);
 	defer fs.pop_font(&font_context);
 	
-	_set_font_size(false, size);
+	_set_font_size(use_EM, size);
 	
 	return fs.get_text_bounds(&state.font_context, text);
 }
 
 @(require_results)
-text_get_visible_bounds :: proc(text : string, size : f32, font : Font = state.default_fonts.normal) -> (bounds : [4]f32) {
+text_get_visible_bounds :: proc(text : string, size : f32, font : Font = state.default_fonts.normal, use_EM := false) -> (bounds : [4]f32) {
 	using state;
 	
 	fs.push_font(&font_context, font);
 	defer fs.pop_font(&font_context);
 	
-	_set_font_size(false, size);
+	_set_font_size(use_EM, size);
 	
 	return fs.get_visible_text_bounds(&state.font_context, text);
 }

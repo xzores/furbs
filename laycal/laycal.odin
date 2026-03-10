@@ -5,6 +5,10 @@ import "vendor:fontstash"
 import "core:fmt"
 import "core:relative"
 import "core:math"
+import "core:strings"
+import "core:unicode"
+import "core:unicode/utf8"
+import "core:log"
 
 ///////////TODO TODO///////////
 //We need some more features here.
@@ -18,12 +22,17 @@ import "core:math"
 //That is likely the most reasonable way.
 //Or we could check beforehand if we need more then 1 line and then treat the two lines as 1 long one and split it by that, approximately and then deligate them to each line.
 
+
 Layout_state :: struct {
-	elements : [dynamic]^Element,	
-	element_stack : [dynamic]^Element,
+	elements : [dynamic]^Element,	 //this is operated by close, aka it gets pop from element_stack to elements
+	element_stack : [dynamic]^Element, //this is operated by open_...
 	root : ^Element,
 	
 	has_begun : bool,
+
+	meas_width : Meassure_text_width_callback,
+	meas_height : Meassure_text_height_callback,
+	meas_line_gap :  Meassure_line_gap_callback,
 
 	draw_commands : [dynamic]Element_layout
 }
@@ -78,6 +87,12 @@ Size :: union {
 	Grow_fit,
 }
 
+Text :: struct {
+	text : string,			//if it is text
+	size : f32,
+	font : int,
+}
+
 Min_size :: union {
 	Fixed,	//Have a fixed size in pixels
 	Parent_ratio,
@@ -96,7 +111,8 @@ Absolute_postion :: struct {
 	offset : [2]i32,
 }
 
-Overflow :: enum {
+//TODO have some system for bumping to the next line on overflow instad of overflowing
+Overflow_dir :: enum {
 	right,
 	equal,
 	left,
@@ -108,33 +124,20 @@ Parameters :: struct {
 	child_gap : [2]i32, //between each sub element
 	layout_dir : Layout_dir, //for the sub-elements
 	alignment : [2]Alignment, //where should we align the children to
-	overflow : Overflow,
-
+	overflow : Overflow_dir,
+	
 	//How does this size behave
-	sizing : [2]Size,
+	sizing : union {
+		[2]Size,
+		Text,
+	},
 	min_size : [2]Min_size,
 	max_size : [2]Max_size,
 	grow_weight : i32, //this is int to not have floating point problems.
+	
+	split_on_dash : bool, 	//for text
 
 	abs_position : Maybe(Absolute_postion),
-}
-
-parameters :: proc (size_x : Size = fit, size_y : Size = fit, min_size_x : Min_size = 0, min_size_y : Min_size = 0, max_size_x : Max_size = max(i32), max_size_y : Max_size = max(i32),
-						grow_weight : i32 = 1, padding : [4]i32 = {5, 5, 5, 5}, child_gap : i32 = 2, layout_dir : Layout_dir = .left_right,
-						alignment_x : Alignment = .near, alignment_y : Alignment = .near, overflow : Overflow = .right, abs_position : Maybe(Absolute_postion) = nil) -> Parameters {
-	
-	return Parameters {
-		padding,
-		child_gap,
-		layout_dir,
-		{ alignment_x, alignment_y },
-		overflow,
-		{size_x, size_y},
-		{min_size_x, min_size_y},
-		{max_size_x, max_size_y},
-		grow_weight, 
-		abs_position,
-	}
 }
 
 Element :: struct {
@@ -144,18 +147,69 @@ Element :: struct {
 	out_flow : [dynamic]^Element,
 	size : [2]i32,
 	position : [2]i32,
+	text_to_draw : [dynamic]string, //one string per line to draw
 	debug_name : cstring,
 
 	using param : Parameters,
 }
 
+Text_line :: struct{
+	ver_offset : i32,
+	line : string
+}
+
 Element_layout :: struct {
 	size : [2]i32,
 	position : [2]i32,
-	user_data : rawptr,
+	text_size : f32,	//use only if there is text
+	font : int, 		//use only if there is text
+	lines : []Text_line, //non-nil if there is text
 }
 
-make_layout_state :: proc (ls : ^Layout_state = nil, params : Parameters = default_root_params) -> ^Layout_state {
+rect_parameters :: proc (size_x : Size = fit, size_y : Size = fit, min_size_x : Min_size = 0, min_size_y : Min_size = 0, max_size_x : Max_size = max(i32), max_size_y : Max_size = max(i32),
+						grow_weight : i32 = 1, padding : [4]i32 = {5, 5, 5, 5}, child_gap : i32 = 2, layout_dir : Layout_dir = .left_right,
+						alignment_x : Alignment = .near, alignment_y : Alignment = .near, overflow : Overflow_dir = .right, abs_position : Maybe(Absolute_postion) = nil) -> Parameters {
+	
+	return Parameters {
+		padding,
+		child_gap,
+		layout_dir,
+		{ alignment_x, alignment_y },
+		overflow,
+		[2]Size{size_x, size_y},
+		{min_size_x, min_size_y},
+		{max_size_x, max_size_y},
+		grow_weight,
+		false,
+		abs_position,
+	}
+}
+
+text_parameters :: proc (text : string, size : f32, font : int, min_size_x : Min_size = 0, min_size_y : Min_size = 0, max_size_x : Max_size = max(i32), max_size_y : Max_size = max(i32),
+						grow_weight : i32 = 1, padding : [4]i32 = {5, 5, 5, 5}, child_gap : i32 = 2, layout_dir : Layout_dir = .left_right,	alignment_x : Alignment = .near,
+						alignment_y : Alignment = .near, overflow : Overflow_dir = .right, split_on_dash := true, tab_width : i32 = 4, abs_position : Maybe(Absolute_postion) = nil) -> Parameters {
+	
+	return Parameters {
+		padding,
+		child_gap,
+		layout_dir,
+		{ alignment_x, alignment_y },
+		overflow,
+		Text{text, size, font},
+		{min_size_x, min_size_y},
+		{max_size_x, max_size_y},
+		grow_weight,
+		split_on_dash,
+		abs_position,
+	}
+}
+
+Meassure_text_width_callback :: proc (text : string, size : f32, font : int) -> i32
+Meassure_text_height_callback :: proc (size : f32, font : int) -> i32
+Meassure_line_gap_callback :: proc (size : f32, font : int) -> i32
+
+make_layout_state :: proc (meas_width : Meassure_text_width_callback, meas_height : Meassure_text_height_callback,
+							meas_line_gap :  Meassure_line_gap_callback, ls : ^Layout_state = nil, params : Parameters = default_root_params) -> ^Layout_state {
 	ls := ls;
 	
 	if ls == nil {
@@ -170,12 +224,17 @@ make_layout_state :: proc (ls : ^Layout_state = nil, params : Parameters = defau
 		make([dynamic]^Element),
 		{0,0},
 		{0,0},
+		nil,
 		"root",
-
+		
 		params,
 	}
 
 	ls.root = ne;
+
+	ls.meas_width = meas_width;
+	ls.meas_height = meas_height;
+	ls.meas_line_gap = meas_line_gap;
 
 	return ls;
 }
@@ -184,21 +243,24 @@ destroy_laytout_state :: proc (ls : ^Layout_state) {
 	delete(ls.elements);
 	delete(ls.element_stack);
 	delete(ls.draw_commands);
+	destroy_element(ls.root)
 	free(ls);
 }
 
 default_root_params : Parameters = {
 	{0,0,0,0}, //padding
 	{0,0}, //child gap
-	.left_right, //for the sub-elements
+	.top_down, //for the sub-elements
 	{.near, .near}, //where should we align the children to
 	.right,
 
 	//How does this size behave
-	{0,0},
+	[2]Size{0,0},
 	{0,0}, //min size
 	{max(i32), max(i32)}, //max size
 	1,
+
+	false,
 
 	nil,
 }
@@ -215,10 +277,15 @@ begin_layout_state :: proc (ls : ^Layout_state, screen_size : [2]i32) {
 
 open_element :: proc (ls : ^Layout_state, params : Parameters, debug_name : cstring = "") {
 	assert(ls.has_begun, "you must begin the layout state once at the start of the frame");
-
+	
 	ne := new(Element);
 	ne.param = params;
 	ne.debug_name = debug_name;
+	
+	if t, ok := ne.param.sizing.(Text); ok {
+		t.text = strings.clone(t.text, context.temp_allocator);
+		ne.param.sizing = t;
+	}
 	
 	if len(ls.element_stack) != 0 {
 		ne.parent = ls.element_stack[len(ls.element_stack)-1];
@@ -243,22 +310,13 @@ close_element :: proc (ls : ^Layout_state) {
 	elem := pop(&ls.element_stack);
 	append(&ls.elements, elem);
 	
-	//size horizontally
-	do_size_fit(elem, 0);
-
-	//size horizontally, todo remove this when doing text, so it fits later on the vertical axis
-	do_size_fit(elem, 1);
-
-	/*
-	for t in 0..<len(state.element_stack) {
-		fmt.print("    ");
-	}
-	fmt.printf("did size : %v\n", elem.size[0]);
-	if elem.size[0] == 0 {
-		fmt.printf("size was 0 for : %#v\n", elem);
-	}
-	*/
+	//size horizontally only, vertically is done in the end
+	do_size_fit(ls, elem, 0);
 }
+
+//WHEN WE DO A TEXT ELEMENT, WE NEED TO MAKE IT SO THAT IT SETS A PREFERED WIDTH BEFORE THE FIT AND EXPAND; THIS MEANS THAT WHEN WE FIT WE WILL TRY TO FIT THE TEXT AND WHEN WE EXPAND IT 
+//WILL ALSO TAKE INTO ACCOUNT THE TEXT WIDTH; THAT SAID THE WIDTH OF THE TEXT SHOULD MAYBE BE SHARED WITH THE GROW ELEMETNS? OR NOT? NOT REALLY RIGHT; SO IT SHOULD TAKE UP AS MUCH SPACE AS POSSIABLE
+//THEN IT FAILS TO DO SO AND WE MAKE IT SMALLER AND WRAP IT AT STAGE 3. SO NEXT UP HOW DO WE MAKE IT TAkE UP AS MUCH SPACE AS POSSIABLE; WELL WE JUST SET IT S MAX SIZE AND SET IT TO GROW, THAT IS BASICLY IT
 
 end_layout_state :: proc (ls : ^Layout_state, loc := #caller_location) -> []Element_layout {
 	ls.has_begun = false;
@@ -274,22 +332,30 @@ end_layout_state :: proc (ls : ^Layout_state, loc := #caller_location) -> []Elem
 	//7. draw commands
 
 	{ //2. grow and shrink widths
-		do_expand_recursive(ls.root, 0, &ls.draw_commands);
+		do_expand_and_shrink_recursive(ls, ls.root, 0, &ls.draw_commands);
 	}
 
 	{ //3. wrap text
-		
+		//we need to do a reverse breath first search
+		do_text_height_recursive(ls, ls.root)
 	}
 
 	{ //4. fit sizing heigths
-		//we need to do a reverse breath first search 
-		//for e in ls.r 
+		do_fit_recursive :: proc (ls : ^Layout_state, elem : ^Element, axis : int) {
+			for c in elem.children {
+				do_fit_recursive(ls, c, axis)
+			}
+			do_size_fit(ls, elem, axis);
+		}
+		
+		//we need to do a reverse breath first search
+		do_fit_recursive(ls, ls.root, 1)
 	}
-
+	
 	{ //5. grow and shrink heigths
-		do_expand_recursive(ls.root, 1, &ls.draw_commands);
+		do_expand_and_shrink_recursive(ls, ls.root, 1, &ls.draw_commands);
 	}
-
+	
 	{ //6. position
 		do_position_recursive(ls.root, {0,0});
 	}
@@ -297,31 +363,52 @@ end_layout_state :: proc (ls : ^Layout_state, loc := #caller_location) -> []Elem
 	{ //7. draw commands
 		clear(&ls.draw_commands);
 		
-		draw_elem :: proc(elem : ^Element, commands : ^[dynamic]Element_layout) {
+		draw_elem :: proc(ls : ^Layout_state, elem : ^Element, commands : ^[dynamic]Element_layout) {
 
-			el := Element_layout {
-				size = elem.size,
-				position = elem.position, //todo
+			el : Element_layout
+			if elem.text_to_draw == nil {
+				el = {
+					size = elem.size,
+					position = elem.position,
+				}
+			}
+			else {
+				t := elem.sizing.(Text)
+
+				line_height := ls.meas_height(t.size, t.font) + ls.meas_line_gap(t.size, t.font)
+				lines := make([]Text_line, len(elem.text_to_draw), context.temp_allocator)
+				
+				vertical_offset : i32 = 0
+				#reverse for ttd, i in elem.text_to_draw {
+					lines[i] = Text_line{vertical_offset, ttd}
+					vertical_offset += line_height;
+				}
+
+				defer delete(elem.text_to_draw)
+				el = {
+					elem.size,
+					elem.position,
+					t.size,
+					t.font,
+					lines,
+				}
 			}
 
 			append(commands, el);
 
 			for child in elem.children {
-				draw_elem(child, commands);
+				draw_elem(ls, child, commands);
 			}
 		}
 		
 		for child in ls.root.children {
-			draw_elem(child, &ls.draw_commands);
+			draw_elem(ls, child, &ls.draw_commands);
 		}
 	}
 
 	assert(len(ls.element_stack) == 0, "Popped too few elements", loc);
 	for e in ls.elements {
-		delete(e.children)
-		delete(e.in_flow)
-		delete(e.out_flow)
-		free(e);
+		destroy_element(e)
 	}
 	clear(&ls.elements);
 
@@ -332,31 +419,137 @@ end_layout_state :: proc (ls : ^Layout_state, loc := #caller_location) -> []Elem
 	return ls.draw_commands[:];
 }
 
+@(private="file")
+destroy_element :: proc (e : ^Element) {
+	delete(e.children)
+	delete(e.in_flow)
+	delete(e.out_flow)
+	free(e);
+}
+
+@(private="file")
+do_text_height_recursive :: proc (ls : ^Layout_state, elem : ^Element) {
+	for c in elem.children {
+		do_text_height_recursive(ls, c);
+	}
+	for &c in elem.in_flow {
+		switch what in c.sizing {
+			case [2]Size: {
+				//nothing
+			}
+			case Text: {
+				max_size := c.size.x;
+
+				cur_line := strings.builder_make();
+				defer strings.builder_destroy(&cur_line);
+				cur_word := strings.builder_make();
+				defer strings.builder_destroy(&cur_word);
+				
+				//find the line count
+				i := 0
+				for r in what.text {
+					//0xA0 is a space that may not be line-wrapped
+					if (unicode.is_white_space(r) && r != 0xA0) || (r == '-' && strings.builder_len(cur_word) > 0 && elem.split_on_dash) {
+						width := ls.meas_width(strings.concatenate({strings.to_string(cur_line), strings.to_string(cur_word), fmt.tprintf("%v", r)}, context.temp_allocator), what.size, what.font)
+						
+						if r == '-' {
+							log.warnf("TODO correct - behvaior when wrapping UI text")
+							strings.write_rune(&cur_word, r)
+						}
+						
+						if width > max_size {
+							//there is not space for this word, so print the current line and then
+							if strings.builder_len(cur_line) != 0 {
+								append(&c.text_to_draw, strings.clone(strings.to_string(cur_line), context.temp_allocator));
+								strings.builder_reset(&cur_line)
+							}
+							strings.write_string(&cur_line, strings.to_string(cur_word))
+							strings.builder_reset(&cur_word)
+						}
+						else {
+							//this write this word to the line
+							if r == '\n' {
+								append(&c.text_to_draw, strings.clone(strings.to_string(cur_line), context.temp_allocator));
+								strings.builder_reset(&cur_line)
+								panic("TODO, not right")
+							}
+							else if r == ' ' {
+								strings.write_rune(&cur_line, r) //write the whitespace charactor
+							}
+							else if r == '-' || r == '\r' || r == '\t' { //tab size is handled from user side
+								//ignore
+							}
+							else {
+								fmt.panicf("whitespace type '%h' not supported", cast(int) r);
+							}
+							strings.write_string(&cur_line, strings.to_string(cur_word))
+							strings.builder_reset(&cur_word)
+						}
+					}
+					else if r == 0xA0 {
+						strings.write_rune(&cur_word, ' ') //translate to a normal space
+					}
+					else {
+						strings.write_rune(&cur_word, r)
+					}
+					i += 1;
+				}
+				strings.write_string(&cur_line, strings.to_string(cur_word))
+				append(&c.text_to_draw, strings.clone(strings.to_string(cur_line), context.temp_allocator));
+				
+				h := ls.meas_height(what.size, what.font);
+				baseline_step := ls.meas_height(what.size, what.font) + ls.meas_line_gap(what.size, what.font)
+				fmt.printf("lines_cnt : %v, baseline_step : %v, max_size : %v\n", len(c.text_to_draw), baseline_step, max_size)
+				for i in 0..<len(c.text_to_draw)-1 {
+					h += baseline_step
+				}
+				c.size.y = h
+			}
+		}
+	}
+}
+
 //grow children to fit the parent
 @(private="file")
-do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]Element_layout) {
-
+do_expand_and_shrink_recursive :: proc(ls : ^Layout_state, elem : ^Element, axis : int, commands : ^[dynamic]Element_layout) {
 	//We must do 2 things in this function
 	//first, the primary axis must look at its children to find all the ones the must grow.
 	//secoudly I must grow my children if i am on the non-primary
 	
-	expand_in_flow : [dynamic]^Element; //the children whom needs to grow
+	Expandus :: struct{elem : ^Element, min_width : i32, max_size : i32}
+	expand_in_flow : [dynamic]Expandus; //the children whom needs to grow
 	defer delete(expand_in_flow);
-	for c in elem.in_flow {
-		switch _ in c.sizing[axis] {
-			case i32, Fit:
+	shrink_in_flow : [dynamic]Expandus;
+	defer delete(shrink_in_flow);
 
-			case Parent_ratio:
-				panic("TODO");
-				
-			case Grow, Grow_fit:
-				append(&expand_in_flow, c);
+	for c in elem.in_flow {
+		switch what in c.sizing {
+			case [2]Size: {
+				switch _ in what[axis] {
+					case i32, Fit:
+						//Do nothing
+					case Parent_ratio:
+						panic("TODO");
+						
+					case Grow, Grow_fit:
+						append(&expand_in_flow, Expandus{c, 0, max(i32)});
+				}
+			}
+			case Text: {
+				//Text should expand if we are expanding the horizontal axis
+				//Text should not expand beyond the max text size, but it should be part of this expand loop
+				if axis == 0 {
+					max_width := ls.meas_width(what.text, what.size, what.font);
+					min_width := find_min_text_width(ls, what.text, what.size, what.font)
+					append(&shrink_in_flow, Expandus{c, min_width, max_width});
+				}
+			}
 		}
 	}
-
+	
 	if is_primary_axis(elem, axis) { //all this is just for the primary axis
 
-		//TODO this parent ratio needs to happen here
+		//TODO this parent ratio needs to happen here, we have just set the parents size and we should now look at what it is to set our prefered size
 		remaning_width := elem.size[axis] - elem.padding[axis] - elem.padding[axis + 2];
 		
 		//how much width is there in total and how much weight, we can use to determine how many pixels a single width is worth
@@ -368,14 +561,15 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 		
 		total_weight : i32 = 0;
 		for child in expand_in_flow {
-			total_weight += child.grow_weight;
+			total_weight += child.elem.grow_weight;
 		}
 
 		for remaning_width > 0 && len(expand_in_flow) != 0 {
 			least_pressence : i32 = max(i32)
 			next_least_pressence : i32 = max(i32)
 			
-			for child, i in expand_in_flow {
+			for thing, i in expand_in_flow {
+				child := thing.elem
 				if child.grow_weight * child.size[axis] < least_pressence {
 					next_least_pressence = least_pressence;
 					least_pressence = child.grow_weight * child.size[axis];
@@ -385,7 +579,8 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 				}
 			}
 			
-			#reverse for &child, i in expand_in_flow {
+			#reverse for thing, i in expand_in_flow {
+				child := thing.elem
 				consumed : i32;
 
 				if i == 0 { //we do give the last element the rest of the width, this is a way to handle floating point precision.
@@ -401,7 +596,7 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 				}
 
 				//if child.size[axis] + consumed becomes larger then eval_max_size(elem, axis), then subtract the differnce from consumed, this means we will enforce the elements max_size
-				consumed -= math.max(0, (child.size[axis] + consumed) - eval_max_size(elem, axis));
+				consumed -= math.max(0, (child.size[axis] + consumed) - math.min(eval_max_size(elem, axis), thing.max_size));
 				
 				if consumed == 0 {
 					ordered_remove(&expand_in_flow, i);
@@ -411,15 +606,66 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 					child.size[axis] += consumed;
 					remaning_width -= consumed;
 				}
-
 			}
+		}
+		
+		//we want to shrink the item with the mose pressence so they all become closer to the same size if they take up too much space
+		for remaning_width < 0 && len(shrink_in_flow) != 0 && false {
+			most_pressence : i32 = 0
+			next_most_pressence : i32 = 0
+			
+			for thing, i in shrink_in_flow {
+				child := thing.elem
+				if child.grow_weight * child.size[axis] > most_pressence {
+					next_most_pressence = most_pressence;
+					most_pressence = child.grow_weight * child.size[axis];
+				}
+				if child.grow_weight * child.size[axis] != most_pressence {
+					next_most_pressence = math.max(next_most_pressence, child.grow_weight * child.size[axis]);
+				}
+			}
+			
+			
+			//TODO shrink_weight is 1/grow_weight
+			#reverse for thing, i in shrink_in_flow {
+				child := thing.elem
+				consumed : i32;
+				
+				if i == 0 { //we do give the last element the rest of the width, this is a way to handle floating point precision.
+					consumed = remaning_width;
+				}
+				else {
+					if next_most_pressence == 0 {
+						//they are all the same, just expand by weight
+						consumed = cast(i32)math.round(cast(f32)total_width * cast(f32)child.grow_weight / cast(f32)total_weight);
+					} else {
+						consumed = math.max(1, cast(i32)math.round((cast(f32)next_most_pressence - cast(f32)most_pressence) / cast(f32)child.grow_weight));
+					}
+				}
+				
+				//if child.size[axis] + consumed becomes larger then eval_max_size(elem, axis), then subtract the differnce from consumed, this means we will enforce the elements max_size
+				consumed += math.max(0, (child.size[axis] - consumed) - math.max(eval_min_size(elem, axis), thing.min_width));
+				
+				fmt.printf("consumed : %v of %v from %v\n", consumed, child.size[axis], child.debug_name)
+
+				if consumed == 0 {
+					ordered_remove(&shrink_in_flow, i);
+					total_weight -= child.grow_weight;
+				}
+				else {
+					child.size[axis] -= consumed;
+					remaning_width += consumed;
+				}
+			}
+		
 		}
 		
 		elem.size[axis] = math.clamp(elem.size[axis], eval_min_size(elem, axis), eval_max_size(elem, axis));
 	}
 	else { //this is for the non-primary axis, it needs to be applied for all children even if this current element is not on the primary axis.
 		//simply move this down to the max size (that is the size of the parent - padding)
-		for child in expand_in_flow {
+		for thing in shrink_in_flow {
+			child := thing.elem
 			child.size[axis] = elem.size[axis] - elem.padding[axis] - elem.padding[axis+2]; 
 			elem.size[axis] = math.clamp(elem.size[axis], eval_min_size(elem, axis), eval_max_size(elem, axis));
 		}
@@ -427,29 +673,38 @@ do_expand_recursive :: proc(elem : ^Element, axis : int, commands : ^[dynamic]El
 
 	//recurse down the tree in DFS
 	for child in elem.children {
-		do_expand_recursive(child, axis, commands);
+		do_expand_and_shrink_recursive(ls, child, axis, commands);
 	}
 }
 
-do_size_fit_recursive :: proc (elem : ^Element, axis : int) {
-	
-}
-
 @(private="file")
-do_size_fit :: proc (elem : ^Element, axis : int) {
+do_size_fit :: proc (ls : ^Layout_state, elem : ^Element, axis : int) {
 
-	switch sizing in elem.sizing[axis] { //calculate the size of the element, we know it here
-		case Fixed: {
-			elem.size[axis] = sizing;
+	switch what in elem.sizing { 
+		case [2]Size: {
+			switch sizing in what[axis] { //calculate the size of the element, we know it here
+				case Fixed: {
+					elem.size[axis] = sizing;
+				}
+				case Fit, Grow_fit: {
+					elem.size[axis] = get_fit_space(elem, axis);
+				}
+				case Parent_ratio:
+					panic("TODO");
+				case Grow: {
+					//grow does not make space for children
+					elem.size[axis] = 0;
+				}
+			}
 		}
-		case Fit, Grow_fit: {
-			elem.size[axis] = get_fit_space(elem, axis);
-		}
-		case Parent_ratio:
-			panic("TODO");
-		case Grow: {
-			//grow does not make space for children
-			elem.size[axis] = 0;
+		case Text: {
+			if axis == 0 {
+				elem.size[axis] = ls.meas_width(what.text, what.size, what.font)
+				fmt.printf("found prefered size size : %v\n", elem.size[axis])
+			}
+			else {
+				//The text size heights are handled elsewhere, in the text wrapping logic and is already set
+			}
 		}
 	}
 	
@@ -523,7 +778,12 @@ do_position_recursive :: proc (elem : ^Element, screen_offset : [2]i32) {
 							panic("TODO, this is not easy to solve, i think");
 					}
 					
-					child.position[axis] += inner_box[axis] + internal_offset + center_off; //we undo the origianl offset from the padding here.
+					if reverse {
+						child.position[axis] += inner_box[axis] + inner_box[axis + 2] - internal_offset - child.size[axis] - center_off;
+					}
+					else {
+						child.position[axis] += inner_box[axis] + internal_offset + center_off; //we undo the origianl offset from the padding here.
+					}
 				}
 				case .far: {
 					if reverse {
@@ -746,3 +1006,34 @@ position_abs_rect :: proc(anchor : Anchor_point, self_anchor : Anchor_point, axi
 
 	return offset;
 }
+
+@(private="file")
+find_min_text_width :: proc(ls : ^Layout_state, text : string, size : f32, font : int) -> i32 {
+	
+	b := strings.builder_make();
+	defer strings.builder_destroy(&b);
+
+	//max_string := ""
+	max_size : i32 = 0;
+	
+	i := 0
+	for r in text {
+		if unicode.is_white_space(r) {
+			width := ls.meas_width(strings.to_string(b), size, font)
+			if width > max_size {
+				max_size = width
+				//max_string = strings.clone(strings.to_string(b), context.temp_allocator)
+			}
+			strings.builder_reset(&b)
+		}
+		else {
+			strings.write_rune(&b, r)
+		}
+
+		i += 1
+	}
+	
+	return auto_cast max_size
+
+}
+

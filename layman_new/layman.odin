@@ -6,6 +6,7 @@ import "core:fmt"
 import "core:log"
 import "core:math/linalg"
 import "base:runtime"
+import "core:strings"
 
 import "../laycal"
 
@@ -14,7 +15,6 @@ import "../laycal"
 //		The point of this is to create a persistents state for the gui elements (implemented on top of this) and manage the hot path.
 //		That is it know what element is currently begin hovered, clicked or was clicked (and is now active)
 //		Also it manages if the order of elements needs to be changed, that is if there are elements which orders can be swapped, like in a window system.
-// 		It also swaps the cursor on hover or drag.
 //																	
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -56,6 +56,9 @@ Key_state :: enum {
 Layout_mananger :: struct {
 	ls : laycal.Layout_state,
 
+	scissor_stack : [dynamic][4]f32,
+
+	
 	hot : Unique_id,
 	active : Unique_id,
 	next_hot : Unique_id,
@@ -68,26 +71,35 @@ Layout_mananger :: struct {
 	mouse_delta : [2]f32,
 	scroll_delta : [2]f32,
 	mouse_state : Key_state,
-
+	
 	originations : map[Unique_look_up]int, //resets every frame
-
+	
 	items : [dynamic]Item_or_pop,
+	items_shadow_stack : [dynamic]int, //this will act like a stack instead of recording so that we know the type when we do a pop, this points to the items array
 }
 
-init :: proc (lm : ^Layout_mananger = nil) -> ^Layout_mananger {
+Meassure_width_callback 	:: laycal.Meassure_text_width_callback 
+Meassure_height_callback 	:: laycal.Meassure_text_height_callback 
+Meassure_gap_callback 		:: laycal.Meassure_line_gap_callback 
+
+init :: proc (meas_width : Meassure_width_callback, meas_height : Meassure_height_callback, meas_line_gap :  Meassure_gap_callback, lm : ^Layout_mananger = nil) -> ^Layout_mananger {
 	lm := lm;
 
 	if lm == nil {
 		lm = new(Layout_mananger);
 	}
 
-	laycal.make_layout_state(&lm.ls);
+	laycal.make_layout_state(meas_width, meas_height, meas_line_gap, &lm.ls);
 	
 	return lm;
 }
 
 destroy :: proc (lm : ^Layout_mananger) {
 	laycal.destroy_laytout_state(&lm.ls);
+	delete(lm.scissor_stack)
+	delete(lm.originations)
+	delete(lm.items)
+	delete(lm.items_shadow_stack)
 }
 
 begin :: proc (lm : ^Layout_mananger, screen_size : [2]i32) {
@@ -114,21 +126,58 @@ default_transform := Transform {
 
 ///////////////////////////////////////////////////////////////////////////////////////
 
-To_draw :: struct {
-	type : Type_number, //This is an indicator that tells you how to draw it, set by you
-	text : string, //is non-empty ("") for string only
-	rect : [4]f32, 
+Element_kind :: distinct int
+
+Cmd_rect :: struct {
+	rect : [4]f32,
+	element_kind : Element_kind, //use this to store what kind element needs to be rendered.
+	state : Display_state,
 }
+
+Text_line :: laycal.Text_line;
+
+Cmd_text :: struct {
+	rect : [4]f32,
+	text_size : f32, 
+	font : int,
+	lines : []Text_line,
+	type : Element_kind,
+	rotation : f32, //rotation around the begining of the baseline 
+}
+
+Cmd_scissor :: struct{
+	area : [4]f32,
+}
+
+Cmd_scissor_disable :: struct {}
+
+Command :: union {
+	Cmd_rect,
+	Cmd_text,
+	Cmd_scissor, 			//this should automaticly enable the scissor stack
+	Cmd_scissor_disable,	//disable it
+}
+
+Overflow :: struct {
+	x : bool, //show overflow
+	y : bool, //show overflow
+}
+
+default_overflow := Overflow {false, false}
 
 @private
 Item :: struct {
-	type : Type_number,
+	type : Element_kind,
 	text : string,
+	overflow : Maybe(Overflow),
 	layout : Layout,
 	transform : Transform,
 }
 
-Pop :: struct {}
+@private
+Pop :: struct {
+	pop_scissor : bool,
+}
 
 @(private)
 Item_or_pop :: struct {
@@ -141,42 +190,170 @@ Item_or_pop :: struct {
 
 //time: what is the current time.
 @(require_results)
-end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> []To_draw {
-	item := make([dynamic]Item, 0, len(lm.items) / 2, context.temp_allocator) //half the size because for every push there is a pop
+end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
+	
+	Proto_scissor_push :: struct {
+		overflow : Overflow,
+		layout_lookup : int,
+	}
+
+	Proto_rect :: struct {
+		kind : Element_kind,
+		text : string,
+		layout_lookup : int,
+		transform : Transform
+	} //int to lookup in the elem
+	
+	Proto_scissor_pop :: struct {}
+
+	Proto_command :: union {
+		Proto_rect,
+		Proto_scissor_push,
+		Proto_scissor_pop,
+	}
+
+	proto_commands := make([dynamic]Proto_command, 0, len(lm.items), context.temp_allocator) //half the size because for every push there is a pop
 	
 	defer laycal.end_layout_state(&lm.ls);
 
+	lc_count := 0;
 	for opt in lm.items {
 		switch o in opt.what {
 			case Item: {
 				//log.debugf("interpolated_params : %v\n", interpolated_params);
 				laycal.open_element(&lm.ls, o.layout, fmt.ctprint("", opt.loc));
-				append_elem(&item, o);
+				append_elem(&proto_commands, Proto_rect{o.type, o.text, lc_count, o.transform});
+				if overflow, ok := o.overflow.?; ok {
+					append(&proto_commands, Proto_scissor_push{overflow, lc_count})
+				}
+				lc_count += 1;
 			}
 			case Pop: {
+				if o.pop_scissor {
+					append(&proto_commands, Proto_scissor_pop{});
+				}
 				laycal.close_element(&lm.ls);
 			}
 		}
 	}
 
-	to_draw := make([]To_draw, len(item), context.temp_allocator)
+	commands := make([dynamic]Command, 0, len(proto_commands), context.temp_allocator)
 	elems := laycal.end_layout_state(&lm.ls);
-	assert(len(item) == len(elems))
-	assert(len(item) == len(to_draw))
-	for e, i in elems {
-		itm := item[i];
-		
-		//TODO in the furture re-order these if there is push_orderable
+	assert(len(proto_commands) >= len(elems))
 
-		to_draw[i] = To_draw {
-			itm.type,
-			itm.text,
-			{cast(f32)e.position.x, cast(f32)e.position.y, cast(f32)e.size.x, cast(f32)e.size.y},
+	for proto, i in proto_commands {
+		cmd : Command;
+		
+		switch v in proto {
+			case Proto_rect: {
+				elem := elems[v.layout_lookup]
+				if v.text == "" {
+					cmd = Cmd_rect {
+						[4]f32{auto_cast elem.position.x, auto_cast elem.position.y, auto_cast elem.size.x, auto_cast elem.size.y},
+						v.kind,
+						.cold,
+					}
+				}
+				else {
+					cmd = Cmd_text {
+						[4]f32{auto_cast elem.position.x, auto_cast elem.position.y, auto_cast elem.size.x, auto_cast elem.size.y},
+						elem.text_size,
+						elem.font,
+						elem.lines,
+						v.kind,
+						0, //rotation around the begining of the baseline 
+					}
+				}
+			}
+			case Proto_scissor_push: {
+				elem := elems[v.layout_lookup]
+				clip := [4]f32{math.inf_f32(-1), math.inf_f32(-1), math.inf_f32(1), math.inf_f32(1)}
+				if v.overflow.x == false {
+					//if overflow = false then clipping = true and we should clip
+					clip.x = auto_cast elem.position.x
+					clip.z = auto_cast elem.size.x
+				}
+				if v.overflow.y == false {
+					//if overflow = false then clipping = true and we should clip
+					clip.y = auto_cast elem.position.y
+					clip.w = auto_cast elem.size.y
+				}
+				if len(lm.scissor_stack) != 0 {
+					last_scissor := lm.scissor_stack[len(lm.scissor_stack) - 1]
+					clip = [4]f32{math.min(last_scissor.x, clip.x), math.min(last_scissor.y, clip.y),
+									math.max(last_scissor.z, clip.z), math.max(last_scissor.w, clip.w)}
+				}
+				append(&lm.scissor_stack, clip)
+				cmd = Cmd_scissor {
+					clip,
+				}
+			}
+			case Proto_scissor_pop: {
+				pop(&lm.scissor_stack);
+				if len(lm.scissor_stack) != 0 {
+					cmd = Cmd_scissor {
+						lm.scissor_stack[len(lm.scissor_stack) - 1],
+					}
+				}
+				else {
+					cmd = Cmd_scissor_disable {}
+				}
+			}
 		}
+
+		//TODO in the furture re-order these if there is push_orderable
+		append(&commands, cmd)
 	}
 	
+	assert(len(lm.items_shadow_stack) == 0, "lm.items_shadow_stack was not length zero")
+	assert(len(lm.scissor_stack) == 0, "length of scissor stack not zero")
+
 	clear(&lm.items);
-	return to_draw;
+	return commands[:];
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+
+//pushes a contrainer (might be drawn or not drawn) for things can be reordered by hot-path, like windows
+//push_orderable :: proc(lm : ^Layout_mananger, type : Element_kind, layout : Layout, transform := default_transform) {}
+
+open_rect :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, transform := default_transform, loc := #caller_location) {
+	append(&lm.items_shadow_stack, len(lm.items))
+	append_elem(&lm.items, Item_or_pop{Item{kind, "", nil, layout, transform}, loc})
+}
+
+//Pushes a rect (might be drawn or not drawn)
+open_panel :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, overflow := default_overflow, transform := default_transform, loc := #caller_location) {
+	append(&lm.items_shadow_stack, len(lm.items))
+	append(&lm.items, Item_or_pop{Item{kind, "", overflow, layout, transform}, loc})
+}
+
+//Pushes a selectiable, that can be hot and active (might be drawn or not drawn)
+//push_selectiable :: proc(lm : ^Layout_mananger, type : Element_kind, uid : Unique_id, layout : Layout, transform := default_transform, loc := #caller_location) {}
+
+//Pushes a text to be drawn
+open_text :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, transform := default_transform, loc := #caller_location) {
+	layout := layout
+
+	s : string
+	if t, ok := &layout.sizing.(laycal.Text); ok {
+		t.text = strings.clone(t.text, context.temp_allocator)
+		s = t.text
+	} 
+
+	append(&lm.items_shadow_stack, len(lm.items))
+	append(&lm.items, Item_or_pop{Item{kind, s, nil, layout, transform}, loc})
+}
+
+close :: proc(lm : ^Layout_mananger, loc := #caller_location) {
+	index := pop(&lm.items_shadow_stack)
+	#partial switch l in lm.items[index].what {
+		case Item: {
+			append_elem(&lm.items, Item_or_pop{Pop{l.overflow != nil}, loc})
+		}
+		case:
+			fmt.panicf("found a %v", l)
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -241,32 +418,7 @@ try_set_active :: proc (lm : ^Layout_mananger, uid : Unique_id) {
 
 }
 
-//promote :: proc (lm : ^Layout_mananger, uid : Unique_id) -> bool {} 
-
-///////////////////////////////////////////////////////////////////////////////////////
-
-Type_number :: distinct int
-
-//pushes a contrainer (might be drawn or not drawn) for things can be reordered by hot-path, like windows
-//push_orderable :: proc(lm : ^Layout_mananger, type : Type_number, layout : Layout, transform := default_transform) {}
-
-//Pushes a rect (might be drawn or not drawn)
-push_rect :: proc (lm : ^Layout_mananger, type : Type_number, layout : Layout, transform := default_transform, loc := #caller_location) {
-	append_elem(&lm.items, Item_or_pop{Item{type, "", layout, transform}, loc})
-}
-
-//Pushes a selectiable, that can be hot and active (might be drawn or not drawn)
-//push_selectiable :: proc(lm : ^Layout_mananger, type : Type_number, uid : Unique_id, layout : Layout, transform := default_transform, loc := #caller_location) {}
-
-//Pushes a text to be drawn
-push_text :: proc (lm : ^Layout_mananger, type : Type_number, text : string, layout : Layout, transform := default_transform, loc := #caller_location) {
-	panic("TODO");
-}
-
-//pops any of the above
-pop :: proc(lm : ^Layout_mananger, loc := #caller_location) {
-	append_elem(&lm.items, Item_or_pop{Pop{}, loc})
-}
+//promote :: proc (lm : ^Layout_mananger, uid : Unique_id) -> bool {}
 
 ///////////////////////////////////////////////////////////////////////////////////////
 
@@ -274,29 +426,6 @@ pop :: proc(lm : ^Layout_mananger, loc := #caller_location) {
 get_next_priority :: proc (lm : ^Layout_mananger) -> u32 {
 	panic("TODO");
 }
-
-/*
-Panel :: struct {
-	scroll_offset : [2]f32,
-	virtual_size : [2]f32, //the size which there exists items/elements
-	
-	use_scissor : bool, 
-	enable_hor_scroll : bool,
-	enable_ver_scroll : bool,
-	
-	uid : Maybe(Unique_id),
-}
-
-Node :: struct {
-	uid : Unique_id,
-	sub_nodes : [dynamic]^Node,
-	sub_commands : [dynamic]Sub_command,
-	parent : ^Node,
-	is_overlay : bool,
-	
-	refound : bool,
-}
-*/
 
 Layout_dir :: laycal.Layout_dir;
 Alignment ::laycal.Alignment;
@@ -306,7 +435,7 @@ Size :: laycal.Size;
 Min_size :: laycal.Min_size;
 Max_size :: laycal.Max_size;
 Absolute_postion :: laycal.Absolute_postion;
-Overflow :: laycal.Overflow;
+Overflow_dir :: laycal.Overflow_dir;
 
 Fixed :: laycal.Fixed;
 Parent_ratio :: laycal.Parent_ratio;
@@ -317,97 +446,8 @@ fit :: laycal.fit;
 grow :: laycal.grow;
 grow_fit :: laycal.grow_fit;
 
-layout :: laycal.parameters;
+rect :: laycal.rect_parameters;
+text :: laycal.text_parameters;
 Layout :: laycal.Parameters;
 
 acast :: linalg.array_cast;
-
-/*
-///////////////////////////////////////////////////////////////////////////////////////
-
-Text_type :: enum {
-	button_text,
-	checkbox_text,
-	title_text,
-	menu_item,
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-
-Cmd_scissor :: struct{
-	area : [4]f32,
-	enable : bool,
-}; //
-
-Cmd_rect :: struct {
-	rect : [4]f32,
-	element_kind : i32, //use this to store what kind element needs to be rendered. 
-	part_kind  : i32, //use this to store what, use this to store if it the border or background or whatever.
-	border_thickness : f32, 	//optional for some rects, -1 if not used
-	state : Display_state, 	//Used by some interactive elements
-}
-
-Cmd_swap_cursor :: struct {
-	type : Cursor_type,
-	user_id : int,
-}
-
-Cmd_text :: struct {
-	position : [2]f32,
-	val : string,
-	size : f32, //in pixels
-	rotation : f32, //rotation around the begining of the baseline 
-	type : Text_type,
-}
-
-Command :: union {
-	Cmd_scissor,
-	Cmd_rect,
-	Cmd_text,
-	Cmd_swap_cursor,
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-
-push_scissor :: proc(s : ^State, scissor : Cmd_scissor) {
-	scissor := scissor;
-	
-	//make sure the scissor stays inside the current one
-	//scissor_stack is x, y, width, height
-	dx : f32 = 0;
-	dy : f32 = 0;
-	
-	if len(s.scissor_stack) >= 1 {
-		parent_scissor := s.scissor_stack[len(s.scissor_stack)-1];
-		
-		if parent_scissor.enable {
-			r := parent_scissor.area;
-			if scissor.area.x < r.x {
-				dx = r.x - scissor.area.x;
-				scissor.area.x = r.x;
-			}
-			if scissor.area.y < r.y {
-				dy = r.y - scissor.area.y;
-				scissor.area.y = r.y;
-			}
-			
-			scissor.area.z = math.min(scissor.area.z - dx, r.x + r.z - scissor.area.x);
-			scissor.area.w = math.min(scissor.area.w - dy, r.y + r.w - scissor.area.y);
-		}
-	}
-	
-	scissor.area.z = math.max(scissor.area.z, 0);
-	scissor.area.w = math.max(scissor.area.w, 0);
-	
-	append(&s.scissor_stack, scissor);
-	append_command(s, scissor);
-}
-
-pop_scissor :: proc(s : ^State) {
-	pop(&s.scissor_stack);
-	if len(s.scissor_stack) >= 1 {
-		r := s.scissor_stack[len(s.scissor_stack)-1];
-		append_command(s, r);
-	}
-}
-*/
