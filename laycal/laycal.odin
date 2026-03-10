@@ -34,7 +34,9 @@ Layout_state :: struct {
 	meas_height : Meassure_text_height_callback,
 	meas_line_gap :  Meassure_line_gap_callback,
 
-	draw_commands : [dynamic]Element_layout
+	draw_commands : [dynamic]Element_layout,
+
+	self_free : bool,
 }
 
 Layout_dir :: enum {
@@ -214,6 +216,7 @@ make_layout_state :: proc (meas_width : Meassure_text_width_callback, meas_heigh
 	
 	if ls == nil {
 		ls = new(Layout_state);
+		ls.self_free = true
 	}
 	
 	ne := new(Element);
@@ -244,7 +247,9 @@ destroy_laytout_state :: proc (ls : ^Layout_state) {
 	delete(ls.element_stack);
 	delete(ls.draw_commands);
 	destroy_element(ls.root)
-	free(ls);
+	if ls.self_free {
+		free(ls);
+	}
 }
 
 default_root_params : Parameters = {
@@ -499,7 +504,6 @@ do_text_height_recursive :: proc (ls : ^Layout_state, elem : ^Element) {
 				
 				h := ls.meas_height(what.size, what.font);
 				baseline_step := ls.meas_height(what.size, what.font) + ls.meas_line_gap(what.size, what.font)
-				fmt.printf("lines_cnt : %v, baseline_step : %v, max_size : %v\n", len(c.text_to_draw), baseline_step, max_size)
 				for i in 0..<len(c.text_to_draw)-1 {
 					h += baseline_step
 				}
@@ -583,7 +587,7 @@ do_expand_and_shrink_recursive :: proc(ls : ^Layout_state, elem : ^Element, axis
 				child := thing.elem
 				consumed : i32;
 
-				if i == 0 { //we do give the last element the rest of the width, this is a way to handle floating point precision.
+				if len(expand_in_flow) == 1 { //we do give the last element the rest of the width, this is a way to handle floating point precision.
 					consumed = remaning_width;
 				}
 				else {
@@ -591,13 +595,20 @@ do_expand_and_shrink_recursive :: proc(ls : ^Layout_state, elem : ^Element, axis
 						//they are all the same, just expand by weight
 						consumed = cast(i32)math.round(cast(f32)total_width * cast(f32)child.grow_weight / cast(f32)total_weight);
 					} else {
-						consumed = math.max(1, cast(i32)math.round((cast(f32)next_least_pressence - cast(f32)least_pressence) / cast(f32)child.grow_weight));
+						//consume until the least pressence becomes the same as the next_least_pressence, get this childs current pressence, if it is the least expand to next_least
+						if child.grow_weight * child.size[axis] == least_pressence {
+							consumed = math.max(1, cast(i32)math.round((cast(f32)next_least_pressence - cast(f32)least_pressence) / cast(f32)child.grow_weight));
+						}
+						else {
+							consumed = 0;
+							continue;
+						}
 					}
 				}
-
+				
 				//if child.size[axis] + consumed becomes larger then eval_max_size(elem, axis), then subtract the differnce from consumed, this means we will enforce the elements max_size
 				consumed -= math.max(0, (child.size[axis] + consumed) - math.min(eval_max_size(elem, axis), thing.max_size));
-				
+
 				if consumed == 0 {
 					ordered_remove(&expand_in_flow, i);
 					total_weight -= child.grow_weight;
@@ -610,65 +621,66 @@ do_expand_and_shrink_recursive :: proc(ls : ^Layout_state, elem : ^Element, axis
 		}
 		
 		//we want to shrink the item with the mose pressence so they all become closer to the same size if they take up too much space
-		for remaning_width < 0 && len(shrink_in_flow) != 0 && false {
+		for remaning_width < 0 && len(shrink_in_flow) != 0 {
 			most_pressence : i32 = 0
 			next_most_pressence : i32 = 0
 			
 			for thing, i in shrink_in_flow {
 				child := thing.elem
-				if child.grow_weight * child.size[axis] > most_pressence {
+				if child.size[axis] > most_pressence {
 					next_most_pressence = most_pressence;
-					most_pressence = child.grow_weight * child.size[axis];
+					most_pressence = child.size[axis];
 				}
-				if child.grow_weight * child.size[axis] != most_pressence {
-					next_most_pressence = math.max(next_most_pressence, child.grow_weight * child.size[axis]);
+				if child.size[axis] != most_pressence {
+					next_most_pressence = math.max(next_most_pressence, child.size[axis]);
 				}
 			}
-			
-			
-			//TODO shrink_weight is 1/grow_weight
+
 			#reverse for thing, i in shrink_in_flow {
 				child := thing.elem
 				consumed : i32;
 				
 				if i == 0 { //we do give the last element the rest of the width, this is a way to handle floating point precision.
-					consumed = remaning_width;
+					consumed = -remaning_width; //consumed is positive like 200
 				}
 				else {
 					if next_most_pressence == 0 {
 						//they are all the same, just expand by weight
-						consumed = cast(i32)math.round(cast(f32)total_width * cast(f32)child.grow_weight / cast(f32)total_weight);
+						consumed = cast(i32)math.round(cast(f32)-total_width);
 					} else {
-						consumed = math.max(1, cast(i32)math.round((cast(f32)next_most_pressence - cast(f32)most_pressence) / cast(f32)child.grow_weight));
+						consumed = math.max(1, cast(i32)math.round((cast(f32)next_most_pressence - cast(f32)most_pressence)));
 					}
 				}
 				
 				//if child.size[axis] + consumed becomes larger then eval_max_size(elem, axis), then subtract the differnce from consumed, this means we will enforce the elements max_size
-				consumed += math.max(0, (child.size[axis] - consumed) - math.max(eval_min_size(elem, axis), thing.min_width));
+				consumed -= math.max(0, math.max(eval_min_size(elem, axis), thing.min_width) - (child.size[axis] - consumed)); //consumed is still positive like 200
+				//fmt.printf("child.size[axis] - consumed : %v, eval_min_size(elem, axis) : %v, thing.min_width : %v\n", child.size[axis] - consumed, eval_min_size(elem, axis), thing.min_width)
+				//fmt.printf("consumed : %v of %v from %v, remaining before : %v, remaning now : %v\n", consumed, child.size[axis], child.debug_name, remaning_width, remaning_width + consumed)
 				
-				fmt.printf("consumed : %v of %v from %v\n", consumed, child.size[axis], child.debug_name)
-
 				if consumed == 0 {
 					ordered_remove(&shrink_in_flow, i);
-					total_weight -= child.grow_weight;
 				}
 				else {
 					child.size[axis] -= consumed;
 					remaning_width += consumed;
 				}
 			}
-		
 		}
 		
 		elem.size[axis] = math.clamp(elem.size[axis], eval_min_size(elem, axis), eval_max_size(elem, axis));
 	}
 	else { //this is for the non-primary axis, it needs to be applied for all children even if this current element is not on the primary axis.
 		//simply move this down to the max size (that is the size of the parent - padding)
-		for thing in shrink_in_flow {
+		for thing in expand_in_flow {
 			child := thing.elem
 			child.size[axis] = elem.size[axis] - elem.padding[axis] - elem.padding[axis+2]; 
 			elem.size[axis] = math.clamp(elem.size[axis], eval_min_size(elem, axis), eval_max_size(elem, axis));
 		}
+		for thing in shrink_in_flow {
+			child := thing.elem
+			child.size[axis] = elem.size[axis] - elem.padding[axis] - elem.padding[axis+2]; 
+			elem.size[axis] = math.clamp(elem.size[axis], eval_min_size(elem, axis), eval_max_size(elem, axis));
+		}		
 	}
 
 	//recurse down the tree in DFS
@@ -700,7 +712,6 @@ do_size_fit :: proc (ls : ^Layout_state, elem : ^Element, axis : int) {
 		case Text: {
 			if axis == 0 {
 				elem.size[axis] = ls.meas_width(what.text, what.size, what.font)
-				fmt.printf("found prefered size size : %v\n", elem.size[axis])
 			}
 			else {
 				//The text size heights are handled elsewhere, in the text wrapping logic and is already set

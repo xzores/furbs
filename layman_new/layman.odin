@@ -58,7 +58,6 @@ Layout_mananger :: struct {
 
 	scissor_stack : [dynamic][4]f32,
 
-	
 	hot : Unique_id,
 	active : Unique_id,
 	next_hot : Unique_id,
@@ -67,15 +66,14 @@ Layout_mananger :: struct {
 	highest_priority : u32,
 	prio_cnt : u32,
 	
-	mouse_pos : [2]f32,
-	mouse_delta : [2]f32,
-	scroll_delta : [2]f32,
-	mouse_state : Key_state,
-	
+	last_rect : map[Unique_id][4]i32,
+
 	originations : map[Unique_look_up]int, //resets every frame
 	
 	items : [dynamic]Item_or_pop,
 	items_shadow_stack : [dynamic]int, //this will act like a stack instead of recording so that we know the type when we do a pop, this points to the items array
+
+	self_free : bool,
 }
 
 Meassure_width_callback 	:: laycal.Meassure_text_width_callback 
@@ -99,10 +97,15 @@ destroy :: proc (lm : ^Layout_mananger) {
 	delete(lm.scissor_stack)
 	delete(lm.originations)
 	delete(lm.items)
+	delete(lm.last_rect)
 	delete(lm.items_shadow_stack)
+	if lm.self_free {
+		free(lm)
+	}
 }
 
 begin :: proc (lm : ^Layout_mananger, screen_size : [2]i32) {
+	clear(&lm.originations)
 	laycal.begin_layout_state(&lm.ls, screen_size);
 }
 
@@ -170,6 +173,7 @@ Item :: struct {
 	type : Element_kind,
 	text : string,
 	overflow : Maybe(Overflow),
+	uid : Maybe(Unique_id),
 	layout : Layout,
 	transform : Transform,
 }
@@ -188,10 +192,11 @@ Item_or_pop :: struct {
 	loc : runtime.Source_Code_Location,
 }
 
-//time: what is the current time.
 @(require_results)
 end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
-	
+
+	clear(&lm.last_rect);
+
 	Proto_scissor_push :: struct {
 		overflow : Overflow,
 		layout_lookup : int,
@@ -201,6 +206,7 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 		kind : Element_kind,
 		text : string,
 		layout_lookup : int,
+		uid : Maybe(Unique_id),
 		transform : Transform
 	} //int to lookup in the elem
 	
@@ -222,7 +228,7 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 			case Item: {
 				//log.debugf("interpolated_params : %v\n", interpolated_params);
 				laycal.open_element(&lm.ls, o.layout, fmt.ctprint("", opt.loc));
-				append_elem(&proto_commands, Proto_rect{o.type, o.text, lc_count, o.transform});
+				append_elem(&proto_commands, Proto_rect{o.type, o.text, lc_count, o.uid, o.transform});
 				if overflow, ok := o.overflow.?; ok {
 					append(&proto_commands, Proto_scissor_push{overflow, lc_count})
 				}
@@ -236,17 +242,20 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 			}
 		}
 	}
-
+	
 	commands := make([dynamic]Command, 0, len(proto_commands), context.temp_allocator)
 	elems := laycal.end_layout_state(&lm.ls);
-	assert(len(proto_commands) >= len(elems))
-
+	assert(len(proto_commands) >= len(elems));
+	
 	for proto, i in proto_commands {
 		cmd : Command;
 		
 		switch v in proto {
 			case Proto_rect: {
 				elem := elems[v.layout_lookup]
+				if uid, ok := v.uid.?; ok {
+					lm.last_rect[uid] = [4]i32{elem.position.x, elem.position.y, elem.size.x, elem.size.y}
+				}
 				if v.text == "" {
 					cmd = Cmd_rect {
 						[4]f32{auto_cast elem.position.x, auto_cast elem.position.y, auto_cast elem.size.x, auto_cast elem.size.y},
@@ -305,6 +314,15 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 		append(&commands, cmd)
 	}
 	
+	if lm.next_hot != {}{
+		lm.hot = lm.next_hot
+	}
+	if lm.next_active != {}{
+		lm.active = lm.next_active
+	}
+	lm.next_hot = {}
+	lm.next_active = {}
+
 	assert(len(lm.items_shadow_stack) == 0, "lm.items_shadow_stack was not length zero")
 	assert(len(lm.scissor_stack) == 0, "length of scissor stack not zero")
 
@@ -317,24 +335,10 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 //pushes a contrainer (might be drawn or not drawn) for things can be reordered by hot-path, like windows
 //push_orderable :: proc(lm : ^Layout_mananger, type : Element_kind, layout : Layout, transform := default_transform) {}
 
-open_rect :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, transform := default_transform, loc := #caller_location) {
-	append(&lm.items_shadow_stack, len(lm.items))
-	append_elem(&lm.items, Item_or_pop{Item{kind, "", nil, layout, transform}, loc})
-}
-
-//Pushes a rect (might be drawn or not drawn)
-open_panel :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, overflow := default_overflow, transform := default_transform, loc := #caller_location) {
-	append(&lm.items_shadow_stack, len(lm.items))
-	append(&lm.items, Item_or_pop{Item{kind, "", overflow, layout, transform}, loc})
-}
-
-//Pushes a selectiable, that can be hot and active (might be drawn or not drawn)
-//push_selectiable :: proc(lm : ^Layout_mananger, type : Element_kind, uid : Unique_id, layout : Layout, transform := default_transform, loc := #caller_location) {}
-
 //Pushes a text to be drawn
-open_text :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, transform := default_transform, loc := #caller_location) {
+open :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, uid : Maybe(Unique_id) = nil, overflow := default_overflow, transform := default_transform, loc := #caller_location) {
 	layout := layout
-
+	
 	s : string
 	if t, ok := &layout.sizing.(laycal.Text); ok {
 		t.text = strings.clone(t.text, context.temp_allocator)
@@ -342,7 +346,7 @@ open_text :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, 
 	} 
 
 	append(&lm.items_shadow_stack, len(lm.items))
-	append(&lm.items, Item_or_pop{Item{kind, s, nil, layout, transform}, loc})
+	append(&lm.items, Item_or_pop{Item{kind, s, overflow, uid, layout, transform}, loc})
 }
 
 close :: proc(lm : ^Layout_mananger, loc := #caller_location) {
@@ -367,7 +371,6 @@ Display_state :: enum {
 //create a new uid only do this when a new element is shown
 @(require_results)
 make_uid :: proc (lm : ^Layout_mananger, dont_touch : runtime.Source_Code_Location, user_id : int = 0) -> Unique_id {
-	
 	special_number : int;
 	is_call_count : bool;
 
@@ -409,13 +412,27 @@ is_active :: proc(lm : ^Layout_mananger, uid : Unique_id) -> bool {
 
 //if you where active last frame always win the hot
 //otherwise if uid is the same except for the sub_priority, then the highest sub_priority wins
-try_set_hot :: proc (lm : ^Layout_mananger, uid : Unique_id) {
-	
+try_set_hot :: proc (lm : ^Layout_mananger, uid : Unique_id, loc := #caller_location) {
+	lm.next_hot = uid
 }
 
 //tries to set the currently pushed element to active
 try_set_active :: proc (lm : ^Layout_mananger, uid : Unique_id) {
+	lm.next_active = uid
+}
 
+current_active :: proc (lm : ^Layout_mananger) -> Unique_id {
+	return lm.active
+}
+
+current_hot :: proc (lm : ^Layout_mananger) -> Unique_id {
+	return lm.hot
+}
+
+get_rect :: proc (lm : ^Layout_mananger, uid : Unique_id) -> [4]i32 {
+	//assert(uid in lm.last_rect, "not valid");
+	//log.debugf("last_rect : %v", lm.last_rect);
+	return lm.last_rect[uid]
 }
 
 //promote :: proc (lm : ^Layout_mananger, uid : Unique_id) -> bool {}

@@ -1,7 +1,7 @@
 package furbs_gui;
 
 
-/*
+
 import "base:runtime"
 
 import "core:math"
@@ -14,93 +14,50 @@ import "core:fmt"
 
 import "../utils"
 import "../render"
+import layman "../layman_new"
 
-//////////////////////////////////////// Common ////////////////////////////////////////
 
-Ver_placement :: enum {
-	bottom, mid, top
-}
-
-Hor_placement :: enum {
-	left, mid, right,
-}
-
-Dest :: struct {
-	hor : Hor_placement,
-	ver : Ver_placement,
-	offset_x : f32,
-	offset_y : f32,
-}
-
-//////////////////////////////////////// Spacers ////////////////////////////////////////
-
-spacer :: proc (s : ^State, space : f32) {
-	_ = do_offset(s, space);
-}
 
 //////////////////////////////////////// Button ////////////////////////////////////////
 
-button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0, dont_touch := #caller_location) -> (value : bool) {	
-	uid := make_uid(s, user_id, dont_touch);
+button :: proc (s : ^State, label := "", user_id := 0, dont_touch := #caller_location) -> (value : bool) {	
+	uid := layman.make_uid(&s.man, dont_touch, user_id);
 	
-	push_node(s, uid, false, false);
-	defer pop_node(s);
-	
-	panel := get_current_panel(s);
-	
-	style := get_button_style(s);
-	size := style.size;
-	
-	offset := do_offset(s, size);
-	
-	_dest : Dest;
-	if d, ok := dest.?; ok {
-		_dest = d;
-	}
-	else {
-		//use parent panel behavior
-		gstyle := get_style(s);
-		
-		if panel.append_hor {
-			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x, offset.y + gstyle.out_padding};
-		}
-		else {
-			_dest = {panel.hor_behavior, panel.ver_behavior, offset.x + gstyle.out_padding, offset.y};
-		}
-	}
-	
-	
-	placement := place_in_parent(s, panel.position, panel.size, panel.scroll_offset, _dest, size);
-	
-	if is_hover(s, placement) {
-		try_set_hot(s, uid);
+	if is_hover(s, uid) {
+		layman.try_set_hot(&s.man, uid);
 		if s.mouse_state == .pressed {
-			try_set_active(s, uid);
+			layman.try_set_active(&s.man, uid);
 		}
-		if current_active(s) == uid && s.mouse_state == .down {
-			try_set_active(s, uid);
+		if layman.current_active(&s.man) == uid && s.mouse_state == .down {
+			layman.try_set_active(&s.man, uid);
 		}
-		if current_active(s) == uid && s.mouse_state == .released {
-			try_set_active(s, uid);
+		if layman.current_active(&s.man) == uid && s.mouse_state == .released {
+			layman.try_set_active(&s.man, uid);
 			value = true;
 		}
 	}
 	
-	gui_state : Display_state = .cold;
+	gui_state : layman.Display_state = .cold;
 	
-	if current_hot(s) == uid {
+	if layman.current_hot(&s.man) == uid {
 		gui_state = .hot;
 		set_mouse_cursor(s, .clickable);
 	}
-	if current_active(s) == uid {
+	if layman.current_active(&s.man) == uid {
 		gui_state = .active;
 		set_mouse_cursor(s, .clickable);
 	}
-		
-	append_command(s, Cmd_rect{placement, .button_background, -1, gui_state});
-	append_command(s, Cmd_rect{placement, .button_border, style.border_thickness, gui_state});
+	
+	layman.open(&s.man, auto_cast Style_kind.button_background, layman.rect(150, 50), uid);
+	
+	layman.open(&s.man, auto_cast Style_kind.button_border, layman.rect(layman.grow, layman.grow))
+
+	//append_command(s, Cmd_rect{placement, .button_background, -1, gui_state});
+	//append_command(s, Cmd_rect{placement, .button_border, style.border_thickness, gui_state});
 	
 	if label != "" {
+		panic("TODO");	
+		/*
 		padding := style.text_padding
 		
 		asc, dec := s.font_height(s.user_data, style.text_size);
@@ -111,13 +68,25 @@ button :: proc (s : ^State, dest : Maybe(Dest) = nil, label := "", user_id := 0,
 		text_placement := place_in_parent(s, placement.xy + style.text_padding, placement.zw - 2 * style.text_padding, 0, Dest{style.text_hor, style.text_ver, 0, 0}, text_size);
 		text_placement.y -= dec
 		append_command(s, Cmd_text{text_placement.xy, strings.clone(label, context.temp_allocator), style.text_size, 0, .button_text});
+		*/
 	}
+
+	layman.close(&s.man)
+	layman.close(&s.man);
 	
-	return;
+	return value;
 }
+
+
+
+
+
+
+
 
 //////////////////////////////////////// Checkbox ////////////////////////////////////////
 
+/*
 checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := "", user_id := 0, dont_touch := #caller_location) -> bool {	
 	uid := make_uid(s, user_id, dont_touch);
 	
@@ -204,7 +173,6 @@ checkbox :: proc (s : ^State, value : ^bool, dest : Maybe(Dest) = nil, label := 
 //////////////////////////////////////// Input Field ////////////////////////////////////////
 
 //TODO input field
-
 
 //////////////////////////////////////// Container ////////////////////////////////////////
 
