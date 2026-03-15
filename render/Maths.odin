@@ -41,11 +41,10 @@ perspective_mat :: proc (fovy, aspect, near, far: f32) -> matrix[4,4]f32 {
 
 @(require_results)
 look_at :: proc "contextless" (eye, centre, up: [3]f32) -> matrix[4,4]f32 {
-	using linalg;
 	
-	f := normalize(centre - eye);
-	r := normalize(cross(up, f));
-	u := cross(f, r);
+	f := linalg.normalize(centre - eye);
+	r := linalg.normalize(linalg.cross(up, f));
+	u := linalg.cross(f, r);
 
 	r_mat : matrix[4,4]f32 = {
 		+r.x, +u.x, +f.x,   0,
@@ -66,11 +65,10 @@ look_at :: proc "contextless" (eye, centre, up: [3]f32) -> matrix[4,4]f32 {
 
 @(require_results)
 camera_look_at :: proc "contextless" (eye, centre, up: [3]f32) -> matrix[4,4]f32 {
-	using linalg;
 	
-	f := normalize(centre - eye);
-	r := normalize(cross(up, f));
-	u := cross(f, r);
+	f := linalg.normalize(centre - eye);
+	r := linalg.normalize(linalg.cross(up, f));
+	u := linalg.cross(f, r);
 
 	r_mat : matrix[4,4]f32 = {
 		+r.x, +r.y, +r.z,   0,
@@ -122,16 +120,15 @@ extract_rotation_from_matrix :: proc {extract_rotation_from_matrix3, extract_rot
 //Rotation is applied in x,y,z. postive rotation = counter clock wise.
 @require_results
 rotation_matrix :: proc "contextless" (euler_angles : [3]f32) -> matrix[3,3]f32 {
-	using math;
 	
-	cx := cos(euler_angles.x);
-	sx := sin(euler_angles.x);
+	cx := math.cos(euler_angles.x);
+	sx := math.sin(euler_angles.x);
 
-	cy := cos(euler_angles.y);
-	sy := sin(euler_angles.y);
+	cy := math.cos(euler_angles.y);
+	sy := math.sin(euler_angles.y);
 	
-	cz := cos(euler_angles.z);
-	sz := sin(euler_angles.z);
+	cz := math.cos(euler_angles.z);
+	sz := math.sin(euler_angles.z);
 
 	rot_x := matrix[3,3]f32{1, 0, 0,
 							0, cx, sx,

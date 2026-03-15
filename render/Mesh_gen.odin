@@ -649,8 +649,7 @@ make_mesh_cone :: proc(offset : [3]f32, height, diameter : f32, sectors : int, u
 //direction will be normalized
 @(require_results)
 generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cyl, diameter_cone : f32, sectors : int, use_index_buffer : bool, up : [3]f32 = {0,1,0}) -> (verts : []Default_vertex, indices : Indices) {
-	using linalg;
-
+	
 	vert_cone, index_cone := generate_cone({0,heigth_cone/2,0}, heigth_cone, diameter_cone, sectors, use_index_buffer);
 	defer delete(vert_cone);
 	defer indices_delete(index_cone);
@@ -663,10 +662,10 @@ generate_arrow :: proc (direction : [3]f32, height_cyl, heigth_cone, diameter_cy
 		arb = [3]f32{1,0,0}; //is there something better? likely...
 	}
 
-	b := normalize(direction);
-	a := normalize(cross(arb, b));
-	c := normalize(cross(b, a));
-
+	b := linalg.normalize(direction);
+	a := linalg.normalize(linalg.cross(arb, b));
+	c := linalg.normalize(linalg.cross(b, a));
+	
 	r_mat := matrix[4,4]f32{
 		a.x, b.x, c.x, 0,
 		a.y, b.y, c.y, 0,

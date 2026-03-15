@@ -142,16 +142,15 @@ camera_move :: proc(cam : ^Camera3D, movement : [3]f32) {
 }
 
 camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {
-	using linalg;
 
 	yaw := -math.to_radians(yaw);
 	pitch := -math.to_radians(pitch);
 
 	direction : [3]f32;
 
-	direction.x = cos(yaw) * cos(pitch);
-	direction.y = sin(pitch);
-	direction.z = sin(yaw) * cos(pitch);
+	direction.x = math.cos(yaw) * math.cos(pitch);
+	direction.y = math.sin(pitch);
+	direction.z = math.sin(yaw) * math.cos(pitch);
 
 	cam.target = direction + cam.position;
 }
@@ -159,42 +158,42 @@ camera_rotation :: proc(cam : ^Camera3D, yaw, pitch : f32) {
 //////////////////////////////////////////////////////////////////////////////////
 
 @require_results
-camera3D_get_prj_view :: proc(using camera : Camera3D, aspect : f32, loc := #caller_location) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
+camera3D_get_prj_view :: proc(camera : Camera3D, aspect : f32, loc := #caller_location) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
 
 	view = camera_look_at(camera.position, camera.target, camera.up);
 
 	if (camera.projection == .perspective)
 	{
 		assert(camera.near > 0, "camera near plane must be above zero for a perspective matrix", loc);
-		prj = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, near, far, false); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
+		prj = linalg.matrix4_perspective(camera.fovy * math.PI / 180, aspect, camera.near, camera.far, false); //matrix_perspective(math.to_radians(fovy), aspect, near, far);
 		//prj = glsl.mat4Perspective(camera.fovy * math.PI / 180, aspect, near, far);
 	}
 	else if (camera.projection == .orthographic)
 	{	
-		top : f32 = ortho_height / 2.0;
+		top : f32 = camera.ortho_height / 2.0;
 		right : f32 = top * aspect;
 
-		prj = ortho_mat(-right, right, -top, top, near, far);
+		prj = ortho_mat(-right, right, -top, top, camera.near, camera.far);
 	}
 
 	return;
 };
 
-camera2D_get_prj_view :: proc(using camera : Camera2D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
+camera2D_get_prj_view :: proc(camera : Camera2D, aspect : f32) -> (view : matrix[4,4]f32, prj : matrix[4,4]f32) {
 
-	translation_mat := linalg.matrix4_translate(-linalg.Vector3f32{position.x, position.y, 0});
-	rotation_mat := linalg.matrix4_from_quaternion(linalg.quaternion_angle_axis_f32(math.to_radians(-rotation), {0,0,1}));
+	translation_mat := linalg.matrix4_translate(-linalg.Vector3f32{camera.position.x, camera.position.y, 0});
+	rotation_mat := linalg.matrix4_from_quaternion(linalg.quaternion_angle_axis_f32(math.to_radians(-camera.rotation), {0,0,1}));
 	view = linalg.mul(translation_mat, rotation_mat);
 	
-	top : f32 = 1 / zoom;
+	top : f32 = 1 / camera.zoom;
 	right : f32 = top * aspect;
-	prj = ortho_mat(-right, right, -top, top, near, far);
+	prj = ortho_mat(-right, right, -top, top, camera.near, camera.far);
 	
 	return;
 };
 
 @(private)
-camera3D_bind :: proc(using camera : Camera3D, loc := #caller_location) {
+camera3D_bind :: proc(camera : Camera3D, loc := #caller_location) {
 
 	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 
@@ -207,7 +206,7 @@ camera3D_bind :: proc(using camera : Camera3D, loc := #caller_location) {
 }
 
 @(private)
-camera2D_bind :: proc(using camera : Camera2D, loc := #caller_location) {
+camera2D_bind :: proc(camera : Camera2D, loc := #caller_location) {
 	
 	aspect : f32 = state.target_pixel_width / state.target_pixel_height;
 

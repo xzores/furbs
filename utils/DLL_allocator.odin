@@ -184,11 +184,11 @@ tracking_allocator_proc :: proc(allocator_data: rawptr, mode: mem.Allocator_Mode
 	return
 }
 
-tracking_print_memory_result :: proc(using a : ^Tracking_Allocator) -> (found_leak : bool) {
+tracking_print_memory_result :: proc(a : ^Tracking_Allocator) -> (found_leak : bool) {
 	
 	found_leak = false;
 	
-	if len(allocation_map) == 0 {
+	if len(a.allocation_map) == 0 {
 		fmt.printf("\t%sNo leaks found%s\n", GREEN, RESET);
 	}
 	else {
@@ -197,7 +197,7 @@ tracking_print_memory_result :: proc(using a : ^Tracking_Allocator) -> (found_le
 		defer delete(leaks);
 		
 		fmt.printf("\t%sThe following leaks where found:%s\n", ON_RED, RESET);
-		for p, entry in allocation_map {
+		for p, entry in a.allocation_map {
 			leaks[entry.location] += 1;
 			found_leak = true;
 		}
@@ -209,14 +209,14 @@ tracking_print_memory_result :: proc(using a : ^Tracking_Allocator) -> (found_le
 		fmt.printf(RESET);
 	}
 
-	if len(bad_free_array) == 0 {
+	if len(a.bad_free_array) == 0 {
 		fmt.printf("\t%sNo bad frees where found%s\n", GREEN, RESET);
 	}
 	else {
 		
 		fmt.printf("\t%sThe bad frees where found:%s\n", ON_RED, RESET);
 		fmt.printf(RED);
-		for bf in bad_free_array {
+		for bf in a.bad_free_array {
 			fmt.printf("\t\tbad_free : %v\n", bf.location);
 		}
 		fmt.printf(RESET);

@@ -3147,7 +3147,7 @@ begin_buffer_write :: proc(resource : ^Resource, begin : int = 0, length : Maybe
 }
 
 //after calling this you may not change the buffer data (or even keep a refernce to it)
-end_buffer_writes :: proc(using resource : ^Resource, loc := #caller_location) {
+end_buffer_writes :: proc(resource : ^Resource, loc := #caller_location) {
 
 	switch resource.usage {
 		
@@ -3156,15 +3156,15 @@ end_buffer_writes :: proc(using resource : ^Resource, loc := #caller_location) {
 				//We don't need to do anything here.
 			}
 			else {
-				unmap_buffer(buffer, buffer_type);
+				unmap_buffer(resource.buffer, resource.buffer_type);
 			}
 		
 		case .dynamic_write, .dynamic_read_write:
 			if cpu_state.gl_version >= .opengl_4_4 {
-				unmap_buffer(buffer, buffer_type);
+				unmap_buffer(resource.buffer, resource.buffer_type);
 			}
 			else {
-				unmap_buffer(buffer, buffer_type);
+				unmap_buffer(resource.buffer, resource.buffer_type);
 			}
 
 		case .static_write, .static_read_write:

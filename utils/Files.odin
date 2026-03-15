@@ -5,7 +5,7 @@ import "core:mem"
 import "base:runtime"
 import "core:encoding/json"
 import "core:strings"
-import "core:os"
+import os "core:os/old"
 import "core:log"
 import "core:path/filepath"
 
@@ -14,7 +14,7 @@ import "core:path/filepath"
 // It handles paths ending in either a directory or a filename.
 ensure_path :: proc(path: string) -> (err: os.Error) {
     // Normalize the path (removes redundant separators, etc.)
-    path, alc_err := filepath.clean(path)           // normalizes OS separators:contentReference[oaicite:6]{index=6}
+    path, alc_err := filepath.clean(path, context.allocator)           // normalizes OS separators:contentReference[oaicite:6]{index=6}
 	assert(alc_err == nil);
 	defer delete(path);
 
@@ -24,7 +24,7 @@ ensure_path :: proc(path: string) -> (err: os.Error) {
     }
     // If nothing remains, there is no directory to create
     if path == "" || path == "." {
-        return 0
+        return nil
     }
 
     // Recursively ensure parent directories exist
@@ -32,7 +32,7 @@ ensure_path :: proc(path: string) -> (err: os.Error) {
 	defer delete(parent);
     if parent != "" && parent != path {
         err = ensure_path(parent)
-        if err != 0 {
+        if err != nil {
             return err
         }
     }
@@ -40,10 +40,10 @@ ensure_path :: proc(path: string) -> (err: os.Error) {
     // Create the directory itself
     err = os.make_directory(path)           // creates the directory:contentReference[oaicite:10]{index=10}
     // If it already exists, ignore the error (mimic mkdir -p)
-    if err != 0 && err != os.ERROR_ALREADY_EXISTS {
+    if err != nil && err != os.ERROR_ALREADY_EXISTS {
         return err
     }
-    return 0
+    return nil
 }
 
 
@@ -184,7 +184,7 @@ ensure_folder_exists :: proc(folder_path : string) -> (err: os.Errno) {
 delete_directory_contents :: proc(dir_path: string, loc := #caller_location) -> (success : bool) {
 	
 	dir_handle, dir_err := os.open(dir_path);
-	if dir_err != 0 {
+	if dir_err != nil {
 		log.logf(.Error, "Error opening directory : %v", dir_err, location = loc);
 		return false;
 	}
@@ -193,7 +193,7 @@ delete_directory_contents :: proc(dir_path: string, loc := #caller_location) -> 
 	defer os.file_info_slice_delete(files);
 	os.close(dir_handle);
 	
-	if err != 0 {
+	if err != nil {
 		log.logf(.Error, "Error reading directory : %v", err, location = loc);
 		return false;
 	}
@@ -208,13 +208,13 @@ delete_directory_contents :: proc(dir_path: string, loc := #caller_location) -> 
 				if !delete_directory_contents(full_path) {
 					return false
 				}
-				if os.remove_directory(full_path) != 0 {
+				if os.remove_directory(full_path) != nil {
 					log.logf(.Error, "Error removing directory: %v", full_path, location = loc)
 					return false
 				}
 			}
 		} else {
-			if os.remove(full_path) != 0 {
+			if os.remove(full_path) != nil {
 				log.logf(.Error, "Error removing file : %v", full_path, location = loc)
 				return false
 			}
@@ -230,7 +230,7 @@ remove_directory_recursive :: proc(dir_path: string, loc := #caller_location) ->
 	if !delete_directory_contents(dir_path, loc) {
 		return false;
 	}
-	if os.remove_directory(dir_path) != 0 {
+	if os.remove_directory(dir_path) != nil {
 		log.logf(.Error, "Error removing directory:", dir_path, location = loc);
 		return false;
 	}

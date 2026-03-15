@@ -1,4 +1,5 @@
 #+feature dynamic-literals
+#+feature using-stmt
 package render
 
 import "core:unicode"
@@ -9,7 +10,7 @@ import "core:fmt"
 import "core:reflect"
 import "core:strings"
 import "core:slice"
-import "core:os"
+import os "core:os/old"
 import "core:time"
 import "core:path/filepath"
 import "core:log"
@@ -335,34 +336,34 @@ Preprocessor_info :: struct {
 
 //You must destoy the error. (if it is there)
 @(require_results)
-run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : string, src : string, path : string) -> (vertex_src : string, fragment_src : string, info : Preprocessor_info, err : Maybe(Shader_preprocessor_error)) {
-	using strings;
+run_preprocessor :: proc (preprocessor : ^Preprocessor, shader_name : string, src : string, path : string) -> (vertex_src : string, fragment_src : string, info : Preprocessor_info, err : Maybe(Shader_preprocessor_error)) {
 
 	err = nil;
 
 	write_target_rune :: proc (using preprocessor : ^Preprocessor, val : string) {
 		if target == .target_vertex || target == .all {
-			write_string(&vertex_builder, val);
+			strings.write_string(&vertex_builder, val);
 		}
 		if preprocessor.target == .target_fragment || target == .all {
-			write_string(&fragment_builder, val);
+			strings.write_string(&fragment_builder, val);
 		}
 	}
 
 	write_target_string :: proc (using preprocessor : ^Preprocessor, val : rune) {
 		if target == .target_vertex || target == .all {
-			write_rune(&vertex_builder, val);
+			strings.write_rune(&vertex_builder, val);
 		}
 		if preprocessor.target == .target_fragment || target == .all {
-			write_rune(&fragment_builder, val);
+			strings.write_rune(&fragment_builder, val);
 		}
 	}
 
 	write_target :: proc {write_target_rune, write_target_string};
 
 	for c in src {
+		using preprocessor;
 
-		switch p_state {
+		switch preprocessor.p_state {
 			case .no_state:
 				do_write = false;
 				if c == '/' {
@@ -380,7 +381,7 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 				}
 				else if c == '$' {
 					p_state = .potential_define;
-					builder_reset(&current_identifier);
+					strings.builder_reset(&current_identifier);
 				}
 				else {
 					do_write = true;
@@ -414,14 +415,14 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 				}
 				else if c == '$' {
 					p_state = .potential_define;
-					builder_reset(&current_identifier);
+					strings.builder_reset(&current_identifier);
 					do_write = false;
 				}
 			case .potential_include:
 				
 				do_write = false;
 
-				s := to_string(current_identifier);
+				s := strings.to_string(current_identifier);
 				include :=  "#include";
 				define := "#define";
 				
@@ -449,7 +450,7 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 
 				if c == '\n' || c == ' ' {
 					p_state = .no_state;
-					file_identifier := to_string(current_identifier);
+					file_identifier := strings.to_string(current_identifier);
 
 					if file_identifier[0] == '"' {
 						file_identifier = file_identifier[1:];
@@ -470,7 +471,7 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 					
 					file_info, info_ok := os.stat(path);
 					defer os.file_info_delete(file_info);
-					if info_ok != 0 {
+					if info_ok != nil {
 						err = Shader_preprocessor_error{
 							fmt.aprintf("Something is very wrong the shader %s loaded from no longer exists...", shader_name, path),
 							line,
@@ -508,12 +509,12 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 				
 				do_write = false;
 
-				s := to_string(current_identifier);
+				s := strings.to_string(current_identifier);
 				if s[0] == '$' {
-					builder_reset(&current_identifier);
+					strings.builder_reset(&current_identifier);
 				}
 				if c == '$' {
-					def := to_string(current_identifier);
+					def := strings.to_string(current_identifier);
 					log.debugf("found define : %v", def);
 
 					if def in state.shader_defines {
@@ -538,12 +539,12 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 				vertex := "@vertex";
 				fragment := "@fragment";
 
-				if to_string(current_identifier) == vertex {
+				if strings.to_string(current_identifier) == vertex {
 					log.debugf("found tag @vertex");
 					info.vertex_offset = line - 1;
 					target = .target_vertex;
 				}
-				else if to_string(current_identifier) == fragment {
+				else if strings.to_string(current_identifier) == fragment {
 					log.debugf("found tag @fragment");
 					info.fragment_offset = line - 1;
 					target = .target_fragment;
@@ -560,11 +561,11 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 		strings.write_rune(&current_identifier, c);
 
 		if c == ' ' || c == ')' || c == '(' || c == '+' || c == '-' || c == '*' {
-			builder_reset(&current_identifier);
+			strings.builder_reset(&current_identifier);
 		}
 
 		if c == '\n' {
-			builder_reset(&current_identifier);
+			strings.builder_reset(&current_identifier);
 			line += 1;
 		}
 
@@ -573,7 +574,7 @@ run_preprocessor :: proc (using preprocessor : ^Preprocessor, shader_name : stri
 		}
 	}
 
-	return to_string(vertex_builder), to_string(fragment_builder), info, nil;
+	return strings.to_string(preprocessor.vertex_builder), strings.to_string(preprocessor.fragment_builder), info, nil;
 }
 
 //You must destoy the error. (if it is there)
@@ -583,7 +584,7 @@ shader_load_from_path :: proc(path : string, loc := #caller_location) -> (shader
 	file, f_err := os.stat(path);
 	defer os.file_info_delete(file);
 	
-	if f_err != 0 {
+	if f_err != nil {
 		log.errorf("Failed to reload shader from shader file : %s. The path is likely invalid.", path);
 		return nil, .invalid_path;
 	}

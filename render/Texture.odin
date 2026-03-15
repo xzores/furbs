@@ -6,7 +6,7 @@ import "base:runtime"
 
 import "core:fmt"
 import c "core:c/libc"
-import "core:os"
+import os "core:os/old"
 import "core:bytes"
 import "core:mem"
 import "core:slice"
@@ -60,7 +60,7 @@ texture1D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 }
 
 @(require_results)
-texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture1D {
+texture1D_make_desc :: proc(desc : Texture_desc, width : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture1D {
 	assert(state.is_init, "You must init first", loc);
 
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
@@ -69,13 +69,13 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 
 	gl.wrapmode_texture1D(id, desc.wrapmode);
-	gl.filtermode_texture1D(id, desc.filtermode, mipmaps);
+	gl.filtermode_texture1D(id, desc.filtermode, desc.mipmaps);
 
 	size_per_component, channels : int;
 	size_per_component = gl.upload_format_component_size(upload_format);
 	channels = gl.upload_format_channel_cnt(upload_format);
 
-	gl.setup_texure_1D(id, mipmaps, width, format);
+	gl.setup_texure_1D(id, desc.mipmaps, width, desc.format);
 	gl.set_texture_border_color_1D(id, desc.border_color);
 
 	if len(data) == 0 {
@@ -91,7 +91,7 @@ texture1D_make_desc :: proc(using desc : Texture_desc, width : i32, upload_forma
 		gl.write_texure_data_1D(id, 0, 0, width, upload_format, data, loc = loc);
 	}
 
-	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
+	if desc.mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
 		gl.generate_mip_maps_1D(id);
 	}
 
@@ -176,9 +176,8 @@ texture2D_load_multi_from_file :: proc(paths : []string, desc : Texture_desc = d
 		data, ok := os.read_entire_file_from_filename(info.filename);
 		defer delete(data);
 		if ok {
-			using image;
 
-			options := Options{
+			options := image.Options{
 				.alpha_add_if_missing,
 			};
 
@@ -260,9 +259,8 @@ texture2D_load_multi_from_file :: proc(paths : []string, desc : Texture_desc = d
 //Data is compressed bytes (ex png format)
 @(require_results)
 texture2D_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, texture_path := "", auto_convert_depth := true, flipped := true, loc := #caller_location) -> Texture2D {
-	using image;
 
-	options := Options{
+	options := image.Options{
 		.alpha_add_if_missing,
 	};
 
@@ -320,11 +318,11 @@ texture2D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 
 //Clear color is only used if data is nil
 @(require_results)
-texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture2D {
+texture2D_make_desc :: proc(desc : Texture_desc, #any_int width, height : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture2D {
 	assert(state.is_init, "You must init first", loc);
-	assert(wrapmode != nil, "wrapmode is nil", loc);
-	assert(filtermode != nil, "filtermode is nil", loc);
-	assert(format != nil, "format is nil", loc);
+	assert(desc.wrapmode != nil, "wrapmode is nil", loc);
+	assert(desc.filtermode != nil, "filtermode is nil", loc);
+	assert(desc.format != nil, "format is nil", loc);
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
@@ -336,8 +334,8 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 	
 	gl.wrapmode_texture2D(id, desc.wrapmode);
-	gl.filtermode_texture2D(id, desc.filtermode, mipmaps);	
-	gl.setup_texture_2D(id, mipmaps, width, height, format);
+	gl.filtermode_texture2D(id, desc.filtermode, desc.mipmaps);	
+	gl.setup_texture_2D(id, desc.mipmaps, width, height, desc.format);
 	gl.set_texture_border_color_2D(id, desc.border_color);
 	
 	channels := gl.upload_format_channel_cnt(upload_format);
@@ -356,7 +354,7 @@ texture2D_make_desc :: proc(using desc : Texture_desc, #any_int width, height : 
 		gl.write_texure_data_2D(id, 0, 0, 0, width, height, upload_format, data, loc);
 	}
 
-	if mipmaps { //If there is no data, then it makes no sense to generate mipmaps
+	if desc.mipmaps { //If there is no data, then it makes no sense to generate mipmaps
 		gl.generate_mip_maps_2D(id);
 	}
 	
@@ -483,7 +481,7 @@ texture3D_make :: proc(mipmaps : bool, wrapmode : Wrapmode, filtermode : Filterm
 
 //clear_color is in range 0 to 1
 @(require_results)
-texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture3D {
+texture3D_make_desc :: proc(desc : Texture_desc, width, height, depth : i32, upload_format : gl.Pixel_format_upload, data : []u8, clear_color : Maybe([4]f64) = [4]f64{0,0,0,0}, label := "", loc := #caller_location) -> Texture3D {
 	assert(state.is_init, "You must init first", loc);
 	assert(desc.wrapmode != nil, "mode is invalid", loc);
 	
@@ -493,13 +491,13 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 	
 	gl.wrapmode_texture3D(id, desc.wrapmode);
-	gl.filtermode_texture3D(id, desc.filtermode, mipmaps);
+	gl.filtermode_texture3D(id, desc.filtermode, desc.mipmaps);
 	
 	size_per_component, channels : int;
 	size_per_component = gl.upload_format_component_size(upload_format);
 	channels = gl.upload_format_channel_cnt(upload_format);
 	
-	gl.setup_texure_3D(id, mipmaps, width, height, depth, format);
+	gl.setup_texure_3D(id, desc.mipmaps, width, height, depth, desc.format);
 	gl.set_texture_border_color_3D(id, desc.border_color);
 		
 	if len(data) == 0 {
@@ -515,7 +513,7 @@ texture3D_make_desc :: proc(using desc : Texture_desc, width, height, depth : i3
 		gl.write_texure_data_3D(id, 0, 0, 0, 0, width, height, depth, upload_format, data, loc = loc);
 	}
 
-	if mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
+	if desc.mipmaps && data != nil { //If there is no data, then it makes no sense to generate mipmaps
 		gl.generate_mip_maps_3D(id);
 	}
 	
@@ -677,7 +675,7 @@ texture2D_atlas_shirnk :: proc (atlas : ^Texture2D_atlas) -> (success : bool) {
 	return texture2D_atlas_transfer(atlas, math.max(1, atlas.impl.size / 2));
 }
 
-texture2D_atlas_destroy :: proc (using atlas : Texture2D_atlas) {
+texture2D_atlas_destroy :: proc (atlas : Texture2D_atlas) {
 	
 	delete(atlas.pixels);	
 	fs.atlas_destroy(atlas.impl);
@@ -843,7 +841,7 @@ texture3D_atlas_shirnk :: proc (atlas : ^Texture3D_atlas) -> (success : bool) {
 	return texture3D_atlas_transfer(atlas, math.max(1, atlas.backing.width / 2));
 }
 
-texture3D_atlas_destroy :: proc (using atlas : Texture3D_atlas) {
+texture3D_atlas_destroy :: proc (atlas : Texture3D_atlas) {
 	texture3D_destroy(atlas.backing)
 	delete(atlas.handle_map)
 	for fs in atlas.free_slots {
@@ -1088,9 +1086,8 @@ texture_cubemap_load_from_files :: proc(filenames : [6]string, desc : Texture_de
 //Data is compressed bytes (ex png format)
 @(require_results)
 texture_cubemap_load_from_png_bytes :: proc(desc : Texture_desc, data : []byte, texture_path := "", auto_convert_depth := true, flipped := true, loc := #caller_location) -> Texture_cubemap {
-	using image;
 	
-	options := Options{
+	options := image.Options{
 		.alpha_add_if_missing,
 	};
 
@@ -1204,19 +1201,19 @@ texture_cubemap_make :: proc(mipmaps : bool, filtermode : Filtermode, internal_f
 
 //Clear color is only used if data is nil
 @(require_results)
-texture_cubemap_make_desc :: proc(using desc : Texture_desc, #any_int width, height : i32, label := "", loc := #caller_location) -> Texture_cubemap {
+texture_cubemap_make_desc :: proc(desc : Texture_desc, #any_int width, height : i32, label := "", loc := #caller_location) -> Texture_cubemap {
 	assert(state.is_init, "You must init first", loc);
-	assert(wrapmode != nil, "wrapmode is nil", loc);
-	assert(filtermode != nil, "filtermode is nil", loc);
-	assert(format != nil, "format is nil", loc);
+	assert(desc.wrapmode != nil, "wrapmode is nil", loc);
+	assert(desc.filtermode != nil, "filtermode is nil", loc);
+	assert(desc.format != nil, "format is nil", loc);
 	
 	//gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1); //TODO
 
 	id := gl.gen_texture_cubemap(label, loc);
 	assert(id > 0, "TEXTURE: Failed to load texture", loc);
 	
-	gl.filtermode_texture_cubemap(id, desc.filtermode, mipmaps);	
-	gl.setup_texure_cubemap(id, mipmaps, width, height, format);
+	gl.filtermode_texture_cubemap(id, desc.filtermode, desc.mipmaps);	
+	gl.setup_texure_cubemap(id, desc.mipmaps, width, height, desc.format);
 	gl.set_texture_border_color_cubemap(id, desc.border_color);
 	
 	tex : Texture_cubemap = {

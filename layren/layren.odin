@@ -120,9 +120,10 @@ Layout_render :: struct {
 	gui_texture : render.Texture1D,
 
 	has_begun : bool,
+	self_free : bool,
 }
 
-make_layout_render :: proc (lr : ^Layout_render = nil) -> ^Layout_render {
+init :: proc (lr : ^Layout_render = nil) -> ^Layout_render {
 	lr := lr;
 	
 	defines : [dynamic][2]string;
@@ -138,6 +139,7 @@ make_layout_render :: proc (lr : ^Layout_render = nil) -> ^Layout_render {
 
 	if lr == nil {
 		lr = new(Layout_render);
+		lr.self_free = true;
 	}
 
 	ok : render.Shader_load_error;
@@ -150,8 +152,11 @@ make_layout_render :: proc (lr : ^Layout_render = nil) -> ^Layout_render {
 	return lr;
 }
 
-destroy_layout_render :: proc (lr : ^Layout_render) {
-	
+destroy :: proc (lr : ^Layout_render) {
+	render.pipeline_destroy(lr.pipeline)
+	render.shader_destroy(lr.shader)
+	render.texture1D_destroy(lr.gui_texture)
+	delete(lr.gui_data)	
 }
 
 render :: proc(lr : ^Layout_render, renders : []To_render, loc := #caller_location) {
@@ -186,7 +191,7 @@ render :: proc(lr : ^Layout_render, renders : []To_render, loc := #caller_locati
 		switch obj in object {
 			case Render_rect: {
 				render.set_uniform(.layren_index, cast(i32)obj.index);
-
+				
 				if shadow, ok := obj.options.shadow.?; ok {
 					render.set_texture(.texture_diffuse, render.texture2D_get_white(), loc);
 					render.set_uniform(.lr_is_shadow, true);

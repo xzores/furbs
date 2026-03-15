@@ -137,14 +137,14 @@ investigator_allocator_proc :: proc(allocator_data: rawptr, mode: mem.Allocator_
 
 Megabyte :: cast(f64)runtime.Megabyte;
 
-print_investigator_memory_results :: proc(using self: Investigator_Allocator, single_limit := 10 * runtime.Megabyte, region_limit := 100 * runtime.Megabyte) {
+print_investigator_memory_results :: proc(self: Investigator_Allocator, single_limit := 10 * runtime.Megabyte, region_limit := 100 * runtime.Megabyte) {
 
 	fmt.printf("Investigator memory results:\n");
 
-	fmt.printf("\tTotal current ussage 	: %f MB\n",  cast(f64)total_usage_current / Megabyte);
-	fmt.printf("\tTotal peak ussage 	: %f MB\n", cast(f64)total_usage_peak / Megabyte);
+	fmt.printf("\tTotal current ussage 	: %f MB\n",  cast(f64)self.total_usage_current / Megabyte);
+	fmt.printf("\tTotal peak ussage 	: %f MB\n", cast(f64)self.total_usage_peak / Megabyte);
 
-	for location, entry in allocation_map {
+	for location, entry in self.allocation_map {
 		
 		current : int = 0;
 		peak 	: int = 0;
@@ -181,11 +181,11 @@ print_investigator_memory_results :: proc(using self: Investigator_Allocator, si
 print_tracking_memory_results :: proc() -> (found_leak : bool) {
 
 	//internal
-	print_tracking_memory_result :: proc(using a : ^mem.Tracking_Allocator) -> (found_leak : bool) {
+	print_tracking_memory_result :: proc(a : ^mem.Tracking_Allocator) -> (found_leak : bool) {
 		
 		found_leak = false;
 		
-		if len(allocation_map) == 0 {
+		if len(a.allocation_map) == 0 {
 			fmt.printf("\t%sNo leaks found%s\n", GREEN, RESET);
 		}
 		else {
@@ -194,7 +194,7 @@ print_tracking_memory_results :: proc() -> (found_leak : bool) {
 			defer delete(leaks);
 			
 			fmt.printf("\t%sThe following leaks where found:%s\n", ON_RED, RESET);
-			for p, entry in allocation_map {
+			for p, entry in a.allocation_map {
 				leaks[entry.location] += 1;
 				found_leak = true;
 			}
@@ -206,14 +206,14 @@ print_tracking_memory_results :: proc() -> (found_leak : bool) {
 			fmt.printf(RESET);
 		}
 
-		if len(bad_free_array) == 0 {
+		if len(a.bad_free_array) == 0 {
 			fmt.printf("\t%sNo bad frees where found%s\n", GREEN, RESET);
 		}
 		else {
 			
 			fmt.printf("\t%sThe bad frees where found:%s\n", ON_RED, RESET);
 			fmt.printf(RED);
-			for bf in bad_free_array {
+			for bf in a.bad_free_array {
 				fmt.printf("\t\tbad_free : %v\n", bf.location);
 			}
 			fmt.printf(RESET);

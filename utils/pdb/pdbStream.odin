@@ -29,8 +29,8 @@ PdbStreamVersion :: enum u32le {
 PdbNamedStreamMap :: struct {
     strBuf : []byte, names : []PdbNamedStream,
 }
-find_named_stream :: proc(using this: PdbNamedStreamMap, name: string) -> (streamIdx: MsfStreamIdx) {
-    for ns in names {
+find_named_stream :: proc(this: PdbNamedStreamMap, name: string) -> (streamIdx: MsfStreamIdx) {
+    for ns in this.names {
         if strings.compare(ns.name, name) == 0 {
             return MsfStreamIdx(ns.streamIdx)
         }

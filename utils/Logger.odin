@@ -34,12 +34,12 @@ Default_File_Logger_Opts :: log.Options{
 
 
 File_Console_Logger_Data :: struct {
-	file_handle:  os.Handle,
+	file_handle: ^os.File,
 	ident: string,
 	mutex : sync.Mutex,
 }
 
-create_file_logger :: proc(h: os.Handle, lowest := log.Level.Debug, opt := log.Default_File_Logger_Opts, ident := "") -> log.Logger {
+create_file_logger :: proc(h: ^os.File, lowest := log.Level.Debug, opt := log.Default_File_Logger_Opts, ident := "") -> log.Logger {
 	data := new(File_Console_Logger_Data)
 	data.file_handle = h
 	data.ident = ident
@@ -48,7 +48,7 @@ create_file_logger :: proc(h: os.Handle, lowest := log.Level.Debug, opt := log.D
 
 destroy_file_logger :: proc(log: ^log.Logger) {
 	data := cast(^File_Console_Logger_Data)log.data
-	if data.file_handle != os.INVALID_HANDLE {
+	if data.file_handle != nil {
 		os.close(data.file_handle)
 	}
 	free(data)
@@ -56,7 +56,7 @@ destroy_file_logger :: proc(log: ^log.Logger) {
 
 create_console_logger :: proc(lowest := log.Level.Debug, opt := log.Default_Console_Logger_Opts, ident := "") -> log.Logger {
 	data := new(File_Console_Logger_Data)
-	data.file_handle = os.INVALID_HANDLE
+	data.file_handle = nil
 	data.ident = ident
 	return log.Logger{console_logger_proc, data, lowest, opt}
 }
@@ -69,8 +69,8 @@ console_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string,
 	data := cast(^File_Console_Logger_Data)logger_data
 	sync.mutex_guard(&data.mutex);
 	
-	h: os.Handle = os.stdout if level <= log.Level.Error else os.stderr
-	if data.file_handle != os.INVALID_HANDLE {
+	h : ^os.File = os.stdout if level <= log.Level.Error else os.stderr
+	if data.file_handle != nil {
 		h = data.file_handle
 	}
 	backing: [1024]byte //NOTE(Hoej): 1024 might be too much for a header backing, unless somebody has really long paths.
@@ -89,7 +89,7 @@ console_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string,
 	if .Thread_Id in options {
 		// NOTE(Oskar): not using context.thread_id here since that could be
 		// incorrect when replacing context for a thread.
-		fmt.sbprintf(&buf, "[{}] ", os.current_thread_id())
+		fmt.sbprintf(&buf, "[{}] ", os.get_current_thread_id())
 	}
 
 	if data.ident != "" {
@@ -97,7 +97,7 @@ console_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string,
 	}
 
 	//TODO(Hoej): When we have better atomics and such, make this thread-safe
-	fmt.fprintf(h, "%s%s%s%s\n", strings.to_string(buf), col, text, RESET)
+	fmt.fprintf(h, "%s%s%s%s\n", strings.to_string(buf), col, text, RESET) 
 }
 
 file_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string, options: log.Options, location := #caller_location) {
@@ -105,8 +105,8 @@ file_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string, op
 	
 	sync.mutex_guard(&data.mutex);
 	
-	h: os.Handle = os.stdout if level <= log.Level.Error else os.stderr
-	if data.file_handle != os.INVALID_HANDLE {
+	h := os.stdout if level <= log.Level.Error else os.stderr
+	if data.file_handle != nil {
 		h = data.file_handle
 	}
 	backing: [1024]byte //NOTE(Hoej): 1024 might be too much for a header backing, unless somebody has really long paths.
@@ -131,14 +131,14 @@ file_logger_proc :: proc(logger_data: rawptr, level: log.Level, text: string, op
 	if .Thread_Id in options {
 		// NOTE(Oskar): not using context.thread_id here since that could be
 		// incorrect when replacing context for a thread.
-		fmt.sbprintf(&buf, "[{}] ", os.current_thread_id())
+		fmt.sbprintf(&buf, "[{}] ", os.get_current_thread_id())
 	}
 
 	if data.ident != "" {
 		fmt.sbprintf(&buf, "[%s] ", data.ident)
 	}
 	//TODO(Hoej): When we have better atomics and such, make this thread-safe
-	fmt.fprintf(h, "%s%s\n", strings.to_string(buf), text)
+	//fmt.fprintf(h.file_handle, "%s%s\n", strings.to_string(buf), text) //ASDF
 }
 
 do_level_header :: proc(opts: log.Options, level: log.Level, str: ^strings.Builder) {

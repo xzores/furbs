@@ -76,6 +76,85 @@ Layout_mananger :: struct {
 	self_free : bool,
 }
 
+Cmd_rect :: struct {
+	rect : [4]f32,
+	element_kind : int, //use this to store what kind element needs to be rendered.
+	state : Display_state,
+}
+
+Text_line :: laycal.Text_line;
+
+Cmd_text :: struct {
+	rect : [4]f32,
+	text_size : f32, 
+	font : int,
+	lines : []Text_line,
+	type : int,
+	rotation : f32, //rotation around the begining of the baseline 
+}
+
+Cmd_scissor :: struct{
+	area : [4]f32,
+}
+
+Cmd_scissor_disable :: struct {}
+
+Command :: union {
+	Cmd_rect,
+	Cmd_text,
+	Cmd_scissor, 			//this should automaticly enable the scissor stack
+	Cmd_scissor_disable,	//disable it
+}
+
+Overflow :: struct {
+	x : bool, //show overflow
+	y : bool, //show overflow
+}
+
+default_overflow := Overflow {false, false}
+
+@private
+Item :: struct {
+	type : int,
+	text : string,
+	overflow : Maybe(Overflow),
+	uid : Maybe(Unique_id),
+	layout : Layout,
+	transform : Transform,
+}
+
+@private
+Pop :: struct {
+	pop_scissor : bool,
+}
+
+@(private)
+Item_or_pop :: struct {
+	what : union {
+		Item,
+		Pop,
+	},
+	loc : runtime.Source_Code_Location,
+}
+
+Transform :: struct {
+	offset : [2]int,
+	offset_anchor : Anchor_point,
+	size_multiplier : f32,
+	size_anchor : Anchor_point,
+	rotation : f32,
+	rotation_anchor : Anchor_point,
+}
+
+default_transform := Transform {
+	{0,0},
+	.center_center,
+	1,
+	.center_center,
+	0,
+	.center_center,
+}
+
 Meassure_width_callback 	:: laycal.Meassure_text_width_callback 
 Meassure_height_callback 	:: laycal.Meassure_text_height_callback 
 Meassure_gap_callback 		:: laycal.Meassure_line_gap_callback 
@@ -109,88 +188,7 @@ begin :: proc (lm : ^Layout_mananger, screen_size : [2]i32) {
 	laycal.begin_layout_state(&lm.ls, screen_size);
 }
 
-Transform :: struct {
-	offset : [2]int,
-	offset_anchor : Anchor_point,
-	size_multiplier : f32,
-	size_anchor : Anchor_point,
-	rotation : f32,
-	rotation_anchor : Anchor_point,
-}
-
-default_transform := Transform {
-	{0,0},
-	.center_center,
-	1,
-	.center_center,
-	0,
-	.center_center,
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////
-
-Element_kind :: distinct int
-
-Cmd_rect :: struct {
-	rect : [4]f32,
-	element_kind : Element_kind, //use this to store what kind element needs to be rendered.
-	state : Display_state,
-}
-
-Text_line :: laycal.Text_line;
-
-Cmd_text :: struct {
-	rect : [4]f32,
-	text_size : f32, 
-	font : int,
-	lines : []Text_line,
-	type : Element_kind,
-	rotation : f32, //rotation around the begining of the baseline 
-}
-
-Cmd_scissor :: struct{
-	area : [4]f32,
-}
-
-Cmd_scissor_disable :: struct {}
-
-Command :: union {
-	Cmd_rect,
-	Cmd_text,
-	Cmd_scissor, 			//this should automaticly enable the scissor stack
-	Cmd_scissor_disable,	//disable it
-}
-
-Overflow :: struct {
-	x : bool, //show overflow
-	y : bool, //show overflow
-}
-
-default_overflow := Overflow {false, false}
-
-@private
-Item :: struct {
-	type : Element_kind,
-	text : string,
-	overflow : Maybe(Overflow),
-	uid : Maybe(Unique_id),
-	layout : Layout,
-	transform : Transform,
-}
-
-@private
-Pop :: struct {
-	pop_scissor : bool,
-}
-
-@(private)
-Item_or_pop :: struct {
-	what : union {
-		Item,
-		Pop,
-	},
-	loc : runtime.Source_Code_Location,
-}
 
 @(require_results)
 end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
@@ -203,7 +201,7 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 	}
 
 	Proto_rect :: struct {
-		kind : Element_kind,
+		kind : int,
 		text : string,
 		layout_lookup : int,
 		uid : Maybe(Unique_id),
@@ -289,8 +287,8 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 				}
 				if len(lm.scissor_stack) != 0 {
 					last_scissor := lm.scissor_stack[len(lm.scissor_stack) - 1]
-					clip = [4]f32{math.min(last_scissor.x, clip.x), math.min(last_scissor.y, clip.y),
-									math.max(last_scissor.z, clip.z), math.max(last_scissor.w, clip.w)}
+					clip = [4]f32{math.max(last_scissor.x, clip.x), math.max(last_scissor.y, clip.y),
+									math.min(last_scissor.z, clip.z), math.min(last_scissor.w, clip.w)}
 				}
 				append(&lm.scissor_stack, clip)
 				cmd = Cmd_scissor {
@@ -314,12 +312,8 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 		append(&commands, cmd)
 	}
 	
-	if lm.next_hot != {}{
-		lm.hot = lm.next_hot
-	}
-	if lm.next_active != {}{
-		lm.active = lm.next_active
-	}
+	lm.hot = lm.next_hot
+	lm.active = lm.next_active
 	lm.next_hot = {}
 	lm.next_active = {}
 
@@ -336,7 +330,7 @@ end :: proc (lm : ^Layout_mananger, loc := #caller_location) -> ([]Command) {
 //push_orderable :: proc(lm : ^Layout_mananger, type : Element_kind, layout : Layout, transform := default_transform) {}
 
 //Pushes a text to be drawn
-open :: proc (lm : ^Layout_mananger, kind : Element_kind, layout : Layout, uid : Maybe(Unique_id) = nil, overflow := default_overflow, transform := default_transform, loc := #caller_location) {
+open :: proc (lm : ^Layout_mananger, kind : int, layout : Layout, uid : Maybe(Unique_id) = nil, overflow := default_overflow, transform := default_transform, loc := #caller_location) {
 	layout := layout
 	
 	s : string
@@ -395,19 +389,7 @@ make_uid :: proc (lm : ^Layout_mananger, dont_touch : runtime.Source_Code_Locati
 
 //This is not strictly need, but can be used to forget the state of an element 
 forget_uid :: proc (lm : ^Layout_mananger, uid : Unique_id) {
-	
-}
-
-//the uid is a candidate to become active, like if it hovered
-@(require_results)
-is_hot :: proc(lm : ^Layout_mananger, uid : Unique_id) -> bool {
-	panic("TODO");
-}
-
-//the uid is active, that is it is currectly being interacted with
-@(require_results)
-is_active :: proc(lm : ^Layout_mananger, uid : Unique_id) -> bool {
-	panic("TODO");
+	panic("TODO")
 }
 
 //if you where active last frame always win the hot
@@ -449,6 +431,7 @@ Alignment ::laycal.Alignment;
 Anchor_point :: laycal.Anchor_point;
 Axis :: laycal.Axis;
 Size :: laycal.Size;
+Sizeing :: laycal.Sizeing;
 Min_size :: laycal.Min_size;
 Max_size :: laycal.Max_size;
 Absolute_postion :: laycal.Absolute_postion;

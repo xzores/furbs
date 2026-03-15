@@ -1,7 +1,7 @@
 package utils;
 
 import "core:math"
-import "core:os"
+import os "core:os/old"
 import "core:log"
 import "core:fmt"
 import "core:strings"
@@ -25,7 +25,7 @@ file_watcher_add_file :: proc (fw : ^File_watcher, file_path : string) -> (ok : 
 	fs, err := os.stat(file_path);
 	defer os.file_info_delete(fs);
 	if err != nil {
-		log.errorf("failed to see file %v (%v)", filepath.abs(file_path));
+		log.errorf("failed to see file %v (%v)", filepath.abs(file_path, context.temp_allocator));
 		return false;
 	}
 	
@@ -40,7 +40,7 @@ file_watcher_add_file :: proc (fw : ^File_watcher, file_path : string) -> (ok : 
 file_watcher_add_folder :: proc (fw : ^File_watcher, dir_path : string, loc := #caller_location) -> (ok : bool) {
 
 	if !os.is_dir(dir_path) {
-		log.errorf("not a directory at %v (%v)", filepath.abs(dir_path));
+		log.errorf("not a directory at %v (%v)", filepath.abs(dir_path, context.temp_allocator));
 		return false;
 	}
 

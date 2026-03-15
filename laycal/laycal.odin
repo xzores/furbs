@@ -72,7 +72,7 @@ Axis :: enum {
 }
 
 Fixed :: i32;
-Parent_ratio :: distinct f32;
+Parent_ratio :: struct{rel_size : f32};
 Fit :: struct {};
 Grow :: struct {};
 Grow_fit  :: struct{};
@@ -95,6 +95,11 @@ Text :: struct {
 	font : int,
 }
 
+Sizeing :: union {
+	[2]Size,
+	Text,
+}
+
 Min_size :: union {
 	Fixed,	//Have a fixed size in pixels
 	Parent_ratio,
@@ -109,7 +114,7 @@ Max_size :: union {
 Absolute_postion :: struct {
 	anchor : Anchor_point,
 	self_anchor : Anchor_point,
-	axis : Axis,
+	axis : Axis, //What direction is the coordinate system provided by offset (there is no inherent origin (0,0))
 	offset : [2]i32,
 }
 
@@ -129,10 +134,7 @@ Parameters :: struct {
 	overflow : Overflow_dir,
 	
 	//How does this size behave
-	sizing : union {
-		[2]Size,
-		Text,
-	},
+	sizing : Sizeing,
 	min_size : [2]Min_size,
 	max_size : [2]Max_size,
 	grow_weight : i32, //this is int to not have floating point problems.
@@ -169,7 +171,7 @@ Element_layout :: struct {
 }
 
 rect_parameters :: proc (size_x : Size = fit, size_y : Size = fit, min_size_x : Min_size = 0, min_size_y : Min_size = 0, max_size_x : Max_size = max(i32), max_size_y : Max_size = max(i32),
-						grow_weight : i32 = 1, padding : [4]i32 = {5, 5, 5, 5}, child_gap : i32 = 2, layout_dir : Layout_dir = .left_right,
+						grow_weight : i32 = 1, padding : [4]i32 = {5, 5, 5, 5}, child_gap : i32 = 2, layout_dir : Layout_dir = .top_down,
 						alignment_x : Alignment = .near, alignment_y : Alignment = .near, overflow : Overflow_dir = .right, abs_position : Maybe(Absolute_postion) = nil) -> Parameters {
 	
 	return Parameters {
@@ -188,7 +190,7 @@ rect_parameters :: proc (size_x : Size = fit, size_y : Size = fit, min_size_x : 
 }
 
 text_parameters :: proc (text : string, size : f32, font : int, min_size_x : Min_size = 0, min_size_y : Min_size = 0, max_size_x : Max_size = max(i32), max_size_y : Max_size = max(i32),
-						grow_weight : i32 = 1, padding : [4]i32 = {5, 5, 5, 5}, child_gap : i32 = 2, layout_dir : Layout_dir = .left_right,	alignment_x : Alignment = .near,
+						grow_weight : i32 = 1, padding : [4]i32 = {5, 5, 5, 5}, child_gap : i32 = 2, layout_dir : Layout_dir = .top_down,	alignment_x : Alignment = .near,
 						alignment_y : Alignment = .near, overflow : Overflow_dir = .right, split_on_dash := true, tab_width : i32 = 4, abs_position : Maybe(Absolute_postion) = nil) -> Parameters {
 	
 	return Parameters {
@@ -388,8 +390,8 @@ end_layout_state :: proc (ls : ^Layout_state, loc := #caller_location) -> []Elem
 					lines[i] = Text_line{vertical_offset, ttd}
 					vertical_offset += line_height;
 				}
-
 				defer delete(elem.text_to_draw)
+
 				el = {
 					elem.size,
 					elem.position,
@@ -529,12 +531,14 @@ do_expand_and_shrink_recursive :: proc(ls : ^Layout_state, elem : ^Element, axis
 	for c in elem.in_flow {
 		switch what in c.sizing {
 			case [2]Size: {
-				switch _ in what[axis] {
+				switch t in what[axis] {
 					case i32, Fit:
 						//Do nothing
 					case Parent_ratio:
-						panic("TODO");
-						
+						//here we know the size of the parent, so we set its size to be that
+						c.size[axis] = cast(i32) (cast(f32)elem.size[axis] * t.rel_size);
+						//fmt.printf("eval_min_size(c, axis), eval_max_size(c, axis : %v, %v\n", eval_min_size(c, axis), eval_max_size(c, axis))
+						c.size[axis] = math.clamp(c.size[axis], eval_min_size(c, axis), eval_max_size(c, axis));
 					case Grow, Grow_fit:
 						append(&expand_in_flow, Expandus{c, 0, max(i32)});
 				}
@@ -702,7 +706,8 @@ do_size_fit :: proc (ls : ^Layout_state, elem : ^Element, axis : int) {
 					elem.size[axis] = get_fit_space(elem, axis);
 				}
 				case Parent_ratio:
-					panic("TODO");
+					//we dont know the size of the parent, so we calculate later
+					elem.size[axis] = 0;
 				case Grow: {
 					//grow does not make space for children
 					elem.size[axis] = 0;
@@ -778,7 +783,6 @@ do_position_recursive :: proc (elem : ^Element, screen_offset : [2]i32) {
 					}
 				}
 				case .center: {
-					//the reverse and non-reverse are the same
 					center_off := (inner_box[axis + 2] - total_child_size) / 2;
 					switch elem.overflow {
 						case .right:

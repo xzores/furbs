@@ -1,3 +1,5 @@
+//TODO remove
+#+feature using-stmt 
 package render;
 
 import "core:os"
@@ -331,37 +333,36 @@ font_tex_desc :: Texture_desc {
 //used internally
 @require_results
 text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f32, rotation : f32, flip_y : bool, font : Font) -> (instance_data : [dynamic]Default_instance_data) {
-	using state;
 	
-	fs.push_font(&font_context, font);
-	defer fs.pop_font(&font_context);
+	fs.push_font(&state.font_context, font);
+	defer fs.pop_font(&state.font_context);
 	
 	_set_font_size(false, size);
-	iter := fs.make_font_iter(&font_context, text);
+	iter := fs.make_font_iter(&state.font_context, text);
 	defer fs.destroy_font_iter(iter);
 	
-	if new_size, ok := fs.requires_reupload(&font_context); ok {
+	if new_size, ok := fs.requires_reupload(&state.font_context); ok {
 		log.logf(.Debug, "reuploading font texture : %v", new_size);
 		texture2D_destroy(state.font_texture);
-		state.font_texture = texture2D_make(false, .repeat, .nearest, .R8, new_size.x, new_size.y, .R8, fs.get_bitmap(&font_context), label = "Text texture");
+		state.font_texture = texture2D_make(false, .repeat, .nearest, .R8, new_size.x, new_size.y, .R8, fs.get_bitmap(&state.font_context), label = "Text texture");
 	}
 	
-	rect, done := fs.get_next_quad_upload(&font_context);
+	rect, done := fs.get_next_quad_upload(&state.font_context);
 	for !done {
 		//Here the atlas data is extracted from the atlas, alternatively the entire atlas can be uploaded.
 		extracted_data := make([]u8, rect.z * rect.w);
 		defer delete(extracted_data);
 		
-		dims := fs.get_bitmap_dimension(&font_context);
-		fs.copy_pixels(1, dims.x, dims.y, rect.x, rect.y, fs.get_bitmap(&font_context), rect.z, rect.w, 0, 0, extracted_data, rect.z, rect.w);
+		dims := fs.get_bitmap_dimension(&state.font_context);
+		fs.copy_pixels(1, dims.x, dims.y, rect.x, rect.y, fs.get_bitmap(&state.font_context), rect.z, rect.w, 0, 0, extracted_data, rect.z, rect.w);
 		texture2D_upload_data(&state.font_texture, .R8, {rect.x, rect.y}, rect.zw, extracted_data);
 		
-		rect, done = fs.get_next_quad_upload(&font_context);
+		rect, done = fs.get_next_quad_upload(&state.font_context);
 	}
 	
 	instance_data = make([dynamic]Default_instance_data);
 	
-	for q, coords in fs.font_iter_next(&font_context, &iter) {
+	for q, coords in fs.font_iter_next(&state.font_context, &iter) {
 		
 		rot_mat := linalg.matrix2_rotate_f32(rotation / 180 * math.PI);
 		pos := rot_mat * q.xy;
@@ -385,9 +386,9 @@ text_get_draw_instance_data :: proc (text : string, position : [2]f32, size : f3
 		}
 	}
 	
-	if i_data, ok := char_mesh.instance_data.?; ok {
+	if i_data, ok := state.char_mesh.instance_data.?; ok {
 		if i_data.data_points < len(instance_data) {
-			mesh_resize_instance_single(&char_mesh, len(instance_data));
+			mesh_resize_instance_single(&state.char_mesh, len(instance_data));
 		}
 	}
 	else {

@@ -63,8 +63,6 @@ pipeline_begin :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 	assert(state.target_pixel_width != 0, "target_pixel_width is 0", loc);
 	assert(state.target_pixel_height != 0, "target_pixel_height is 0", loc);
 	assert(pipeline != {}, "pipeline is nil", loc);
-
-	using gl;
 	
 	{
 		shader_bind(pipeline.shader);
@@ -102,8 +100,6 @@ pipeline_begin :: proc (pipeline : Pipeline, camera : Camera, loc := #caller_loc
 
 pipeline_end :: proc (loc := #caller_location) {
 	assert(state.current_pipeline != {}, "There must be a bound target before calling end_pipeline (use begin_pipeline).", loc);
-
-	using gl;
 	
 	shader_unbind(state.current_pipeline.shader);
 
@@ -118,10 +114,9 @@ pipeline_end :: proc (loc := #caller_location) {
 target_begin :: proc (render_target : Render_target, clear_method : Maybe([4]f32) = [4]f32{0,0,0,0}, falgs : gl.Clear_flags = {.color_bit, .depth_bit}, loc := #caller_location) {
 	assert(state.current_target == {}, "There must not be a bound target before calling begin_target (remember to call end_target).", loc);
 	assert(state.is_begin_frame, "You must begin frame before target_begin", loc);
-	using gl;
 
 	if clear_method != nil {
-		set_depth_write(true);
+		gl.set_depth_write(true);
 	}
 	
 	switch t in render_target {

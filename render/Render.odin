@@ -10,7 +10,7 @@ import "core:log"
 import "core:container/queue"
 import "core:math"
 
-import "core:os"
+import os "core:os/old"
 import "core:time"
 
 import "vendor:glfw"
@@ -86,8 +86,6 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.super) == auto_cast 0x8, "incorrect glfw super mapping");
 	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.caps_lock) == auto_cast 0x10, "incorrect glfw caps_lock mapping");
 	fmt.assertf(math.pow2_f32(cast(f32)Input_modifier.num_lock) == auto_cast 0x20, "incorrect glfw num_lock mapping, was %v should be %v", cast(int)Input_modifier.num_lock, 0x20);
-	
-	using gl;
 
 	window : ^Window = nil;
 	
@@ -129,8 +127,8 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	if required_verion, ok := required_gl_verion.?; ok {
 		assert(required_verion >= .opengl_3_3, "version below opengl 3.3 is not supported");
 		if required_verion != nil {
-			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, auto_cast get_major(required_verion));
-			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, auto_cast get_minor(required_verion));
+			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MAJOR, auto_cast gl.get_major(required_verion));
+			glfw.WindowHint_int(glfw.CONTEXT_VERSION_MINOR, auto_cast gl.get_minor(required_verion));
 		}
 	}
 	
@@ -183,18 +181,18 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 
 	_make_context_current(nil);
 
-	load_up_to(.opengl_3_0, glfw.gl_set_proc_address);
-	version := get_version();
+	gl.load_up_to(.opengl_3_0, glfw.gl_set_proc_address);
+	version := gl.get_version();
 	
 	if required_verion, ok := required_gl_verion.?; ok {
 		//load the specified
 		assert(version >= required_verion, "OpenGL version is not new enough for the requied version");
-		load_up_to(required_verion, glfw.gl_set_proc_address);
+		gl.load_up_to(required_verion, glfw.gl_set_proc_address);
 		state.opengl_version = required_verion;
 	}
 	else {
 		//load the newest
-		load_up_to(version, glfw.gl_set_proc_address);
+		gl.load_up_to(version, glfw.gl_set_proc_address);
 		state.opengl_version = version;
 	}
 
@@ -210,7 +208,7 @@ init :: proc(shader_defines : map[string]string, window_desc : Maybe(Window_desc
 	shaders_init(loc = loc);
 	text_init(loc = loc);
 
-	set_cubemap_seamless(true);
+	gl.set_cubemap_seamless(true);
 	
 	return window;
 }
@@ -477,10 +475,9 @@ set_shader_define :: proc (entry : string, value : string) {
 }
 
 set_shader_defines :: proc (entries : [][2]string) {
-	using strings;
 	
 	for e in entries {
-		state.shader_defines[clone(e[0])] = clone(e[1]);
+		state.shader_defines[strings.clone(e[0])] = strings.clone(e[1]);
 	}
 	//panic("TODO recompile all shaders with that define");
 	log.errorf("TODO recompile all shaders with that define");

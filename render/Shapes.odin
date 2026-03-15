@@ -88,8 +88,6 @@ draw_cone :: proc(model_matrix : matrix[4,4]f32, color : [4]f32 = {1,1,1,1}, loc
 
 draw_arrow :: proc(position : [3]f32, direction : [3]f32, color : [4]f32 = {1,1,1,1}, up : [3]f32 = {0,1,0}, loc := #caller_location) {
 	_ensure_shapes_loaded();
-	
-	using linalg;
 
 	arb := up;
 	if math.abs(linalg.dot(arb, direction)) >= 0.9999 {

@@ -411,7 +411,7 @@ CvsInlineUncompressedLine :: struct {
     fileIdx   : u16le,
 }
 
-read_cvsInlineSite :: proc(using this: ^BlocksReader, blockEnd: uint, $T: typeid) -> (ret: T)
+read_cvsInlineSite :: proc(this: ^BlocksReader, blockEnd: uint, $T: typeid) -> (ret: T)
     where intrinsics.type_is_subtype_of(T, CvsInlineSite) {
     ret._base = read_packed(this, type_of(ret._base))
     ret.lines = parse_binary_annotation(this, blockEnd)
@@ -434,7 +434,7 @@ BinaryAnnotationOpcode :: enum u8 {
     ChangeCodeLengthAndCodeOffset = 12, // (codeLength, codeOffset). emitting
     ChangeColumnEnd = 13, // set end column number
 }
-parse_binary_annotation :: proc(using this: ^BlocksReader, blockEnd: uint) -> (ret: []CvsInlineUncompressedLine) {
+parse_binary_annotation :: proc(this: ^BlocksReader, blockEnd: uint) -> (ret: []CvsInlineUncompressedLine) {
     baseOffset := this.offset
     // pase 1: count emiiting
     lineCount := 0
@@ -507,7 +507,7 @@ parse_binary_annotation :: proc(using this: ^BlocksReader, blockEnd: uint) -> (r
     }
     return
 }
-uncompress_binary_annonation :: proc(using this: ^BlocksReader) -> u32le {
+uncompress_binary_annonation :: proc(this: ^BlocksReader) -> u32le {
     b1 := u32le(read_packed(this, u8))
     if (b1 & 0x80) == 0 do return b1
     b2 := u32le(read_packed(this, u8))
@@ -516,7 +516,7 @@ uncompress_binary_annonation :: proc(using this: ^BlocksReader) -> u32le {
     b4 := u32le(read_packed(this, u8))
     return ((b1 & 0x1f) << 24) | (b2 << 16) | (b3 << 8) | b4
 }
-uncompress_binary_annonation_signed :: proc(using this: ^BlocksReader) -> i32le {
+uncompress_binary_annonation_signed :: proc(this: ^BlocksReader) -> i32le {
     u := uncompress_binary_annonation(this)
     if (u&1) != 0 do return -i32le(u>>1)
     return i32le(u>>1)

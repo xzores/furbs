@@ -75,7 +75,7 @@ EM Square:
 	- The em square size is a common unit for defining various metrics and proportions within a font.
 */
 
-import "core:os" //For loading files
+import os "core:os/old" //For loading files
 import "core:path/filepath"
 import "core:reflect"
 import "core:strings"
@@ -380,24 +380,24 @@ make_font_iter :: proc (ctx: ^Font_context, text : string, alloc := context.allo
 };
 
 //Get the dimensions of the bitmap
-get_bitmap_dimension :: proc (using ctx: ^Font_context) -> (dim : [2]i32) {
-	return {atlas.size, atlas.size};
+get_bitmap_dimension :: proc (ctx: ^Font_context) -> (dim : [2]i32) {
+	return {ctx.atlas.size, ctx.atlas.size};
 }
 
 //get the bitmap data, also see get_bitmap_dimension.
-get_bitmap :: proc (using ctx: ^Font_context) -> (data :[]u8) {
-	return atlas.pixels;
+get_bitmap :: proc (ctx: ^Font_context) -> (data :[]u8) {
+	return ctx.atlas.pixels;
 }
 
 //A reupload encompasses a resize of the texture, this means you create a new texture with the given size.
-requires_reupload :: proc (using ctx: ^Font_context) -> (new_size : [2]i32, required : bool) {
+requires_reupload :: proc (ctx: ^Font_context) -> (new_size : [2]i32, required : bool) {
 	
-	if atlas.size != uploaded_size {
-		uploaded_size = atlas.size;
-		return atlas.size, true;
+	if ctx.atlas.size != ctx.uploaded_size {
+		ctx.uploaded_size = ctx.atlas.size;
+		return ctx.atlas.size, true;
 	}
 	
-	return atlas.size, false;
+	return ctx.atlas.size, false;
 }
 
 //Repeatatly call this untill done is true, this tell you what part of the texture should be uploaded to the gpu.
@@ -713,7 +713,7 @@ _get_bounds :: proc (ctx: ^Font_context, loc := #caller_location) -> (x_min, y_m
 }
 
 //Internal use
-_load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph, loc := #caller_location) -> (success : bool) {
+_load_glyph :: proc (ctx: ^Font_context, glyph : Glyph, loc := #caller_location) -> (success : bool) {
 	assert(ctx.scale != 0, "The scale is zero, you must set size first", loc);
 	
 	//This is not too nice, as we have to allocate space for the result 
@@ -739,20 +739,20 @@ _load_glyph :: proc (using ctx: ^Font_context, glyph : Glyph, loc := #caller_loc
 	assert(width != 0, "width is zero, internal error", loc);
 	assert(height != 0, "height is zero, internal error", loc);
 	
-	handle, rect, pixels, resized, ok := client_atlas_add_no_data(&atlas, {width, height});
-	tt.MakeGlyphBitmap(fi, pixels, width, height, atlas.size, ctx.scale, ctx.scale, tt_glyph);
+	handle, rect, pixels, resized, ok := client_atlas_add_no_data(&ctx.atlas, {width, height});
+	tt.MakeGlyphBitmap(fi, pixels, width, height, ctx.atlas.size, ctx.scale, ctx.scale, tt_glyph);
 	
 	if resized {
-		clear(&quads_to_upload);
+		clear(&ctx.quads_to_upload);
 	}
 	
 	if !ok {
 		return false;
 	}
 	
-	glyphs[glyph] = handle;
-	if atlas.size == uploaded_size {
-		append(&quads_to_upload, rect);
+	ctx.glyphs[glyph] = handle;
+	if ctx.atlas.size == ctx.uploaded_size {
+		append(&ctx.quads_to_upload, rect);
 	}
 	
 	return true;
@@ -815,7 +815,7 @@ _get_font_field :: proc (fi : ^tt.fontinfo, #any_int field_index : i32, alloc :=
 //Note, this currently does scalign based on ascender, which mean the library might return some charaters that are greater then max_height if the charater is not in the top font.
 //This is very rare, and if we scale to max_height it does not look good. I think this is the mest solution.
 //Internal use
-_calculate_relative_scaling :: proc (using ctx: ^Font_context, other_fi : ^tt.fontinfo) -> f32 {
+_calculate_relative_scaling :: proc (ctx: ^Font_context, other_fi : ^tt.fontinfo) -> f32 {
 	
 	ori_height := get_ascent(ctx) - get_descent(ctx);//get_max_height(ctx);
 	

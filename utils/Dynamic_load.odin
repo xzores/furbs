@@ -5,7 +5,7 @@ ENABLE_HOT_RELOAD :: #config(ENABLE_HOT_RELOAD, ODIN_DEBUG);
 import "core:fmt"
 import "core:log"
 import "core:mem"
-import "core:os"
+import os "core:os/old"
 import "core:time"
 import "core:c/libc"
 

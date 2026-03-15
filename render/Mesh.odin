@@ -772,32 +772,32 @@ resize_mesh_bufferd :: proc (mesh_buffer : ^Mesh_buffered, new_vertex_size : int
 
 @(require_results)
 //This will swap buffers, upload data and return the buffer index that should be used to draw with.
-mesh_buffered_next_draw_source :: proc (using mesh_buffer : ^Mesh_buffered, loc := #caller_location) -> int {
+mesh_buffered_next_draw_source :: proc (mesh_buffer : ^Mesh_buffered, loc := #caller_location) -> int {
 	
-	if len(backing) == 1 {
+	if len(mesh_buffer.backing) == 1 {
 		upload_buffered_data(mesh_buffer, 0);
 		return 0; //We don't need to upload and we don't need to sync
 	}
 	
 	//Move upload forward
-	next_write := (current_write+1) %% len(backing);
-	if gl.is_fence_ready(backing[next_write].read_fence) {
+	next_write := (mesh_buffer.current_write+1) %% len(mesh_buffer.backing);
+	if gl.is_fence_ready(mesh_buffer.backing[next_write].read_fence) {
 
 		//upload data and move to next if free
-		upload_buffered_data(mesh_buffer, current_write, loc = loc);
-		assert(queue.len(mesh_buffer.backing[current_write].index_data_queue) == 0, "Data was not cleared?");
-		assert(queue.len(mesh_buffer.backing[current_write].vertex_data_queue) == 0, "Data was not cleared?");
+		upload_buffered_data(mesh_buffer, mesh_buffer.current_write, loc = loc);
+		assert(queue.len(mesh_buffer.backing[mesh_buffer.current_write].index_data_queue) == 0, "Data was not cleared?");
+		assert(queue.len(mesh_buffer.backing[mesh_buffer.current_write].vertex_data_queue) == 0, "Data was not cleared?");
 		
-		current_write = next_write;
+		mesh_buffer.current_write = next_write;
 	}
 	
 	//Move read/draw forward
-	next_read := (current_read+1) %% len(backing);
-	if gl.is_fence_ready(backing[next_read].transfer_fence) {
-		current_read = next_read;
+	next_read := (mesh_buffer.current_read+1) %% len(mesh_buffer.backing);
+	if gl.is_fence_ready(mesh_buffer.backing[next_read].transfer_fence) {
+		mesh_buffer.current_read = next_read;
 	}
-
-	return current_read;
+	
+	return mesh_buffer.current_read;
 }
 
 //make sure that the draw_range and draw_source fits each other.

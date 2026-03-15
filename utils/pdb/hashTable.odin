@@ -18,26 +18,26 @@ BitVector :: struct {
     words: []u32le,
 }
 
-get_kv_at :: proc(using this: ^PdbHashTable($T), at: u32le) -> (ret:PdbHashTable_KVPair(T), ok:bool) {
-    ok = get_bit(&presentBits, at)
+get_kv_at :: proc(this: ^PdbHashTable($T), at: u32le) -> (ret:PdbHashTable_KVPair(T), ok:bool) {
+    ok = get_bit(&this.presentBits, at)
     if !ok {
         ret = {}
         return
     }
-    ret = kvPairs[at]
+    ret = this.kvPairs[at]
     return
 }
 
-get_bit :: proc(using this: ^BitVector, at: u32le) -> bool {
+get_bit :: proc(this: ^BitVector, at: u32le) -> bool {
     ELEMENT_PER_WORD :: 32
     wi := at / ELEMENT_PER_WORD
-    if int(wi) >= len(words) do return false
-    word := words[uint(wi)]
+    if int(wi) >= len(this.words) do return false
+    word := this.words[uint(wi)]
     iiw := at - (wi * ELEMENT_PER_WORD)
     return (word & (1 << iiw)) != 0
 }
 
-read_hash_table :: proc(using this: ^BlocksReader, $Value: typeid) -> (ret:PdbHashTable(Value)) {
+read_hash_table :: proc(this: ^BlocksReader, $Value: typeid) -> (ret:PdbHashTable(Value)) {
     ret.size = read_packed(this, u32le)
     ret.capacity = read_packed(this, u32le)
     //log.debugf("hash_table size%v capacity%v", ret.size, ret.capacity)
@@ -57,7 +57,7 @@ read_hash_table :: proc(using this: ^BlocksReader, $Value: typeid) -> (ret:PdbHa
     return
 }
 
-read_bit_vector :: proc(using this: ^BlocksReader) -> (ret: BitVector) {
+read_bit_vector :: proc(this: ^BlocksReader) -> (ret: BitVector) {
     wordCount := read_packed(this, u32le)
     ret.words = read_packed_array(this, uint(wordCount), u32le)
     return

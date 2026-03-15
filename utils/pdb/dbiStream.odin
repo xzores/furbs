@@ -206,10 +206,10 @@ _cmp_sc :: #force_inline proc(l, r: SlimDbiSecContr) -> int {
     else if l.offset > r.offset do return 1
     return 0
 }
-search_for_section_contribution :: proc(using this: ^SlimDbiData, imgRva : u32le) -> (sci : int) {
+search_for_section_contribution :: proc(this: ^SlimDbiData, imgRva : u32le) -> (sci : int) {
     sectionIdx := -1
     offsetInSection :u32le= 0
-    for section, i in sections {
+    for section, i in this.sections {
         if imgRva >= section.vAddr && imgRva < section.vAddr + section.vSize {
             sectionIdx = i
             //log.debug(section)
@@ -220,13 +220,13 @@ search_for_section_contribution :: proc(using this: ^SlimDbiData, imgRva : u32le
     if sectionIdx == -1 do return -1
     // bisearch for module
     ti := SlimDbiSecContr{PESectionOffset{offsetInSection, u16le(sectionIdx+1),}, 0}
-    lo, hi := 0, (len(contributions)-1)
-    if hi < 0 || _cmp_sc(ti, contributions[lo]) < 0 do return -1
-    if _cmp_sc(contributions[hi], ti) < 0 do return int(hi)
+    lo, hi := 0, (len(this.contributions)-1)
+    if hi < 0 || _cmp_sc(ti, this.contributions[lo]) < 0 do return -1
+    if _cmp_sc(this.contributions[hi], ti) < 0 do return int(hi)
     // ti in range, do a bisearch
     for lo <= hi {
         mid := lo + ((hi-lo)>>1)
-        mv := _cmp_sc(ti, contributions[mid])
+        mv := _cmp_sc(ti, this.contributions[mid])
         if mv == 0 {
             lo = mid + 1
             break

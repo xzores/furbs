@@ -39,15 +39,15 @@ TpiIndexOffsetBuffer :: struct {
 }
 TpiIndexOffsetPair :: struct #packed {ti: TypeIndex, offset: u32le,}
 
-seek_for_tpi :: proc(using this: TpiIndexOffsetBuffer, ti : TypeIndex, tpiStream: ^BlocksReader) -> (ok: bool) {
+seek_for_tpi :: proc(this: TpiIndexOffsetBuffer, ti : TypeIndex, tpiStream: ^BlocksReader) -> (ok: bool) {
     // bisearch then linear seaarch proc
-    lo, hi := 0, (len(buf)-1)
-    if hi < 0 || buf[lo].ti > ti || buf[hi].ti < ti do return false
+    lo, hi := 0, (len(this.buf)-1)
+    if hi < 0 || this.buf[lo].ti > ti || this.buf[hi].ti < ti do return false
     // ti in range, do a bisearch
     for lo <= hi {
         //log.debugf("Find block [%v, %v) for ti%v", lo,hi, ti)
         mid := lo + ((hi-lo)>>1)
-        mv := buf[mid].ti
+        mv := this.buf[mid].ti
         if mv == ti {
             lo = mid + 1
             break
@@ -58,10 +58,10 @@ seek_for_tpi :: proc(using this: TpiIndexOffsetBuffer, ti : TypeIndex, tpiStream
     if lo > 0 do lo -= 1
     //log.debugf("Find block [%v, %v) for ti%v", lo,lo+1, ti)
     // now a linear search from lo to high
-    tIdx := buf[lo].ti
-    tpiStream.offset = cast(uint)buf[lo].offset
+    tIdx := this.buf[lo].ti
+    tpiStream.offset = cast(uint)this.buf[lo].offset
     endOffset := tpiStream.size
-    if lo+1 < len(buf) do endOffset = cast(uint)buf[lo+1].offset
+    if lo+1 < len(this.buf) do endOffset = cast(uint)this.buf[lo+1].offset
     for ;tpiStream.offset < endOffset && tIdx != ti; tIdx+=1 {
         cvtHeader := read_packed(tpiStream, CvtRecordHeader)
         tpiStream.offset += cast(uint)cvtHeader.length - size_of(CvtRecordKind)

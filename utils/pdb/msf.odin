@@ -32,9 +32,9 @@ MsfStreamIdx :: distinct u16le
 MsfStreamIdx_Invalid : MsfStreamIdx : 0xffff
 stream_idx_valid ::#force_inline proc(idx: MsfStreamIdx) -> bool {return idx < MsfStreamIdx_Invalid}
 
-get_stream_reader :: #force_inline proc(using this: ^StreamDirectory, streamIdx : MsfStreamIdx) -> BlocksReader {
+get_stream_reader :: #force_inline proc(this: ^StreamDirectory, streamIdx : MsfStreamIdx) -> BlocksReader {
     assert(stream_idx_valid(streamIdx))
-    return make_reader_from_indiced_buf(r, streamBlocks[streamIdx], int(blockSize), streamSizes[streamIdx])
+    return make_reader_from_indiced_buf(this.r, this.streamBlocks[streamIdx], int(this.blockSize), this.streamSizes[streamIdx])
 }
 
 read_superblock :: proc(r: io.Reader) -> (this : SuperBlock, success: bool) {
@@ -60,34 +60,34 @@ read_superblock :: proc(r: io.Reader) -> (this : SuperBlock, success: bool) {
     return
 }
 
-read_stream_dir :: proc(using this: ^SuperBlock, r: io.Reader) -> (sd: StreamDirectory, success: bool) {
+read_stream_dir :: proc(this: ^SuperBlock, r: io.Reader) -> (sd: StreamDirectory, success: bool) {
     success = false
-    if seekN, seekErr := io.seek(r, i64(blockMapAddr * blockSize), .Start); seekErr != nil {
+    if seekN, seekErr := io.seek(r, i64(this.blockMapAddr * this.blockSize), .Start); seekErr != nil {
         log.debugf("seek failed with %v", seekErr)
         return
     }
-    sdBlockCount := ceil_div(numDirectoryBytes, blockSize)
+    sdBlockCount := ceil_div(this.numDirectoryBytes, this.blockSize)
     iData := make([]byte, sdBlockCount*size_of(u32le), context.temp_allocator)
     defer delete(iData, context.temp_allocator)
     if nRead, readErr := io.read(r, iData); readErr != nil || nRead != len(iData) {
-        log.debugf("read block map failed with %v, nRead: %d, should be %d", readErr, nRead, numDirectoryBytes)
+        log.debugf("read block map failed with %v, nRead: %d, should be %d", readErr, nRead, this.numDirectoryBytes)
         return
     }
-    breader := make_reader_from_indiced_buf(r, transmute([]u32le)mem.Raw_Slice{&iData[0], int(sdBlockCount)}, int(blockSize), numDirectoryBytes)
+    breader := make_reader_from_indiced_buf(r, transmute([]u32le)mem.Raw_Slice{&iData[0], int(sdBlockCount)}, int(this.blockSize), this.numDirectoryBytes)
 
     sd.numStreams = read_packed(&breader, u32le)
     //fmt.printf("number of streams %v\n", sd.numStreams)
     sd.streamSizes = make([]u32le, sd.numStreams)
     sd.streamBlocks = make([][]u32le, sd.numStreams)
     sd.r = r
-    sd.blockSize = blockSize
+    sd.blockSize = this.blockSize
     for i in 0..<sd.numStreams {
         sd.streamSizes[i] = read_packed(&breader, u32le)
         if sd.streamSizes[i] == 0xffff_ffff {
             sd.streamSizes[i] = 0 //? clear invalid streamSizes?
         }
         //fmt.printf("reading stream#%v size %v\n", i, sd.streamSizes[i])
-        sd.streamBlocks[i] = make([]u32le, ceil_div(sd.streamSizes[i], blockSize))
+        sd.streamBlocks[i] = make([]u32le, ceil_div(sd.streamSizes[i], this.blockSize))
     }
     
     for i in 0..<sd.numStreams {
@@ -164,20 +164,20 @@ read_packed_from_stream :: #force_inline proc(r: io.Stream, $T: typeid) -> (ret:
     return ret, err
 }
 
-read_packed_array :: proc(using this: ^BlocksReader, count: uint, $T: typeid) -> (ret: []T) {
+read_packed_array :: proc(this: ^BlocksReader, count: uint, $T: typeid) -> (ret: []T) {
     when ODIN_DEBUG==true {
         if (!_can_read_packed(T))  {
             log.errorf("Invalid type: %v", type_info_of(T).variant)
             assert(false)
         }
     }
-    endOffset := offset + count * size_of(T)
+    endOffset := this.offset + count * size_of(T)
     assert(endOffset <= this.size)
-    defer offset = endOffset
-    return mem.slice_ptr(cast(^T)&data[offset], int(count))
+    defer this.offset = endOffset
+    return mem.slice_ptr(cast(^T)&this.data[this.offset], int(count))
 }
 
-read_packed :: #force_inline proc(using this: ^BlocksReader, $T: typeid) -> (ret: T)
+read_packed :: #force_inline proc(this: ^BlocksReader, $T: typeid) -> (ret: T)
     where !intrinsics.type_has_field(T, "_base"),
           !intrinsics.type_is_subtype_of(T, MsfNotPackedMarker) {
         when ODIN_DEBUG==true {
@@ -187,11 +187,11 @@ read_packed :: #force_inline proc(using this: ^BlocksReader, $T: typeid) -> (ret
             }
         }    
         tsize := size_of(T)
-        assert(size == 0 || offset + uint(tsize) <= size, "block overflow")
+        assert(this.size == 0 || this.offset + uint(tsize) <= this.size, "block overflow")
         pret := cast(^byte)&ret
-        psrc := &data[offset]
+        psrc := &this.data[this.offset]
         mem.copy_non_overlapping(pret, psrc, tsize)
-        offset += uint(tsize)
+        this.offset += uint(tsize)
         return
 }
 
@@ -255,54 +255,54 @@ make_stack :: proc($T: typeid, cap: int, allocator : mem.Allocator) -> (ret:Stac
     return
 }
 
-delete_stack :: proc(using stack: ^Stack($T)) {
+delete_stack :: proc(stack: ^Stack($T)) {
     c := context
-    if allocator.procedure != nil {
-        c.allocator = allocator
+    if stack.allocator.procedure != nil {
+        c.allocator = stack.allocator
     }
     context = c
-    delete(buf)
-    count = 0
-    buf = nil
+    delete(stack.buf)
+    stack.count = 0
+    stack.buf = nil
 }
 
-get_stack :: #force_inline proc(using stack: ^Stack($T), index : int) -> T {
+get_stack :: #force_inline proc(stack: ^Stack($T), index : int) -> T {
     return buf[index]
 }
 
-clear_stack :: #force_inline proc(using stack: ^Stack($T)) {
+clear_stack :: #force_inline proc(stack: ^Stack($T)) {
     count = 0
 }
 
-ensure_cap :: proc(using stack: ^Stack($T), newCap: int) {
-    if newCap > len(buf) {
+ensure_cap :: proc(stack: ^Stack($T), newCap: int) {
+    if newCap > len(stack.buf) {
         c := context
-        if allocator.procedure != nil {
-            c.allocator = allocator
+        if stack.allocator.procedure != nil {
+            c.allocator = stack.allocator
         }
         context = c
 
-        oldBuffer := buf
+        oldBuffer := stack.buf
         defer delete(oldBuffer)
 
-        buf = make(type_of(buf), newCap)
-        if count > 0 {
-            mem.copy(&buf[0], &oldBuffer[0], count * size_of(T))
+        stack.buf = make(type_of(stack.buf), newCap)
+        if stack.count > 0 {
+            mem.copy(&stack.buf[0], &oldBuffer[0], stack.count * size_of(T))
         }
     }
 }
 
-push :: #force_inline proc(using stack: ^Stack($T), value: T) {
-    if len(buf) == count {
-        newCap := len(buf)*2
+push :: #force_inline proc(stack: ^Stack($T), value: T) {
+    if len(stack.buf) == stack.count {
+        newCap := len(stack.buf)*2
         if newCap < 8 { newCap = 8 }
         ensure_cap(stack, newCap)
     }
-    buf[count]=value
-    count+=1
+    stack.buf[stack.count]=value
+    stack.count+=1
 }
 
-pop :: #force_inline proc(using stack: ^Stack($T)) -> (T, bool) {
+pop :: #force_inline proc(stack: ^Stack($T)) -> (T, bool) {
     if count == 0 {
         return T{}, false
     }
@@ -311,7 +311,7 @@ pop :: #force_inline proc(using stack: ^Stack($T)) -> (T, bool) {
     return buf[count], true
 }
 
-pop_n :: #force_inline proc(using stack: ^Stack($T), toPop: int) -> (popped: int) {
+pop_n :: #force_inline proc(stack: ^Stack($T), toPop: int) -> (popped: int) {
     popped = toPop
     if popped > count { popped = count }
     count -= popped

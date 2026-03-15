@@ -5,7 +5,7 @@ Bezier_path :: struct(dim : int) {
 	gradient : [dynamic][dim]f32,
 }
 
-init_bezier :: proc (using path : ^Bezier_path($D)) {
+init_bezier :: proc (path : ^Bezier_path($D)) {
 	pass_point = make([dynamic][D]f32, 2);
 	gradient = make([dynamic][D]f32, 2);
 
@@ -21,7 +21,7 @@ eval_bezier_single :: proc (p0, p1, p2, p3 : [2]f32, t : f32) -> [2]f32 {
 	return t1*t1*t1*p0 + 3*t1*t1*t*p1 + 3*t1*t*t*p2 + t*t*t*p3;
 }
 
-eval_bezier :: proc (using path : Bezier_path($D), t : f32) -> [D]f32 {
+eval_bezier :: proc (path : Bezier_path($D), t : f32) -> [D]f32 {
 	
 	assert(t >= 0 && t <= 1);
 
@@ -46,7 +46,7 @@ eval_bezier :: proc (using path : Bezier_path($D), t : f32) -> [D]f32 {
 	return t1*t1*t1*p0 + 3*t1*t1*t*p1 + 3*t1*t*t*p2 + t*t*t*p3;
 }
 
-destroy_bezier :: proc (using path : Bezier_path($D)) {
+destroy_bezier :: proc (path : Bezier_path($D)) {
 	delete(pass_point);
 	delete(gradient);
 }

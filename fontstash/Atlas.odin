@@ -75,20 +75,20 @@ atlas_make :: proc (#any_int size, margin : i32, loc := #caller_location) -> (at
 //Success may return false if texture needs to grow.
 //Can be used to request a speficic Atlas_handle number, the number must be unused.
 @(require_results)
-atlas_add :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, handle_index : Maybe(Atlas_handle) = nil, loc := #caller_location) -> (handle : Atlas_handle, rect : [4]i32, success : bool) {
+atlas_add :: proc (atlas : ^Atlas, pixel_cnt : [2]i32, handle_index : Maybe(Atlas_handle) = nil, loc := #caller_location) -> (handle : Atlas_handle, rect : [4]i32, success : bool) {
 	
 	
 	found_row, found_row_name, found_index : int = -1, -1, -1;
 	found_height, found_area : i32 = max(i32), 0;
 	
 	/////// See if there is free space in one of the existing free rects ///////
-	required_size := pixel_cnt + 2 * margin;
-	for rect, i in free_rects {
+	required_size := pixel_cnt + 2 * atlas.margin;
+	for rect, i in atlas.free_rects {
 		//Find available space
 		available_space : [2]i32;
-		row := rows[rect.row];
+		row := atlas.rows[rect.row];
 		available_space.y = row.height;
-		if rect.row == len(rows)-1 {
+		if rect.row == len(atlas.rows)-1 {
 			//If the is on the last row then they y advaliable space is all the way to the top.
 			available_space.y = atlas.size - row.y_offset;
 		}
@@ -111,20 +111,20 @@ atlas_add :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, handle_index : Mayb
 		assert(found_row_name != -1, "internal error");
 		assert(found_index != -1, "internal error");
 		
-		row := &rows[found_row];
+		row := &atlas.rows[found_row];
 		entry : Row_entry = row.row_entires[found_row_name];
 		
-		if row.y_offset + required_size.y > size {
+		if row.y_offset + required_size.y > atlas.size {
 			return -1, {}, false;
 		}
 		
-		if found_row == len(rows)-1 {
+		if found_row == len(atlas.rows)-1 {
 			//If this is the last row, then increase height to match.
 			row.height = math.max(row.height, required_size.y);
 		}
 		
 		//consume the space
-		unordered_remove(&free_rects, found_index);
+		unordered_remove(&atlas.free_rects, found_index);
 		//if the rect does not match exactly with, then create a new space for the remaining space.
 		if required_size.x != entry.width {
 			new_entry : Row_entry = entry; //This is the "rest" of what was not used, it will be added as a new entry.
@@ -136,51 +136,51 @@ atlas_add :: proc (using atlas : ^Atlas, pixel_cnt : [2]i32, handle_index : Mayb
 			
 			//add the new entry to the row and the free rects.
 			row.row_entires[row.row_current_name] = new_entry;
-			append(&free_rects, Atlas_index{row = found_row, row_name = row.row_current_name});
+			append(&atlas.free_rects, Atlas_index{row = found_row, row_name = row.row_current_name});
 			row.row_current_name += 1;
 		}
 		//contruct to occupying rect
-		rect : [4]i32 = {entry.x_start + margin, row.y_offset + margin, pixel_cnt.x, pixel_cnt.y}; // this is the max height.
+		rect : [4]i32 = {entry.x_start + atlas.margin, row.y_offset + atlas.margin, pixel_cnt.x, pixel_cnt.y}; // this is the max height.
 		
 		//Create the handle
 		if h, ok := handle_index.?; ok {
-			assert(!(h in handles), "The handle is already in use", loc);
+			assert(!(h in atlas.handles), "The handle is already in use", loc);
 			//If the handle is a specific handle
-			handles[h] = Atlas_entry {rect = rect, row = found_row, row_name = found_row_name};
-			current_handle_counter = math.max(current_handle_counter + 1, h + 1);
+			atlas.handles[h] = Atlas_entry {rect = rect, row = found_row, row_name = found_row_name};
+			atlas.current_handle_counter = math.max(atlas.current_handle_counter + 1, h + 1);
 		}
 		else {
 			//if not increment counter
-			handles[current_handle_counter] = Atlas_entry {rect = rect, row = found_row, row_name = found_row_name};
-			current_handle_counter += 1;
+			atlas.handles[atlas.current_handle_counter] = Atlas_entry {rect = rect, row = found_row, row_name = found_row_name};
+			atlas.current_handle_counter += 1;
 		}
 		
-		return current_handle_counter - 1, rect, true;
+		return atlas.current_handle_counter - 1, rect, true;
 	}
 	
 	/////// There was not enough horizontal space, check if we can add a new row, otherwise return ok = false; ///////
 	
 	current_height : i32;
-	for r in rows {
+	for r in atlas.rows {
 		current_height += r.height;
 	}
 	
-	if (size - current_height) >= pixel_cnt.y {
+	if (atlas.size - current_height) >= pixel_cnt.y {
 		//Add a new row.
-		append(&rows, Atlas_row{
+		append(&atlas.rows, Atlas_row{
 			height = required_size.y,
 			y_offset = current_height,
 			row_current_name = 0,
 			row_entires = make(map[int]Row_entry),
 		});
-		row : ^Atlas_row = &rows[len(rows)-1];
+		row : ^Atlas_row = &atlas.rows[len(atlas.rows)-1];
 		
 		//Add the entire row to free rects and all atlas_add again.
-		append(&free_rects, Atlas_index{
-				row = len(rows) - 1,
+		append(&atlas.free_rects, Atlas_index{
+				row = len(atlas.rows) - 1,
 				row_name = row.row_current_name,
 		});
-		row.row_entires[row.row_current_name] = Row_entry{x_start = 0, width = size};
+		row.row_entires[row.row_current_name] = Row_entry{x_start = 0, width = atlas.size};
 		row.row_current_name += 1;
 		
 		return atlas_add(atlas, pixel_cnt, handle_index, loc);
@@ -200,24 +200,24 @@ atlas_get_coords :: proc (atlas : Atlas, handle : Atlas_handle, loc := #caller_l
 }
 
 @(require_results)
-atlas_remove :: proc(using atlas : ^Atlas, handle : Atlas_handle, loc := #caller_location) -> (rect : [4]i32) {
+atlas_remove :: proc(atlas : ^Atlas, handle : Atlas_handle, loc := #caller_location) -> (rect : [4]i32) {
 	
 	//Remove the entry from the handles
-	entry : Atlas_entry = handles[handle];
-	delete_key(&handles, handle);
+	entry : Atlas_entry = atlas.handles[handle];
+	delete_key(&atlas.handles, handle);
 	
-	row := &rows[entry.row];
+	row := &atlas.rows[entry.row];
 	row_entry := &row.row_entires[entry.row_name];
 	fmt.assertf(row_entry != nil, "row_entry is nil, internal error : %v : %#v", entry, atlas);
 	
 	could_expand : bool = false;
 	
 	//The entry is added to free rects.
-	append(&free_rects, Atlas_index{row = entry.row, row_name = entry.row_name});
+	append(&atlas.free_rects, Atlas_index{row = entry.row, row_name = entry.row_name});
 	
 	//// Seach all other free rects, if it shares the row we check if it is connected to the entry. ////
 	//Look to the right
-	for r, i in free_rects {
+	for r, i in atlas.free_rects {
 		if r.row == entry.row {
 			
 			//it shares the row, so it might also be able to expand the exsisting rect.
@@ -231,14 +231,14 @@ atlas_remove :: proc(using atlas : ^Atlas, handle : Atlas_handle, loc := #caller
 				row_entry.width += free_entry.width;
 				//Remove the entry from the row
 				delete_key(&row.row_entires, r.row_name);
-				unordered_remove(&free_rects, i);
+				unordered_remove(&atlas.free_rects, i);
 				break;
 			}
 		}
 	}
 	
 	//Look to the left
-	for r, i in free_rects {
+	for r, i in atlas.free_rects {
 		if r.row == entry.row {
 			
 			//it shares the row, so it might also be able to expand the exsisting rect.
@@ -250,7 +250,7 @@ atlas_remove :: proc(using atlas : ^Atlas, handle : Atlas_handle, loc := #caller
 				row_entry.width += free_entry.width;
 				//Remove the entry from the row
 				delete_key(&row.row_entires, r.row_name);
-				unordered_remove(&free_rects, i);
+				unordered_remove(&atlas.free_rects, i);
 				break;
 			}
 		}
@@ -258,21 +258,21 @@ atlas_remove :: proc(using atlas : ^Atlas, handle : Atlas_handle, loc := #caller
 	
 	//Keep removing the top row if it has 0 entries, this will help "reset" the atlas state, so it behaves as expected.
 	//Only at the top to now fuck up any old entry indecies.
-	for len(rows) != 0 {
-		if len(rows[len(rows)-1].row_entires) == 1 {
+	for len(atlas.rows) != 0 {
+		if len(atlas.rows[len(atlas.rows)-1].row_entires) == 1 {
 			row_name : int = 0;
 			
-			for name in rows[len(rows)-1].row_entires {
+			for name in atlas.rows[len(atlas.rows)-1].row_entires {
 				row_name = name;
 			}
 			
-			index, contains := slice.linear_search(free_rects[:], Atlas_index{row = len(rows)-1, row_name = row_name});
+			index, contains := slice.linear_search(atlas.free_rects[:], Atlas_index{row = len(atlas.rows)-1, row_name = row_name});
 			if contains {
 				//remove the top.
-				old_row := pop(&rows);
+				old_row := pop(&atlas.rows);
 				delete(old_row.row_entires);
 				
-				unordered_remove(&free_rects, index);
+				unordered_remove(&atlas.free_rects, index);
 			}
 			else {
 				break;
@@ -287,7 +287,7 @@ atlas_remove :: proc(using atlas : ^Atlas, handle : Atlas_handle, loc := #caller
 }
 
 //Returns a free atlas handle, this will also consume the atlas handle space.
-get_next_free_handle :: proc (using atlas : ^Atlas) -> (h : Atlas_handle) {
+get_next_free_handle :: proc (atlas : ^Atlas) -> (h : Atlas_handle) {
 	h = atlas.current_handle_counter;
 	atlas.current_handle_counter += 1;
 	return h;
@@ -296,7 +296,7 @@ get_next_free_handle :: proc (using atlas : ^Atlas) -> (h : Atlas_handle) {
 //If multiple textures are added to the atlas at once a better packing can be achived.
 //See get_next_free_handle
 @(require_results)
-atlas_add_multi :: proc (using atlas : ^Atlas, pixel_cnts : map[Atlas_handle][2]i32, loc := #caller_location) -> (rects : map[Atlas_handle][4]i32, success : bool) {
+atlas_add_multi :: proc (atlas : ^Atlas, pixel_cnts : map[Atlas_handle][2]i32, loc := #caller_location) -> (rects : map[Atlas_handle][4]i32, success : bool) {
 	rects = make(map[Atlas_handle][4]i32, len(pixel_cnts));
 	
 	Handle_sorting :: struct {
@@ -339,15 +339,15 @@ atlas_add_multi :: proc (using atlas : ^Atlas, pixel_cnts : map[Atlas_handle][2]
 	return rects, true;
 }
 
-atlas_destroy :: proc (using atlas : Atlas) {
+atlas_destroy :: proc (atlas : Atlas) {
 	
-	for r in rows {
+	for r in atlas.rows {
 		delete(r.row_entires);
 	}
 	
-	delete(rows);
-	delete(handles);
-	delete(free_rects);
+	delete(atlas.rows);
+	delete(atlas.handles);
+	delete(atlas.free_rects);
 }
 
 
@@ -456,8 +456,8 @@ client_atlas_prune :: proc (atlas : ^Client_atlas, loc := #caller_location) -> (
 
 //Will double the size (in each dimension) of the atlas, the old rects will be repacked in a smart way to increase the packing ratio.
 //Retruns false if the GPU texture size limit is reached.
-client_atlas_grow :: proc (using atlas : ^Client_atlas, loc := #caller_location) -> (success : bool) {
-	if size * 2 > max_size {
+client_atlas_grow :: proc (atlas : ^Client_atlas, loc := #caller_location) -> (success : bool) {
+	if atlas.size * 2 > atlas.max_size {
 		return false;
 	}
 	return client_atlas_transfer(atlas, atlas.size * 2);
@@ -470,7 +470,7 @@ client_atlas_shirnk :: proc (atlas : ^Client_atlas) -> (success : bool) {
 }
 
 //Destroys the client atlas
-client_atlas_destroy :: proc (using atlas : Client_atlas) {
+client_atlas_destroy :: proc (atlas : Client_atlas) {
 	delete(atlas.pixels);
 	atlas_destroy(atlas);
 }

@@ -1,7 +1,5 @@
 package furbs_gui;
 
-
-
 import "base:runtime"
 
 import "core:math"
@@ -15,13 +13,161 @@ import "core:fmt"
 import "../utils"
 import "../render"
 import layman "../layman_new"
+import "../layren"
 
-
+//TODO button, slider, color_picker, text_field,
 
 //////////////////////////////////////// Button ////////////////////////////////////////
 
-button :: proc (s : ^State, label := "", user_id := 0, dont_touch := #caller_location) -> (value : bool) {	
+Button_style :: struct {
+	
+	disabled : bool,
+
+	///////////////// LAYCAL /////////////////
+
+	//How do children behave
+	text_padding : Padding, //from sub-elements to this
+	text_placement : [2]Alignment, //where should we align the children to
+	overflow_dir : Overflow_dir,
+	
+	//How does this size behave
+	sizing : [2]Size,
+	min_size : [2]Min_size,
+	max_size : [2]Max_size,
+	grow_weight : i32, //this is int to not have floating point problems.
+
+	abs_position : Maybe(Absolute_postion),
+	
+
+	///////////////// LAYREN /////////////////
+	bg_color : Color_or_gradient,
+	border_color : Color_or_gradient,
+	
+	border : Padding, //set this if it is border (width is pixels) default is fill.
+	shadow : Maybe(Shadow),
+	rounding : [4]f32, // TL, TR, BR, BL
+	
+	//TODO border and such
+	
+	using transform : layman.Transform,
+	
+	clip_text_overflow : bool,
+	wrap_text : bool,
+	font_size : f32,
+	font : Font,
+}
+
+push_button_style :: proc (s : ^State,  inherit_from : Maybe(Button_style) = nil, style_name := "button", disabled : Maybe(bool) = nil, font : Maybe(Font) = nil, text_padding : Maybe(Padding) = nil, text_placement : Maybe([2]Alignment) = nil, clip_text_overflow : Maybe(bool) = nil,
+							overflow_dir : Maybe(Overflow_dir) = nil, size : Maybe([2]Size) = nil, wrap_text : Maybe(bool) = nil, min_size_x : Maybe(Min_size) = nil, min_size_y : Maybe(Min_size) = nil, clip_text : Maybe(bool) = nil,
+							max_size_x : Maybe(Max_size) = nil, max_size_y : Maybe(Max_size) = nil, grow_weight : Maybe(i32) = nil, abs_pos : Maybe(Absolute_postion) = nil, loc := #caller_location) {
+	bs : Button_style;
+
+	if i, ok := inherit_from.?; ok {
+		bs = i;
+	} else {
+		bs = get_style(s, style_name, Button_style);
+	}
+
+	if v, ok := disabled.?; ok {
+		bs.disabled = v;
+	}
+
+	if v, ok := font.?; ok {
+		bs.font = v;
+	}
+
+	if v, ok := text_padding.?; ok {
+		bs.text_padding = v;
+	}
+
+	if v, ok := text_placement.?; ok {
+		bs.text_placement = v;
+	}
+
+	if v, ok := clip_text_overflow.?; ok {
+		bs.clip_text_overflow = v;
+	}
+
+	if v, ok := overflow_dir.?; ok {
+		bs.overflow_dir = v;
+	}
+
+	if v, ok := size.?; ok {
+		bs.sizing = v;
+	}
+
+	if v, ok := wrap_text.?; ok {
+		assert(size == nil, "You cannot both fit to text and set sizing", loc)
+
+		if v {
+			bs.wrap_text = true;
+
+			if bs.clip_text_overflow {
+				bs.min_size = {0, 0}
+			}
+			else {
+				bs.min_size = {0, fit}
+			}
+		}
+		else {
+			bs.wrap_text = false;
+			bs.min_size = {fit, fit};
+		}
+	}
+
+	if v, ok := clip_text.?; ok {
+		assert(min_size_x == nil, "you cannot both set the min size and control the clip text", loc)
+		assert(min_size_y == nil, "you cannot both set the min size and control the clip text", loc)
+
+		bs.clip_text_overflow = v;
+		if v {
+			bs.min_size = {0, 0}
+		}
+		else {
+			bs.min_size = {0, fit}
+		}
+	}
+
+	if v, ok := min_size_x.?; ok {
+		bs.min_size[0] = v;
+	}
+
+	if v, ok := min_size_y.?; ok {
+		bs.min_size[1] = v;
+	}
+
+	if v, ok := max_size_x.?; ok {
+		bs.max_size[0] = v;
+	}
+
+	if v, ok := max_size_y.?; ok {
+		bs.max_size[1] = v;
+	}
+
+	if v, ok := grow_weight.?; ok {
+		bs.grow_weight = v;
+	}
+
+	if v, ok := abs_pos.?; ok {
+		bs.abs_position = v;
+	}
+
+	new_ptr := new(Button_style);
+	new_ptr^ = bs;
+
+	push_style(s, style_name, new_ptr);
+}
+
+pop_button_style :: proc (s : ^State, style_name := "button") {
+	ptr, t := pop_style(s, style_name)
+	assert(t == Button_style, "something is wrong, button style type is not button style")
+	free(ptr)
+}
+
+button :: proc (s : ^State, label := "", style := "button", user_id := 0, dont_touch := #caller_location) -> (value : bool) {	
 	uid := layman.make_uid(&s.man, dont_touch, user_id);
+
+	style : Button_style = get_style(s, style, Button_style);
 	
 	if is_hover(s, uid) {
 		layman.try_set_hot(&s.man, uid);
@@ -41,34 +187,123 @@ button :: proc (s : ^State, label := "", user_id := 0, dont_touch := #caller_loc
 	
 	if layman.current_hot(&s.man) == uid {
 		gui_state = .hot;
-		set_mouse_cursor(s, .clickable);
+		if style.disabled {
+			set_mouse_cursor(s, .not_allowed);
+		}
+		else {
+			set_mouse_cursor(s, .clickable);
+		}
 	}
 	if layman.current_active(&s.man) == uid {
 		gui_state = .active;
-		set_mouse_cursor(s, .clickable);
+		if style.disabled {
+			set_mouse_cursor(s, .not_allowed);
+		}
+		else {
+			set_mouse_cursor(s, .clickable);
+		}
 	}
 	
-	layman.open(&s.man, auto_cast Style_kind.button_background, layman.rect(150, 50), uid);
-	
-	layman.open(&s.man, auto_cast Style_kind.button_border, layman.rect(layman.grow, layman.grow))
+	if style.disabled {
+		value = false;
+	}
 
-	//append_command(s, Cmd_rect{placement, .button_background, -1, gui_state});
-	//append_command(s, Cmd_rect{placement, .button_border, style.border_thickness, gui_state});
+	size : layman.Sizeing;
 	
+	win_dim := window_dim(s);
+	size = [2]layman.Size{convert_size(style.sizing[0], win_dim), convert_size(style.sizing[1], win_dim)}
+	
+	bg_draw : To_render_rect = {
+		style.bg_color,
+		true,
+		0, //set this if it is border (width is pixels) default is fill.
+		style.shadow,
+		style.rounding // TL, TR, BR, BL
+	}
+
+	layman.open(&s.man, render_index(s, bg_draw), layman.Layout{
+		[4]i32{0, 0, 0, 0},
+		{0,0},
+		.right_left,
+		{.center, .center},
+		style.overflow_dir,
+		
+		//How does this size behave
+		size, //
+		convert_size(style.min_size, win_dim),
+		convert_size(style.max_size, win_dim),
+		style.grow_weight, //this is int to not have floating point problems.
+		
+		false,
+
+		style.abs_position,
+	}, uid);
+
+	//TODO next up make the visuals work, so we can do a nice border.
+
+	border_size := style.border.(Fixed);
+
+	border_draw : To_render_rect = {
+		style.border_color,
+		false,
+		cast(f32)border_size, //set this if it is border (width is pixels) default is fill.
+		style.shadow,
+		style.rounding // TL, TR, BR, BL
+	}
+	
+	pad := convert_size(style.text_padding, win_dim).(i32) + border_size;
+	border_layout :=  layman.Layout{
+		[4]i32{pad, pad, pad, pad},
+		{0,0},
+		.top_down,
+		style.text_placement,
+		style.overflow_dir,
+		
+		//How does this size behave
+		convert_size([2]Size{Grow{}, Grow{}}, win_dim), //
+		convert_size(style.min_size, win_dim),
+		{max(i32), max(i32)},
+		style.grow_weight, //this is int to not have floating point problems.
+		
+		false,
+
+		style.abs_position,
+	}
+	layman.open(&s.man, render_index(s , border_draw), border_layout)
+
 	if label != "" {
-		panic("TODO");	
-		/*
-		padding := style.text_padding
+
+		if style.clip_text_overflow {
+			clip_layout := border_layout
+			clip_layout.padding = {0,0,0,0};
+			clip_layout.alignment = {.near, .near}
+			layman.open(&s.man, render_index(s , {}), clip_layout, nil, {false, false})
+		}
+
+		text_draw : To_render_text = {
+			strings.clone(label, context.temp_allocator),
+			auto_cast style.font,
+			//border : f32 // outgoing border around text //TODO
+			//shadow : Maybe(Shadow), //Drop shadow //TODO
+			style.font_size,
+		}
 		
-		asc, dec := s.font_height(s.user_data, style.text_size);
-		text_width := s.font_width(s.user_data, style.text_size, label);
+		if style.wrap_text {
+			layman.open(&s.man, render_index(s , text_draw), layman.text(label, style.font_size, auto_cast style.font))
+		}
+		else {
+			text_size : [2]i32;
+			text_bounds := render.text_get_bounds(label, style.font_size, style.font);
+			text_size = {auto_cast text_bounds.z, auto_cast text_bounds.w};
+
+			layman.open(&s.man, render_index(s , text_draw), layman.rect(text_size.x, text_size.y))
+		}
+
+		layman.close(&s.man);
 		
-		text_size :=  [2]f32{text_width, asc - dec};
-		
-		text_placement := place_in_parent(s, placement.xy + style.text_padding, placement.zw - 2 * style.text_padding, 0, Dest{style.text_hor, style.text_ver, 0, 0}, text_size);
-		text_placement.y -= dec
-		append_command(s, Cmd_text{text_placement.xy, strings.clone(label, context.temp_allocator), style.text_size, 0, .button_text});
-		*/
+		if style.clip_text_overflow {
+			layman.close(&s.man);	
+		}
 	}
 
 	layman.close(&s.man)
@@ -77,10 +312,29 @@ button :: proc (s : ^State, label := "", user_id := 0, dont_touch := #caller_loc
 	return value;
 }
 
+begin_panel :: proc (s : ^State, size_x : Size, size_y : Size, min_size_x : Min_size = 0, min_size_y : Min_size = 0, max_size_x : Max_size = max(i32), max_size_y : Max_size = max(i32)) {
+	screen_size := [2]f32{auto_cast s.window.width, auto_cast s.window.height}
+	size_x := convert_size(size_x, screen_size) 
+	size_y := convert_size(size_y, screen_size) 
+	min_size_x := convert_size(min_size_x, screen_size) 
+	min_size_y := convert_size(min_size_y, screen_size)
+	max_size_x := convert_size(max_size_x, screen_size)
+	max_size_y := convert_size(max_size_y, screen_size)
 
+	bg_draw : To_render_rect = {
+		[4]f32{1,1,1,0.5},
+		true,
+		5, //set this if it is border (width is pixels) default is fill.
+		nil,
+		{5,5,5,5} // TL, TR, BR, BL
+	}
 
+	layman.open(&s.man, render_index(s, bg_draw), layman.rect(size_x, size_y, min_size_x, min_size_y, max_size_x, max_size_y), );
+}
 
-
+end_panel :: proc (s : ^State) {
+	layman.close(&s.man)
+} 
 
 
 

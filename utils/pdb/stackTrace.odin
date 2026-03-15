@@ -1,5 +1,5 @@
 package pdb
-import "core:os"
+import os "core:os/old"
 import "core:slice"
 import "core:strings"
 import "base:intrinsics"
@@ -249,7 +249,7 @@ parse_stack_trace :: proc(stackTrace: []StackFrame, sameProcess: bool, srcCodeLo
             }
             mi.filePath = path
             peFile, peFileErr := os.open(mi.filePath)
-            if peFileErr != 0 {
+            if peFileErr != nil {
                 // skip images that we cannot open
                 continue
             }
@@ -291,12 +291,12 @@ parse_stack_trace :: proc(stackTrace: []StackFrame, sameProcess: bool, srcCodeLo
             }
             // TODO: if pdbPath is still not found by now, we should look into other possible directories for them
             pdbFile, pdbErr := os.open(mi.pdbPath)
-            if pdbErr != 0 { // try load pdb at the same path as src exe
+            if pdbErr != nil { // try load pdb at the same path as src exe
                 toConcatenate := []string {filepath.stem(mi.filePath), ".pdb"}
                 mi.pdbPath = strings.concatenate(toConcatenate)
                 pdbFile, pdbErr = os.open(mi.pdbPath)
             }
-            if pdbErr == 0 {
+            if pdbErr == nil {
                 mi.pdbHandle = pdbFile
                 pdbr := io.to_reader(os.stream_from_handle(pdbFile))
                 if streamDir, sdOk := find_stream_dir(pdbr); sdOk {
@@ -436,8 +436,8 @@ print_u64_x :: proc "contextless" (x: u64) #no_bounds_check {
 	runtime.stderr_write(a[i:])
 }
 
-print_source_code_location :: proc (using scl: runtime.Source_Code_Location) {
-    runtime.print_string(file_path)
+print_source_code_location :: proc (scl: runtime.Source_Code_Location) {
+    runtime.print_string(scl.file_path)
     when ODIN_ERROR_POS_STYLE == .Unix {
         runtime.print_byte(':')
 		runtime.print_u64(u64(line))
@@ -446,11 +446,11 @@ print_source_code_location :: proc (using scl: runtime.Source_Code_Location) {
 		runtime.print_byte(':')
     } else {
         runtime.print_byte('(')
-		runtime.print_u64(u64(line))
+		runtime.print_u64(u64(scl.line))
 		runtime.print_byte(':')
-		runtime.print_u64(u64(column))
+		runtime.print_u64(u64(scl.column))
 		runtime.print_byte(')')
     }
-    runtime.print_string(procedure)
+    runtime.print_string(scl.procedure)
     runtime.print_string("()\n")
 }
